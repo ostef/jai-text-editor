@@ -13,7 +13,7 @@ build :: ()
 	set_build_options (build_options);
 
 	workspace := compiler_create_workspace ();
-	executable_name := "piper";
+	executable_name := "editor";
 
 	#if OS == .WINDOWS
 	{
