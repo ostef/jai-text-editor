@@ -41,12 +41,16 @@ Event :: struct
 			mods : int;
 			x : int;
 			y : int;
+			col : int;
+			row : int;
 		};
 
 		mouse_motion_event : struct
 		{
 			x : int;
 			y : int;
+			col : int;
+			row : int;
 		};
 
 		scroll_event : struct

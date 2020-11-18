@@ -284,6 +284,54 @@ get_text_view_cursor_pos :: (using view : *Text_View) -> int, int
 	return column, row;
 }
 
+move_text_view_cursor_to_target :: (using view : *Text_View, target_x : int, target_y : int)
+{
+	i := 0;
+	column : int;
+	row : int;
+	while i < buffer.count && row < target_y
+	{
+		column += 1;
+		if buffer[i] == #char "\t"
+		{
+			while column % 4 != 0 && column < w
+			{
+				column += 1;
+			}
+		}
+
+		if column > w - 1 || buffer[i] == #char "\n"
+		{
+			column = 0;
+			row += 1;
+		}
+
+		i += 1;
+	}
+
+	column = 0;
+	while i < buffer.count && column < target_x
+	{
+		column += 1;
+		if buffer[i] == #char "\t"
+		{
+			while column % 4 != 0 && column < w
+			{
+				column += 1;
+			}
+		}
+
+		if column > w - 1 || buffer[i] == #char "\n"
+		{
+			break;
+		}
+
+		i += 1;
+	}
+
+	cursor = i;
+}
+
 // @Note (stefan): Why can't I make these two work ?? This is not supposed to be hard...
 move_text_view_cursor_up :: (using view : *Text_View)
 {
@@ -324,5 +372,14 @@ text_view_handle_event :: (using view : *Text_View, event : Event)
 	else if event.type == .CHAR_INPUT
 	{
 		insert_rune_at_cursor (view, event.char_input_event.codepoint);
+	}
+	else if event.type == .MOUSE_BUTTON_PRESS
+	{
+		if event.mouse_button_event.button == GLFW_MOUSE_BUTTON_LEFT
+		{
+			target_x := event.mouse_button_event.col - x;
+			target_y := event.mouse_button_event.row - y;
+			move_text_view_cursor_to_target (view, target_x, target_y);
+		}
 	}
 }

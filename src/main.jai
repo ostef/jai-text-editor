@@ -85,6 +85,13 @@ main :: ()
 			}
 			event.mouse_button_event.button = button;
 			event.mouse_button_event.mods = mods;
+			mouse_x, mouse_y : float64;
+			glfwGetCursorPos (window, *mouse_x, *mouse_y);
+			event.mouse_button_event.x = cast (int) mouse_x;
+			event.mouse_button_event.y = cast (int) mouse_y;
+			event.mouse_button_event.col = cast (int) mouse_x / renderer.atlas.cell_w;
+			event.mouse_button_event.row = cast (int) mouse_y / renderer.atlas.cell_h;
+
 			screen_handle_event (screen, event);
 		}
 	});
