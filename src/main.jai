@@ -10,10 +10,11 @@
 #load "render.jai";
 #load "screen.jai";
 #load "unicode.jai";
+#load "event.jai";
 
 Window_Data :: struct
 {
-	buffer : *Screen_Buffer;
+	screen : *Screen;
 	renderer : *Screen_Renderer;
 }
 
@@ -34,23 +35,36 @@ main :: ()
 		push_context new_context
 		{
 			using data := cast (*Window_Data) glfwGetWindowUserPointer (window);
-			if action == GLFW_PRESS || action == GLFW_REPEAT
+			
+			event : Event;
+			event.window = window;
+			if action ==
 			{
-				if mods == 0
-				{
-					if key == 
-					{
-						case GLFW_KEY_UP;    move_cursor_up (buffer.active_view);
-						case GLFW_KEY_DOWN;  move_cursor_down (buffer.active_view);
-						case GLFW_KEY_LEFT;  move_cursor_left (buffer.active_view);
-						case GLFW_KEY_RIGHT; move_cursor_right (buffer.active_view);
-					}
-				}
-				else if mods & GLFW_MOD_CONTROL != 0
-				{
-					navigate_views (buffer);
-				}
+				case GLFW_PRESS; event.type = .KEY_PRESS;
+				case GLFW_REPEAT; event.type = .KEY_REPEAT;
+				case GLFW_RELEASE; event.type = .KEY_RELEASE;
 			}
+			event.key_event.key = key;
+			event.key_event.scancode = scancode;
+			event.key_event.mods = mods;
+			screen_handle_event (screen, event);
+		}
+	});
+
+	glfwSetCharCallback (window,
+	(window : *GLFWwindow, codepoint : u32) #c_call
+	{
+		new_context : Context;
+		push_context new_context
+		{
+			using data := cast (*Window_Data) glfwGetWindowUserPointer (window);
+			
+			event : Event;
+			event.window = window;
+			event.type = .CHAR_INPUT;
+			event.char_input_event.codepoint = xx codepoint;
+			event.char_input_event.mods = 0;
+			screen_handle_event (screen, event);
 		}
 	});
 
@@ -62,14 +76,16 @@ main :: ()
 		{
 			using data := cast (*Window_Data) glfwGetWindowUserPointer (window);
 
-			if action == GLFW_PRESS && mods == 0 && button == GLFW_MOUSE_BUTTON_LEFT
+			event : Event;
+			event.window = window;
+			if action ==
 			{
-				mouse_x, mouse_y : float64;
-				glfwGetCursorPos (window, *mouse_x, *mouse_y);
-				cell_x := cast (int) mouse_x / renderer.atlas.cell_w;
-				cell_y := cast (int) mouse_y / renderer.atlas.cell_h;
-				set_cursor_absolute_position (buffer, cell_x, cell_y);
+				case GLFW_PRESS; event.type = .MOUSE_BUTTON_PRESS;
+				case GLFW_RELEASE; event.type = .MOUSE_BUTTON_RELEASE;
 			}
+			event.mouse_button_event.button = button;
+			event.mouse_button_event.mods = mods;
+			screen_handle_event (screen, event);
 		}
 	});
 
@@ -95,27 +111,16 @@ main :: ()
 	defer free (output_buffer.data);
 	output_buffer.count = FONT_ATLAS_SIZE * FONT_ATLAS_SIZE;
 
-	buffer : Screen_Buffer;
-	window_data.buffer = *buffer;
-	init_screen_buffer (*buffer, 80, 43);
-	defer destroy_screen_buffer (*buffer);
+	screen : Screen;
+	window_data.screen = *screen;
+	init_screen (*screen, 80, 43);
+	defer destroy_screen (*screen);
 
 	renderer : Screen_Renderer;
 	renderer.atlas = atlas;
 	window_data.renderer = *renderer;
 	init_screen_renderer (*renderer, 10_000, xx viewport_width, xx viewport_height, Vector3.{ 0.2, 0.2, 0.2 });
 	defer destroy_screen_renderer (*renderer);
-
-	this_file_data, file_read := read_entire_file (#file);
-	view1 := buffer.active_view;
-	view2 := make_screen_view_horizontal (*buffer);
-	set_active_screen_view (*buffer, view2);
-	view3 := make_screen_view_vertical (*buffer);
-	set_active_screen_view (*buffer, view3);
-	
-	print_to_screen (view1, "#include <stdio.h>\n\nvoid main () {\n\tprintf (\"Hello World!\\n\");\n\treturn 0;\n}\n");
-	print_to_screen (view2, "Blablabla whatever"); 
-	print_to_screen (view3, "stefan@stef-linux$gcc main.c\nHello World!\nProgram terminated with exit code 0.\n");
 
 	while !glfwWindowShouldClose (window)
 	{
@@ -125,13 +130,32 @@ main :: ()
 		glfwGetFramebufferSize (window, *viewport_width, *viewport_height);
 		glViewport (0, 0, xx viewport_width, xx viewport_height);
 		resize_screen_renderer (*renderer, xx viewport_width, xx viewport_height);
-		draw_screen_buffer (*renderer, *buffer);
+		refresh_screen (*screen);
+		draw_screen (*renderer, *screen);
 		
 		glfwSwapBuffers (window);
 	}
 }
 
-offset_of ::inline ($T : Type, $member : string) -> s64
+Color :: struct
+{
+	r, g, b, a : u8;
+}
+
+COLOR_BLACK :: Color.{ 0, 0, 0, 255 };
+COLOR_WHITE :: Color.{ 255, 255, 255, 255 };
+
+color_to_vector3 :: (color : Color) -> Vector3
+{
+	return make_vector3 (color.r / 255.0, color.g / 255.0, color.b / 255.0);
+}
+
+color_to_vector4 :: (color : Color) -> Vector4
+{
+	return make_vector4 (color.r / 255.0, color.g / 255.0, color.b / 255.0, color.a / 255.0);
+}
+
+offset_of :: inline ($T : Type, $member : string) -> s64
 {
 	#insert #run sprint (BODY, member);
 
