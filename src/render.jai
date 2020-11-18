@@ -184,7 +184,7 @@ draw_screen_element :: (renderer : *Screen_Renderer, x : float, y : float, elem 
 	return true;
 }
 
-draw_screen_buffer :: (renderer : *Screen_Renderer, buffer : *Screen_Buffer)
+draw_screen :: (renderer : *Screen_Renderer, screen : *Screen)
 {
 	glBindFramebuffer (GL_FRAMEBUFFER, 0);
 	glClearColor (renderer.clear_color.x, renderer.clear_color.y, renderer.clear_color.z, 1.0);
@@ -195,11 +195,11 @@ draw_screen_buffer :: (renderer : *Screen_Renderer, buffer : *Screen_Buffer)
 
 	x := 0;
 	y := 0;
-	for i : 0..buffer.rows - 1
+	for i : 0..screen.rows - 1
 	{
-		for j : 0..buffer.columns - 1
+		for j : 0..screen.cols - 1
 		{
-			elem := buffer.cells[i + buffer.rows * j];
+			elem := screen.cells[i + screen.rows * j];
 			draw_screen_element (renderer, cast (float) x, cast (float) y, elem);
 			x += 1;
 		}
@@ -208,9 +208,12 @@ draw_screen_buffer :: (renderer : *Screen_Renderer, buffer : *Screen_Buffer)
 		x = 0;
 	}
 
-	cursor : Screen_Element;
-	cursor.background_color = Color.{ 255, 255, 255, 255 };
-	draw_screen_element (renderer, cast (float) buffer.active_view.x + buffer.active_view.cursor_x, cast (float) buffer.active_view.y + buffer.active_view.cursor_y, cursor);
+	if screen.active_view.draw_cursor
+	{
+		cursor : Screen_Element;
+		cursor.background_color = COLOR_WHITE;
+		draw_screen_element (renderer, cast (float) screen.active_view.x + screen.active_view.cursor_x, cast (float) screen.active_view.y + screen.active_view.cursor_y, cursor);
+	}
 
 	flush_screen_renderer (renderer);
 }
