@@ -16,7 +16,7 @@ Utf8_Char :: struct
 	count : u32;
 }
 
-utf8_string_length :: (str : string) -> u64, bool	// We use a signed integer so we can return -1 for invalid utf8 string
+utf8_string_length :: (str : string) -> u64, bool
 {
 	length : u64;
 	i := 0;
@@ -109,6 +109,26 @@ utf8_char_at :: (str : string, position : u64) -> Utf8_Char
 	}
 
 	return Utf8_Char.{};
+}
+
+utf8_string_to_runes :: (str : string, allocator : Allocator = null, allocator_data : *void = null) -> []Rune, bool
+{
+	runes : []Rune;
+	length, valid := utf8_string_length (str);
+	if !valid  return runes, false;
+	runes = NewArray (xx length, Rune, allocator = allocator, allocator_data = allocator_data);
+
+	i := 0;
+	pos := 0;
+	while i < str.count
+	{
+		codepoint, size := utf8_rune_at_byte (str, xx i);
+		runes[pos] = codepoint;
+		pos += 1;
+		i += xx size;
+	}
+
+	return runes, true;
 }
 
 utf8_decode :: (buffer : []u8) -> Rune, u64

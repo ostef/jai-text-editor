@@ -224,22 +224,8 @@ write_string_to_view :: (using view : *Screen_View, str : string, x_pos : int, y
 {
 	// @Note (stefan): We could do a better version without allocating but that would require 2 similar procedures to maintain.
 	// I dunno if we should choose the better version over the current one.
-	length, valid := utf8_string_length (str);
-	if !valid  return;
-	runes : []Rune;
-	runes = NewArray (xx length, Rune, allocator = __temporary_allocator);
-
-	i := 0;
-	pos := 0;
-	while i < str.count
-	{
-		codepoint, size := utf8_rune_at_byte (str, xx i);
-		runes[pos] = codepoint;
-		pos += 1;
-		i += xx size;
-	}
-
-	write_string_to_view (view, runes, x_pos, y_pos, x_max, y_max, foreground_color, background_color);
+	runes, valid := utf8_string_to_runes (str, __temporary_allocator);
+	if valid  write_string_to_view (view, runes, x_pos, y_pos, x_max, y_max, foreground_color, background_color);
 }
 
 refresh_text_view :: (using view : *Text_View)
