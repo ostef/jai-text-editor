@@ -111,7 +111,7 @@ utf8_char_at :: (str : string, position : u64) -> Utf8_Char
 	return Utf8_Char.{};
 }
 
-utf8_string_to_runes :: (str : string, allocator : Allocator = null, allocator_data : *void = null) -> []Rune, bool
+utf8_string_to_runes :: (str : string, allocator : Allocator = null, allocator_data : *void = null) -> []Rune #must, bool
 {
 	runes : []Rune;
 	length, valid := utf8_string_length (str);
