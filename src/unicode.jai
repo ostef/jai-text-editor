@@ -16,9 +16,9 @@ Utf8_Char :: struct
 	count : u32;
 }
 
-utf8_string_length :: (str : string) -> s64		// We use a signed integer so we can return -1 for invalid utf8 string
+utf8_string_length :: (str : string) -> u64, bool	// We use a signed integer so we can return -1 for invalid utf8 string
 {
-	length : s64;
+	length : u64;
 	i := 0;
 	while i < str.count
 	{
@@ -27,17 +27,19 @@ utf8_string_length :: (str : string) -> s64		// We use a signed integer so we ca
 		else if (c & 0xe0) == 0xc0  i += 2;
 		else if (c & 0xf0) == 0xe0  i += 3;
 		else if (c & 0xf8) == 0xf0  i += 4;
-		else return -1;
+		else return 0, false;
 
 		length += 1;
 	}
 
-	return length;
+	return length, true;
 }
 
 utf8_string_is_valid :: inline (str : string) -> bool
 {
-	return utf8_string_length (str) != -1;
+	_, ok := utf8_string_length (str);
+
+	return ok;
 }
 
 utf8_rune_at_byte :: (str : string, position : u64) -> Rune, u64
