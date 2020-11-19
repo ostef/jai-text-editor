@@ -126,6 +126,11 @@ Text_View :: struct
 	has_file : bool;
 	buffer : [..]Rune;
 	cursor : int;
+	// Just a remainder that we'll want to handle these in the future
+	// Start from 1
+	//col_in_text : int;
+	// Start from 1
+	//line_in_text : int;
 }
 
 init_text_view :: (view : *Text_View, screen : *Screen, x : int, y : int, w : int, h : int)
@@ -141,7 +146,19 @@ init_text_view :: (view : *Text_View, screen : *Screen, x : int, y : int, w : in
 	view.cursor_y = 0;
 	view.filepath = #file;
 	view.has_file = false;
+	//data, ok := read_entire_file (#file);
+	//assert (ok, "Could not read file %", #file);
+	//defer free (data);
 	array_reserve (*view.buffer, 1024);
+	
+	//i := 0;
+	//while i < data.count
+	//{
+	//	codepoint, size := utf8_rune_at_byte (data, xx i);
+	//	if codepoint != #char "\r"  array_add (*view.buffer, codepoint);	// Ignore freaking '\r'
+	//	i += xx size;
+	//}
+	
 	view.cursor = 0;
 }
 
@@ -332,19 +349,22 @@ move_text_view_cursor_to_target :: (using view : *Text_View, target_x : int, tar
 	cursor = i;
 }
 
-// @Note (stefan): Why can't I make these two work ?? This is not supposed to be hard...
 move_text_view_cursor_up :: (using view : *Text_View)
 {
-	
+	column, row := get_text_view_cursor_pos (view);
+	move_text_view_cursor_to_target (view, column, row - 1);
 }
 
 move_text_view_cursor_down :: (using view : *Text_View)
 {
-	
+	column, row := get_text_view_cursor_pos (view);
+	move_text_view_cursor_to_target (view, column, row + 1);
 }
 
 move_text_view_cursor_left :: (using view : *Text_View)
 {
+	// @Note (stefan): Maybe we should also update the cursor position in the view, instead of doing it when refreshing.
+	// This would also mean that we can rely on cursor_x and cursor_y being correct in other procedures such as move_cursor_up/down.
 	cursor = clamp (cursor - 1, 0, buffer.count);
 }
 
