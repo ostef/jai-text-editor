@@ -1,6 +1,9 @@
 #import "GL";
 #import "Math";
 
+RENDER_WHITESPACE :: true;
+DIM_WHITESPACE    :: true;
+
 // The Screen_Renderer is a batch renderer. It stores all the vertices in an array and send all the data to the GPU everytime the array is full
 // or when all the vertices we want to render have been added to the array.
 
@@ -152,6 +155,18 @@ draw_screen_element :: (renderer : *Screen_Renderer, x : float, y : float, elem 
 	vertex.background_color = color_to_vector3 (elem.background_color);
 
 	codepoint := elem.codepoint;
+	
+	if is_space (codepoint) && !RENDER_WHITESPACE
+	{
+		codepoint = 0;
+	}
+	else if is_space (codepoint) && DIM_WHITESPACE
+	{
+		vertex.foreground_color.x *= 0.3;
+		vertex.foreground_color.y *= 0.3;
+		vertex.foreground_color.z *= 0.3;
+	}
+
 	char_x, char_y := get_glyph_coords_in_font_atlas (renderer.atlas, codepoint);
 	tex_x := char_x * renderer.atlas.cell_w / cast (float) FONT_ATLAS_SIZE;
 	tex_y := char_y * renderer.atlas.cell_h / cast (float) FONT_ATLAS_SIZE;
