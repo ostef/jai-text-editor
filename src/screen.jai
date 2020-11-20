@@ -328,7 +328,7 @@ refresh_text_view :: (using view : *Text_View)
 			cell := *screen.cells[i + screen.rows * j];
 			cell.codepoint = 0;
 			cell.foreground_color = COLOR_WHITE;
-			cell.background_color = COLOR_BLACK;
+			cell.background_color = Color.{ 16, 16, 16, 255 };
 		}
 
 		if line_number <= line_count  write_line_number (view, line_number);
@@ -424,13 +424,13 @@ move_text_view_cursor_to_target :: (using view : *Text_View, target_x : int, tar
 move_text_view_cursor_up :: (using view : *Text_View)
 {
 	column, row := get_text_view_cursor_pos (view);
-	move_text_view_cursor_to_target (view, column, row - 1);
+	move_text_view_cursor_to_target (view, column + xoffset, row - 1);
 }
 
 move_text_view_cursor_down :: (using view : *Text_View)
 {
 	column, row := get_text_view_cursor_pos (view);
-	move_text_view_cursor_to_target (view, column, row + 1);
+	move_text_view_cursor_to_target (view, column + xoffset, row + 1);
 }
 
 move_text_view_cursor_left :: (using view : *Text_View)
