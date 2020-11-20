@@ -1,3 +1,5 @@
+INIT_TEXT_VIEW_WITH_CURRENT_FILE :: true;
+
 Screen_Element :: struct
 {
 	codepoint : Rune;
@@ -126,11 +128,10 @@ Text_View :: struct
 	has_file : bool;
 	buffer : [..]Rune;
 	cursor : int;
-	// Just a remainder that we'll want to handle these in the future
-	// Start from 1
-	//col_in_text : int;
-	// Start from 1
-	//line_in_text : int;
+	xoffset : int;
+	col_in_text : int;
+	line_in_text : int;
+	line_count : int;
 }
 
 init_text_view :: (view : *Text_View, screen : *Screen, x : int, y : int, w : int, h : int)
@@ -144,20 +145,30 @@ init_text_view :: (view : *Text_View, screen : *Screen, x : int, y : int, w : in
 
 	view.cursor_x = 0;
 	view.cursor_y = 0;
+	view.draw_cursor = true;
 	view.filepath = #file;
 	view.has_file = false;
-	//data, ok := read_entire_file (#file);
-	//assert (ok, "Could not read file %", #file);
-	//defer free (data);
-	array_reserve (*view.buffer, 1024);
-	
-	//i := 0;
-	//while i < data.count
-	//{
-	//	codepoint, size := utf8_rune_at_byte (data, xx i);
-	//	if codepoint != #char "\r"  array_add (*view.buffer, codepoint);	// Ignore freaking '\r'
-	//	i += xx size;
-	//}
+	view.xoffset = 1;
+
+	#if INIT_TEXT_VIEW_WITH_CURRENT_FILE
+	{
+		data, ok := read_entire_file (#file);
+		assert (ok, "Could not read file %", #file);
+		defer free (data);
+		array_reserve (*view.buffer, data.count);
+		
+		i := 0;
+		while i < data.count
+		{
+			codepoint, size := utf8_rune_at_byte (data, xx i);
+			if codepoint != #char "\r"  array_add (*view.buffer, codepoint);	// Ignore freaking '\r'
+			i += xx size;
+		}
+	}
+	else
+	{
+		array_reserve (*view.buffer, 1024);
+	}
 	
 	view.cursor = 0;
 }
@@ -198,7 +209,7 @@ remove_rune_at_cursor :: (using view : *Text_View)
 
 #scope_file
 
-write_string_to_view :: (using view : *Screen_View, runes : []Rune, x_pos : int, y_pos : int, x_max : int = -1, y_max : int = -1, foreground_color := Color.{ 255, 255, 255, 255 }, background_color := Color.{ 0, 0, 0, 255 })
+write_string_to_view :: (using view : *Screen_View, runes : []Rune, x_min : int, y_min : int, x_max : int = -1, y_max : int = -1, foreground_color := Color.{ 255, 255, 255, 255 }, background_color := Color.{ 0, 0, 0, 255 })
 {
 	if x_max == -1  x_max = w;
 	if y_max == -1  y_max = h;
@@ -206,6 +217,8 @@ write_string_to_view :: (using view : *Screen_View, runes : []Rune, x_pos : int,
 	y_max = clamp (y_max, 0, h);
 
 	i : u64;
+	x_pos := x_min;
+	y_pos := y_min;
 	while i < xx runes.count && y_pos < y_max
 	{
 		codepoint := runes[i];
@@ -229,7 +242,7 @@ write_string_to_view :: (using view : *Screen_View, runes : []Rune, x_pos : int,
 
 		if x_pos >= x_max - 1 || codepoint == #char "\n"
 		{
-			x_pos = 0;
+			x_pos = x_min;
 			y_pos += 1;
 		}
 
@@ -237,24 +250,66 @@ write_string_to_view :: (using view : *Screen_View, runes : []Rune, x_pos : int,
 	}
 }
 
-write_string_to_view :: (using view : *Screen_View, str : string, x_pos : int, y_pos : int, x_max : int = -1, y_max : int = -1, foreground_color := Color.{ 255, 255, 255, 255 }, background_color := Color.{ 0, 0, 0, 255 })
+write_string_to_view :: (using view : *Screen_View, str : string, x_min : int, y_min : int, x_max : int = -1, y_max : int = -1, foreground_color := Color.{ 255, 255, 255, 255 }, background_color := Color.{ 0, 0, 0, 255 })
 {
 	// @Note (stefan): We could do a better version without allocating but that would require 2 similar procedures to maintain.
 	// I dunno if we should choose the better version over the current one.
 	runes, valid := utf8_string_to_runes (str, __temporary_allocator);
-	if valid  write_string_to_view (view, runes, x_pos, y_pos, x_max, y_max, foreground_color, background_color);
+	if valid  write_string_to_view (view, runes, x_min, y_min, x_max, y_max, foreground_color, background_color);
+}
+
+get_line_count :: (buffer : []Rune) -> int
+{
+	count := 1;
+	for rune : buffer
+	{
+		if rune == #char "\n" count += 1;
+	}
+
+	return count;
+}
+
+update_text_view_xoffset :: (using view : *Text_View)
+{
+	// xoffset is the length of the line number string plus one
+	count := 0;
+	current := line_count;
+	while current > 0
+	{
+		current /= 10;
+		count += 1;
+	}
+
+	xoffset = count + 1;
 }
 
 refresh_text_view :: (using view : *Text_View)
 {
-	column, row := get_text_view_cursor_pos (view);
-	cursor_x = column;
-	cursor_y = row;
-	draw_cursor = true;
+	write_line_number :: (using view : *Text_View, line : int)
+	{
+		yoffset := line - 1;
+		i := xoffset - 2;
+		while line > 0
+		{
+			digit := line % 10;
+			cell := *screen.cells[y + yoffset + screen.rows * (x + i)];
+			cell.codepoint = cast (Rune) (#char "0" + digit);
+			i -= 1;
+			line /= 10;
+		}
+	}
+
+	column, line := get_text_view_cursor_pos (view);
+	col_in_text = column;
+	line_in_text = line;
+	line_count = get_line_count (view.buffer);
+	update_text_view_xoffset (view);
+	cursor_x = col_in_text + xoffset;
+	cursor_y = line_in_text;
 
 	for i : y..h-1
 	{
-		for j : x..w-1
+		for j : x + xoffset..w-1
 		{
 			cell := *screen.cells[i + screen.rows * j];
 			cell.codepoint = 0;
@@ -263,7 +318,24 @@ refresh_text_view :: (using view : *Text_View)
 		}
 	}
 
-	write_string_to_view (view, buffer, 0, 0, w, h - 1);
+	// @Note (stefan): Currently, the line number we have does not take into account
+	// wordwrapping. Everything is a mess right now so we should do a cleanup.
+	line_number := 1;
+	for i : y..h-2
+	{
+		for j : x..x + xoffset - 1
+		{
+			cell := *screen.cells[i + screen.rows * j];
+			cell.codepoint = 0;
+			cell.foreground_color = COLOR_WHITE;
+			cell.background_color = COLOR_BLACK;
+		}
+
+		if line_number <= line_count  write_line_number (view, line_number);
+		line_number += 1;
+	}
+
+	write_string_to_view (view, buffer, xoffset, 0, w, h - 1);
 
 	for i : x..x + w - 1
 	{
@@ -278,8 +350,8 @@ refresh_text_view :: (using view : *Text_View)
 
 get_text_view_cursor_pos :: (using view : *Text_View) -> int, int
 {
-	column : int;
-	row : int;
+	column := xoffset;
+	line : int;
 	for i : 0..cursor-1
 	{
 		column += 1;
@@ -293,18 +365,18 @@ get_text_view_cursor_pos :: (using view : *Text_View) -> int, int
 
 		if column > w - 1 || buffer[i] == #char "\n"
 		{
-			column = 0;
-			row += 1;
+			column = xoffset;
+			line += 1;
 		}
 	}
 
-	return column, row;
+	return column - xoffset, line;
 }
 
 move_text_view_cursor_to_target :: (using view : *Text_View, target_x : int, target_y : int)
 {
 	i := 0;
-	column : int;
+	column := xoffset;
 	row : int;
 	while i < buffer.count && row < target_y
 	{
@@ -319,14 +391,14 @@ move_text_view_cursor_to_target :: (using view : *Text_View, target_x : int, tar
 
 		if column > w - 1 || buffer[i] == #char "\n"
 		{
-			column = 0;
+			column = xoffset;
 			row += 1;
 		}
 
 		i += 1;
 	}
 
-	column = 0;
+	column = xoffset;
 	while i < buffer.count && column < target_x
 	{
 		column += 1;
