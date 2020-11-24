@@ -33,7 +33,7 @@ Screen_Renderer :: struct
 	atlas : *Font_Atlas;
 }
 
-init_screen_renderer :: (renderer : *Screen_Renderer, max_screen_elements_per_batch : int, screen_width : float, screen_height : float, clear_color : Vector3) -> bool
+init_screen_renderer :: (renderer : *Screen_Renderer, max_screen_elements_per_batch : int, screen_width : int, screen_height : int, clear_color : Vector3) -> bool
 {
 	renderer.gl.spo = create_gl_shader_program (VERTEX_SOURCE, FRAGMENT_SOURCE);
 	
@@ -111,6 +111,8 @@ init_screen_renderer :: (renderer : *Screen_Renderer, max_screen_elements_per_ba
 	array_reserve (*renderer.vertices, max_screen_elements_per_batch * 4);
 	renderer.clear_color = clear_color;
 	renderer.view_proj = orthographic_projection_matrix (0.0, cast (float) screen_width, cast (float) screen_height, 0.0, 0.1, 1000.0);
+	renderer.width = screen_width;
+	renderer.height = screen_height;
 
 	return true;
 }
