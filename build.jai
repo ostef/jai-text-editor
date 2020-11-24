@@ -32,6 +32,7 @@ build :: ()
 	build_options.output_executable_name = executable_name;
 	build_options.output_path = build_dir;
 	array_add (*build_options.modules_search_path_array, "src/modules/");
+	array_add (*build_options.modules_search_path_array, "../jai_modules/");
 	set_build_options (build_options, workspace);
 
 	run_on_success := false;
