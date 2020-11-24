@@ -1,16 +1,25 @@
 #import "Basic";
 #import "glfw";
-#import "Stateless_GL";
+#import "GL";
 #import "stb_image_write";
 #import "freetype255";
 #import "Math";
 #import "File";
+#import "Utf8";
+Debug :: #import "Debug";
 
+#load "common.jai";
 #load "font_atlas.jai";
 #load "render.jai";
-#load "screen.jai";
-#load "unicode.jai";
 #load "event.jai";
+#load "screen.jai";
+#load "text_view.jai";
+
+FONT_ATLAS_CELL_WIDTH  :: 9;
+FONT_ATLAS_CELL_HEIGHT :: 17;
+
+SCREEN_COLUMN_COUNT :: 182;
+SCREEN_ROW_COUNT    :: 42;
 
 Window_Data :: struct
 {
@@ -20,9 +29,11 @@ Window_Data :: struct
 
 main :: ()
 {
+	//Debug.attach_to_debugger ();
 	glfwInit ();
 	defer glfwTerminate ();
-	window := glfwCreateWindow (720, 731, "Text", null, null);
+	glfwWindowHint (GLFW_RESIZABLE, 0);
+	window := glfwCreateWindow (SCREEN_COLUMN_COUNT * FONT_ATLAS_CELL_WIDTH, SCREEN_ROW_COUNT * FONT_ATLAS_CELL_HEIGHT, "Text", null, null);
 	defer glfwDestroyWindow (window);
 	glfwMakeContextCurrent (window);
 	window_data : Window_Data;
@@ -96,6 +107,24 @@ main :: ()
 		}
 	});
 
+	glfwSetScrollCallback (window,
+	(window : *GLFWwindow, xoffset : float64, yoffset : float64) #c_call
+	{
+		new_context : Context;
+		push_context new_context
+		{
+			using data := cast (*Window_Data) glfwGetWindowUserPointer (window);
+		
+			event : Event;
+			event.type = .SCROLL;
+			event.window = window;
+			event.scroll_event.x = cast (int) xoffset;
+			event.scroll_event.y = cast (int) -yoffset;
+
+			screen_handle_event (screen, event);
+		}
+	});
+
 	gl_load (*gl, glfwGetProcAddress);
 	using gl;
 
@@ -109,7 +138,7 @@ main :: ()
 
 	font := make_font ();
 	defer destroy_font (*font);
-	atlas := generate_font_atlas (*font, "fonts/dina/dina_regular_13_spaced.png", Face.REGULAR, 9, 17);
+	atlas := generate_font_atlas (*font, "fonts/dina/dina_regular_13_spaced.png", Face.REGULAR, FONT_ATLAS_CELL_WIDTH, FONT_ATLAS_CELL_HEIGHT);
 	assert (atlas != null);
 	
 	// Get the image data and write it to a file
@@ -120,13 +149,13 @@ main :: ()
 
 	screen : Screen;
 	window_data.screen = *screen;
-	init_screen (*screen, 80, 43);
+	init_screen (*screen, SCREEN_COLUMN_COUNT, SCREEN_ROW_COUNT);
 	defer destroy_screen (*screen);
 
 	renderer : Screen_Renderer;
 	renderer.atlas = atlas;
 	window_data.renderer = *renderer;
-	init_screen_renderer (*renderer, 10_000, xx viewport_width, xx viewport_height, Vector3.{ 0.2, 0.2, 0.2 });
+	init_screen_renderer (*renderer, 10_000, viewport_width, viewport_height, Vector3.{ 0.2, 0.2, 0.2 });
 	defer destroy_screen_renderer (*renderer);
 
 	while !glfwWindowShouldClose (window)
@@ -134,59 +163,11 @@ main :: ()
 		reset_temporary_storage ();
 		glfwWaitEvents ();
 		
-		glfwGetFramebufferSize (window, *viewport_width, *viewport_height);
-		glViewport (0, 0, xx viewport_width, xx viewport_height);
-		resize_screen_renderer (*renderer, xx viewport_width, xx viewport_height);
 		refresh_screen (*screen);
 		draw_screen (*renderer, *screen);
 		
 		glfwSwapBuffers (window);
 	}
-}
-
-Color :: struct
-{
-	r, g, b, a : u8;
-}
-
-COLOR_BLACK :: Color.{ 0, 0, 0, 255 };
-COLOR_WHITE :: Color.{ 255, 255, 255, 255 };
-
-color_to_vector3 :: (color : Color) -> Vector3
-{
-	return make_vector3 (color.r / 255.0, color.g / 255.0, color.b / 255.0);
-}
-
-color_to_vector4 :: (color : Color) -> Vector4
-{
-	return make_vector4 (color.r / 255.0, color.g / 255.0, color.b / 255.0, color.a / 255.0);
-}
-
-offset_of :: inline ($T : Type, $member : string) -> s64
-{
-	#insert #run sprint (BODY, member);
-
-	BODY :: #string DONE
-		dummy : T = ---;
-		
-		return cast (*void) (*dummy.%) - cast (*void) *dummy;
-	DONE
-}
-
-print :: inline (val : $T)
-{
-	print ("%", val);
-}
-
-println :: inline (val : $T)
-{
-	print ("%\n", val);
-}
-
-println :: inline (fmt : string, args : ..Any)
-{
-	print (fmt, ..args);
-	print ("\n");
 }
 
 create_gl_shader_program :: (vertex_source : string, fragment_source : string) -> GLuint
