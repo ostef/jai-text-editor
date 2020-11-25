@@ -43,7 +43,7 @@ Text_View :: struct
 	col_in_text : int;
 	line_in_text : int;
 	scroll_x, scroll_y : int;
-	line_count : int;
+	line_count, wrapped_line_count : int;
 	xoffset : int;
 }
 
@@ -83,6 +83,7 @@ init_text_view :: (view : *Text_View, screen : *Screen, x : int, y : int, w : in
 	}
 
 	view.line_count = get_line_count (view.buffer);
+	view.wrapped_line_count = get_wrapped_line_count (view);
 	update_text_view_xoffset (view);
 	
 	view.cursor = 0;
@@ -105,6 +106,7 @@ insert_rune_at_cursor :: (using view : *Text_View, codepoint : Rune)
 	move_text_view_cursor_right (view);
 	// @Cleanup
 	line_count = get_line_count (view.buffer);
+	wrapped_line_count = get_wrapped_line_count (view);
 	update_text_view_xoffset (view);
 }
 
@@ -116,6 +118,7 @@ backspace_remove_rune_at_cursor :: (using view : *Text_View)
 		move_text_view_cursor_left (view);
 		// @Cleanup
 		line_count = get_line_count (view.buffer);
+		wrapped_line_count = get_wrapped_line_count (view);
 		update_text_view_xoffset (view);
 	}
 }
@@ -127,6 +130,7 @@ remove_rune_at_cursor :: (using view : *Text_View)
 		array_ordered_remove_by_index (*buffer, cursor);
 		// @Cleanup
 		line_count = get_line_count (view.buffer);
+		wrapped_line_count = get_wrapped_line_count (view);
 		update_text_view_xoffset (view);
 	}
 }
@@ -189,6 +193,36 @@ get_line_count :: (buffer : []Rune) -> int
 	}
 
 	return count;
+}
+
+get_wrapped_line_count :: (using view : *Text_View) -> int
+{
+	column := xoffset;
+	row    := 0;
+	i := 0;
+	while i < buffer.count
+	{
+		codepoint := buffer[i];
+		column += 1;
+
+		if codepoint == #char "\t"
+		{
+			while column % 4 != 0 && column < w
+			{
+				column += 1;
+			}
+		}
+		
+		if column >= w - 1 || codepoint == #char "\n"
+		{
+			column = xoffset;
+			row += 1;
+		}
+
+		i += 1;
+	}
+
+	return row + 1;
 }
 
 update_text_view_xoffset :: (using view : *Text_View)
@@ -445,12 +479,12 @@ move_text_view_cursor_right :: (using view : *Text_View)
 
 scroll_text_view_up :: (using view : *Text_View, amount := 1)
 {
-	scroll_y = clamp (scroll_y - 1, 0, line_count);
+	scroll_y = clamp (scroll_y - 1, 0, wrapped_line_count - 1);
 }
 
 scroll_text_view_down :: (using view : *Text_View, amount := 1)
 {
-	scroll_y = clamp (scroll_y + 1, 0, line_count);
+	scroll_y = clamp (scroll_y + 1, 0, wrapped_line_count - 1);
 }
 
 text_view_handle_event :: (using view : *Text_View, event : Event)
