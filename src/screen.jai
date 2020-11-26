@@ -105,6 +105,31 @@ refresh_screen :: inline (using screen : *Screen)
 	}
 }
 
+resize_screen :: inline (using screen : *Screen, new_columns : int, new_rows : int)
+{
+	cached_columns := cols;
+	cached_rows    := rows;
+	cols = new_columns;
+	rows = new_rows;
+	
+	if cells.count < cols * rows
+	{
+		free (cells.data);
+		cells = NewArray (cols * rows, Screen_Element);
+	}
+
+	for view : views
+	{
+		if view.type == .TEXT_VIEW
+		{
+			view_width := cached_columns / view.w * cols;
+			view_height := (cached_rows - 1) / view.h * rows - 1;
+			resize_text_view (cast (*Text_View) view, view_width, view_height);
+			refresh_text_view (cast (*Text_View) view);
+		}
+	}
+}
+
 get_cell_at_pos :: inline (using screen : *Screen, pos_x : int, pos_y : int) -> *Screen_Element
 {
 	assert (pos_x >= 0 && pos_x < cols && pos_y >= 0 && pos_y < rows);

@@ -95,9 +95,13 @@ destroy_text_view :: (using view : *Text_View)
 	memset (view, 0, size_of (Text_View));
 }
 
-// @Todo (stefan)
-resize_text_view :: (using view : *Text_View)
+resize_text_view :: (using view : *Text_View, new_w : int, new_h : int)
 {
+	w = new_w;
+	h = new_h;
+	line_count = get_line_count (view.buffer);
+	wrapped_line_count = get_wrapped_line_count (view);
+	update_text_view_xoffset (view);
 }
 
 insert_rune_at_cursor :: (using view : *Text_View, codepoint : Rune)
@@ -108,6 +112,7 @@ insert_rune_at_cursor :: (using view : *Text_View, codepoint : Rune)
 	line_count = get_line_count (view.buffer);
 	wrapped_line_count = get_wrapped_line_count (view);
 	update_text_view_xoffset (view);
+	scroll_text_view_to_cursor (view);
 }
 
 backspace_remove_rune_at_cursor :: (using view : *Text_View)
@@ -120,6 +125,7 @@ backspace_remove_rune_at_cursor :: (using view : *Text_View)
 		line_count = get_line_count (view.buffer);
 		wrapped_line_count = get_wrapped_line_count (view);
 		update_text_view_xoffset (view);
+		scroll_text_view_to_cursor (view);
 	}
 }
 
@@ -132,6 +138,7 @@ remove_rune_at_cursor :: (using view : *Text_View)
 		line_count = get_line_count (view.buffer);
 		wrapped_line_count = get_wrapped_line_count (view);
 		update_text_view_xoffset (view);
+		scroll_text_view_to_cursor (view);
 	}
 }
 
@@ -426,50 +433,60 @@ move_text_view_cursor_to_target :: (using view : *Text_View, target_x : int, tar
 		i += 1;
 	}
 
-	while row < scroll_y + min (row, TEXT_VIEW_SCROLL_MARGIN)
-	{
-		scroll_text_view_up (view);
-	}
-
-	while row - scroll_y > h - TEXT_VIEW_SCROLL_MARGIN
-	{
-		scroll_text_view_down (view);
-	}
-
 	cursor = i;
+	col_in_text, line_in_text = get_text_view_cursor_pos_in_text (view);		// @Cleanup (stefan): This can be returned by move_text_view_cursor_to_target...
+	scroll_text_view_to_cursor (view);
 }
 
-move_text_view_cursor_up :: (using view : *Text_View)
+move_text_view_cursor_up :: inline (using view : *Text_View)
 {
 	column, row := get_text_view_cursor_pos_in_text (view);
 	move_text_view_cursor_to_target (view, column + xoffset, row - 1);
-	col_in_text, line_in_text = get_text_view_cursor_pos_in_text (view);		// @Cleanup (stefan): This can be returned by move_text_view_cursor_to_target...
 }
 
-move_text_view_cursor_down :: (using view : *Text_View)
+move_text_view_cursor_down :: inline (using view : *Text_View)
 {
 	column, row := get_text_view_cursor_pos_in_text (view);
 	move_text_view_cursor_to_target (view, column + xoffset, row + 1);
-	col_in_text, line_in_text = get_text_view_cursor_pos_in_text (view);		// @Cleanup
 }
 
-move_text_view_cursor_left :: (using view : *Text_View)
+move_text_view_cursor_left :: inline (using view : *Text_View)
 {
 	// @Note (stefan): Maybe we should also update the cursor position in the view, instead of doing it when refreshing.
 	// This would also mean that we can rely on cursor_x and cursor_y being correct in other procedures such as move_cursor_up/down.
 	cursor = clamp (cursor - 1, 0, buffer.count);
 	col_in_text, line_in_text = get_text_view_cursor_pos_in_text (view);
-	
+	scroll_text_view_to_cursor (view);
+}
+
+move_text_view_cursor_right :: inline (using view : *Text_View)
+{
+	cursor = clamp (cursor + 1, 0, buffer.count);
+	col_in_text, line_in_text = get_text_view_cursor_pos_in_text (view);
+	scroll_text_view_to_cursor (view);
+}
+
+move_text_view_cursor_to_buffer_start :: inline (using view : *Text_View)
+{
+	cursor = 0;
+	col_in_text, line_in_text = get_text_view_cursor_pos_in_text (view);
+	scroll_text_view_to_cursor (view);
+}
+
+move_text_view_cursor_to_buffer_end :: inline (using view : *Text_View)
+{
+	cursor = buffer.count;
+	col_in_text, line_in_text = get_text_view_cursor_pos_in_text (view);
+	scroll_text_view_to_cursor (view);
+}
+
+scroll_text_view_to_cursor :: inline (using view : *Text_View)
+{
+	// @Cleanup (stefan): There's probably a better way to do it without loops.
 	while line_in_text < scroll_y + min (line_in_text, TEXT_VIEW_SCROLL_MARGIN)
 	{
 		scroll_text_view_up (view);
 	}
-}
-
-move_text_view_cursor_right :: (using view : *Text_View)
-{
-	cursor = clamp (cursor + 1, 0, buffer.count);
-	col_in_text, line_in_text = get_text_view_cursor_pos_in_text (view);
 
 	while line_in_text - scroll_y > h - TEXT_VIEW_SCROLL_MARGIN
 	{
@@ -477,14 +494,14 @@ move_text_view_cursor_right :: (using view : *Text_View)
 	}
 }
 
-scroll_text_view_up :: (using view : *Text_View, amount := 1)
+scroll_text_view_up :: inline (using view : *Text_View, amount := 1)
 {
-	scroll_y = clamp (scroll_y - 1, 0, wrapped_line_count - 1);
+	scroll_y = clamp (scroll_y - amount, 0, wrapped_line_count - 1);
 }
 
-scroll_text_view_down :: (using view : *Text_View, amount := 1)
+scroll_text_view_down :: inline (using view : *Text_View, amount := 1)
 {
-	scroll_y = clamp (scroll_y + 1, 0, wrapped_line_count - 1);
+	scroll_y = clamp (scroll_y + amount, 0, wrapped_line_count - 1);
 }
 
 text_view_handle_event :: (using view : *Text_View, event : Event)
@@ -493,8 +510,26 @@ text_view_handle_event :: (using view : *Text_View, event : Event)
 	{
 		if event.key_event.key ==
 		{
-			case GLFW_KEY_UP;    move_text_view_cursor_up (view);
-			case GLFW_KEY_DOWN;  move_text_view_cursor_down (view);
+			case GLFW_KEY_UP;
+				if event.key_event.mods == GLFW_MOD_CONTROL
+				{
+					move_text_view_cursor_to_buffer_start (view);
+				}
+				else
+				{
+					move_text_view_cursor_up (view);
+				}
+
+			case GLFW_KEY_DOWN;
+				if event.key_event.mods == GLFW_MOD_CONTROL
+				{
+					move_text_view_cursor_to_buffer_end (view);
+				}
+				else
+				{
+					move_text_view_cursor_down (view);
+				}
+
 			case GLFW_KEY_LEFT;  move_text_view_cursor_left (view);
 			case GLFW_KEY_RIGHT; move_text_view_cursor_right (view);
 			case GLFW_KEY_ENTER; insert_rune_at_cursor (view, #char "\n");
@@ -520,13 +555,7 @@ text_view_handle_event :: (using view : *Text_View, event : Event)
 	}
 	else if event.type == .SCROLL
 	{
-		if event.scroll_event.y > 0
-		{
-			for i : 1..TEXT_VIEW_SCROLL_INCREMENT  scroll_text_view_down (view);	// @Cleanup
-		}
-		else
-		{
-			for i : 1..TEXT_VIEW_SCROLL_INCREMENT  scroll_text_view_up (view);
-		}
+		if event.scroll_event.y > 0  scroll_text_view_down (view, TEXT_VIEW_SCROLL_INCREMENT);
+		else                         scroll_text_view_up   (view, TEXT_VIEW_SCROLL_INCREMENT);
 	}
 }

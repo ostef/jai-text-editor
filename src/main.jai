@@ -1,9 +1,8 @@
 #import "Basic";
 #import "glfw";
 #import "GL";
-#import "stb_image_write";
-#import "freetype255";
-#import "Math";
+//#import "stb_image_write";
+//#import "freetype255";
 #import "File";
 #import "Utf8";
 Debug :: #import "Debug";
@@ -13,6 +12,7 @@ Debug :: #import "Debug";
 #load "render.jai";
 #load "event.jai";
 #load "screen.jai";
+#load "gap_buffer.jai";
 #load "text_view.jai";
 
 FONT_ATLAS_CELL_WIDTH  :: 9;
@@ -32,13 +32,30 @@ main :: ()
 	//Debug.attach_to_debugger ();
 	glfwInit ();
 	defer glfwTerminate ();
-	glfwWindowHint (GLFW_RESIZABLE, 0);
+	//glfwWindowHint (GLFW_RESIZABLE, 0);
 	window := glfwCreateWindow (SCREEN_COLUMN_COUNT * FONT_ATLAS_CELL_WIDTH, SCREEN_ROW_COUNT * FONT_ATLAS_CELL_HEIGHT, "Text", null, null);
 	defer glfwDestroyWindow (window);
 	glfwMakeContextCurrent (window);
 	window_data : Window_Data;
 	glfwSetWindowUserPointer (window, *window_data);
 	
+	glfwSetFramebufferSizeCallback (window,
+	(window : *GLFWwindow, width : s32, height : s32) #c_call
+	{
+		if width != 0 && height != 0
+		{
+			new_context : Context;
+			push_context new_context
+			{
+				using data := cast (*Window_Data) glfwGetWindowUserPointer (window);
+				
+				glViewport (0, 0, xx width, xx height);
+				resize_screen_renderer (renderer, width, height);
+				resize_screen (screen, width / renderer.atlas.cell_w, height / renderer.atlas.cell_h);
+			}
+		}
+	});
+
 	glfwSetKeyCallback (window,
 	(window : *GLFWwindow, key : s32, scancode : s32, action : s32, mods : s32) #c_call
 	{
@@ -155,7 +172,7 @@ main :: ()
 	renderer : Screen_Renderer;
 	renderer.atlas = atlas;
 	window_data.renderer = *renderer;
-	init_screen_renderer (*renderer, 10_000, viewport_width, viewport_height, Vector3.{ 0.2, 0.2, 0.2 });
+	init_screen_renderer (*renderer, 10_000, viewport_width, viewport_height, Vec3.{ 0.2, 0.2, 0.2 });
 	defer destroy_screen_renderer (*renderer);
 
 	while !glfwWindowShouldClose (window)
