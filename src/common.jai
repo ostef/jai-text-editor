@@ -13,14 +13,9 @@ Color :: struct
 COLOR_BLACK :: Color.{ 0, 0, 0 };
 COLOR_WHITE :: Color.{ 255, 255, 255 };
 
-color_to_vector3 :: (color : Color) -> Vector3
+color_to_vec3 :: (color : Color) -> Vec3
 {
-	return make_vector3 (color.r / 255.0, color.g / 255.0, color.b / 255.0);
-}
-
-color_to_vector4 :: (color : Color) -> Vector4
-{
-	return make_vector4 (color.r / 255.0, color.g / 255.0, color.b / 255.0, 1.0);
+	return vec3 (color.r / 255.0, color.g / 255.0, color.b / 255.0);
 }
 
 offset_of :: inline ($T : Type, $member : string) -> s64

@@ -1,5 +1,5 @@
 #import "GL";
-#import "Math";
+#import "Linalg";
 
 RENDER_WHITESPACE :: true;
 DIM_WHITESPACE    :: true;
@@ -9,10 +9,10 @@ DIM_WHITESPACE    :: true;
 
 Vertex :: struct
 {
-	position : Vector2;
-	tex_coords : Vector2;
-	foreground_color : Vector3;
-	background_color : Vector3;
+	position : Vec2;
+	tex_coords : Vec2;
+	foreground_color : Vec3;
+	background_color : Vec3;
 }
 
 Screen_Renderer :: struct
@@ -26,14 +26,14 @@ Screen_Renderer :: struct
 	columns : int;
 	rows : int;
 	vertices : [..]Vertex;
-	view_proj : Matrix4;
-	clear_color : Vector3;
+	view_proj : Mat4;
+	clear_color : Vec3;
 	width : int;
 	height : int;
 	atlas : *Font_Atlas;
 }
 
-init_screen_renderer :: (renderer : *Screen_Renderer, max_screen_elements_per_batch : int, screen_width : int, screen_height : int, clear_color : Vector3) -> bool
+init_screen_renderer :: (renderer : *Screen_Renderer, max_screen_elements_per_batch : int, screen_width : int, screen_height : int, clear_color : Vec3) -> bool
 {
 	renderer.gl.spo = create_gl_shader_program (VERTEX_SOURCE, FRAGMENT_SOURCE);
 	
@@ -110,7 +110,7 @@ init_screen_renderer :: (renderer : *Screen_Renderer, max_screen_elements_per_ba
 
 	array_reserve (*renderer.vertices, max_screen_elements_per_batch * 4);
 	renderer.clear_color = clear_color;
-	renderer.view_proj = orthographic_projection_matrix (0.0, cast (float) screen_width, cast (float) screen_height, 0.0, 0.1, 1000.0);
+	renderer.view_proj = make_orthographic_projection_matrix (0.0, cast (float) screen_width, cast (float) screen_height, 0.0, 0.1, 1000.0);
 	renderer.width = screen_width;
 	renderer.height = screen_height;
 
@@ -131,7 +131,7 @@ destroy_screen_renderer :: (renderer : *Screen_Renderer)
 
 resize_screen_renderer :: (renderer : *Screen_Renderer, width : int, height : int)
 {
-	renderer.view_proj = orthographic_projection_matrix (0.0, cast (float) width, cast (float) height, 0.0, 0.1, 1000.0);
+	renderer.view_proj = make_orthographic_projection_matrix (0.0, cast (float) width, cast (float) height, 0.0, 0.1, 1000.0);
 	renderer.width = width;
 	renderer.height = height;
 }
@@ -153,8 +153,8 @@ draw_screen_element :: (renderer : *Screen_Renderer, x : float, y : float, elem 
 	if cast (int) x * renderer.atlas.cell_w > renderer.width || cast (int) y * renderer.atlas.cell_h > renderer.height  return false;
 
 	vertex : Vertex;
-	vertex.foreground_color = color_to_vector3 (elem.foreground_color);
-	vertex.background_color = color_to_vector3 (elem.background_color);
+	vertex.foreground_color = color_to_vec3 (elem.foreground_color);
+	vertex.background_color = color_to_vec3 (elem.background_color);
 
 	codepoint := elem.codepoint;
 	
@@ -179,23 +179,23 @@ draw_screen_element :: (renderer : *Screen_Renderer, x : float, y : float, elem 
 	cell_height := renderer.atlas.cell_h;
 
 	// Top left
-	vertex.position = make_vector2 (x * cell_width, y * cell_height);
-	vertex.tex_coords = make_vector2 (tex_x, tex_y);
+	vertex.position = vec2 (x * cell_width, y * cell_height);
+	vertex.tex_coords = vec2 (tex_x, tex_y);
 	array_add (*renderer.vertices, vertex);
 
 	// Top right
-	vertex.position = make_vector2 (x * cell_width + cell_width, y * cell_height);
-	vertex.tex_coords = make_vector2 (tex_x + tex_w, tex_y);
+	vertex.position = vec2 (x * cell_width + cell_width, y * cell_height);
+	vertex.tex_coords = vec2 (tex_x + tex_w, tex_y);
 	array_add (*renderer.vertices, vertex);
 
 	// Bottom right
-	vertex.position = make_vector2 (x * cell_width + cell_width, y * cell_height + cell_height);
-	vertex.tex_coords = make_vector2 (tex_x + tex_w, tex_y + tex_h);
+	vertex.position = vec2 (x * cell_width + cell_width, y * cell_height + cell_height);
+	vertex.tex_coords = vec2 (tex_x + tex_w, tex_y + tex_h);
 	array_add (*renderer.vertices, vertex);
 
 	// Bottom left
-	vertex.position = make_vector2 (x * cell_width, y * cell_height + cell_height);
-	vertex.tex_coords = make_vector2 (tex_x, tex_y + tex_h);
+	vertex.position = vec2 (x * cell_width, y * cell_height + cell_height);
+	vertex.tex_coords = vec2 (tex_x, tex_y + tex_h);
 	array_add (*renderer.vertices, vertex);
 
 	return true;
@@ -207,7 +207,7 @@ draw_screen :: (renderer : *Screen_Renderer, screen : *Screen)
 	glClearColor (renderer.clear_color.x, renderer.clear_color.y, renderer.clear_color.z, 1.0);
 	glClear (GL_COLOR_BUFFER_BIT);
 	glUseProgram (renderer.gl.spo);
-	glUniformMatrix4fv (renderer.gl.view_proj_loc, 1, GL_TRUE, *renderer.view_proj._11);
+	glUniformMatrix4fv (renderer.gl.view_proj_loc, 1, GL_FALSE, *renderer.view_proj.n11);
 	glBindTexture (GL_TEXTURE_2D, renderer.atlas.gl.tex);
 
 	x := 0;
