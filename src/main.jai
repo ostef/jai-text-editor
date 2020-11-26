@@ -157,12 +157,6 @@ main :: ()
 	defer destroy_font (*font);
 	atlas := generate_font_atlas (*font, "fonts/dina/dina_regular_13_spaced.png", Face.REGULAR, FONT_ATLAS_CELL_WIDTH, FONT_ATLAS_CELL_HEIGHT);
 	assert (atlas != null);
-	
-	// Get the image data and write it to a file
-	output_buffer : []Color;
-	output_buffer.data = alloc (size_of (Color) * FONT_ATLAS_SIZE * FONT_ATLAS_SIZE);
-	defer free (output_buffer.data);
-	output_buffer.count = FONT_ATLAS_SIZE * FONT_ATLAS_SIZE;
 
 	screen : Screen;
 	window_data.screen = *screen;
