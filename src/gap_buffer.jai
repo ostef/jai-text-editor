@@ -88,8 +88,10 @@ gap_buffer_grow :: (using buffer : *Gap_Buffer, factor : int)
 	gap  = new_gap;
 }
 
-for_expansion :: (using buffer : Gap_Buffer, body : Code, by_pointer : bool, reverse : bool) #expand
+for_expansion :: (using buffer : *Gap_Buffer, body : Code, by_pointer : bool, reverse : bool) #expand
 {
+	#assert (!reverse);		// @Incomplete
+
 	`it_index := 0;
 	should_break := false;
 	while it_index < cursor && !should_break
@@ -108,6 +110,44 @@ for_expansion :: (using buffer : Gap_Buffer, body : Code, by_pointer : bool, rev
 
 	it_index += gap;
 	while it_index < data.count && !should_break
+	{
+		#if by_pointer
+		{
+			`it := *data[it_index];
+		}
+		else
+		{
+			`it := data[it_index];
+		}
+		
+		#insert body;
+	}
+}
+
+front :: (using buffer : Gap_Buffer, body : Code, by_pointer : bool, reverse : bool) #expand
+{
+	#assert (!reverse);		// @Incomplete
+
+	for `it_index : 0..cursor - 1
+	{
+		#if by_pointer
+		{
+			`it := *data[it_index];
+		}
+		else
+		{
+			`it := data[it_index];
+		}
+		
+		#insert body;
+	}
+}
+
+back :: (using buffer : Gap_Buffer, body : Code, by_pointer : bool, reverse : bool) #expand
+{
+	#assert (!reverse);		// @Incomplete
+
+	for `it_index : cursor + gap..data.count - 1
 	{
 		#if by_pointer
 		{
