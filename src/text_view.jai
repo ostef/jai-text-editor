@@ -38,8 +38,7 @@ Text_View :: struct
 	using base : Screen_View;
 	filepath : string;
 	has_file : bool;
-	buffer : [..]Rune;		// @Todo (stefan): Gap buffer
-	cursor : int;
+	buffer : Gap_Buffer;
 	col_in_text : int;
 	line_in_text : int;
 	scroll_x, scroll_y : int;
@@ -67,31 +66,32 @@ init_text_view :: (view : *Text_View, screen : *Screen, x : int, y : int, w : in
 		data, ok := read_entire_file (FILEPATH);
 		assert (ok, "Could not read file %", FILEPATH);
 		defer free (data);
-		array_reserve (*view.buffer, data.count);
+		view.buffer = make_gap_buffer (data.count);
 		
 		i := 0;
+		newlines := 0;
 		while i < data.count
 		{
 			codepoint, size := utf8_rune_at_byte (data, xx i);
-			if codepoint != #char "\r"  array_add (*view.buffer, codepoint);	// Ignore freaking '\r'
+			if codepoint != #char "\r" insert (*view.buffer, codepoint);	// Ignore freaking '\r'
 			i += xx size;
 		}
 	}
 	else
 	{
-		array_reserve (*view.buffer, 1024);
+		view.buffer = make_gap_buffer (5_000);
 	}
 
-	view.line_count = get_line_count (view.buffer);
+	view.line_count = get_line_count (view);
 	view.wrapped_line_count = get_wrapped_line_count (view);
 	update_text_view_xoffset (view);
-	
-	view.cursor = 0;
+	view.col_in_text, view.line_in_text = get_text_view_cursor_pos_in_text (view);
+	scroll_text_view_to_cursor (view);
 }
 
 destroy_text_view :: (using view : *Text_View)
 {
-	array_reset (*buffer);
+	destroy_gap_buffer (*buffer);
 	memset (view, 0, size_of (Text_View));
 }
 
@@ -99,17 +99,16 @@ resize_text_view :: (using view : *Text_View, new_w : int, new_h : int)
 {
 	w = new_w;
 	h = new_h;
-	line_count = get_line_count (view.buffer);
+	line_count = get_line_count (view);
 	wrapped_line_count = get_wrapped_line_count (view);
 	update_text_view_xoffset (view);
 }
 
 insert_rune_at_cursor :: (using view : *Text_View, codepoint : Rune)
 {
-	array_insert_at (*buffer, codepoint, cursor);
-	move_text_view_cursor_right (view);
+	insert (*buffer, codepoint);
 	// @Cleanup
-	line_count = get_line_count (view.buffer);
+	line_count = get_line_count (view);
 	wrapped_line_count = get_wrapped_line_count (view);
 	update_text_view_xoffset (view);
 	scroll_text_view_to_cursor (view);
@@ -117,12 +116,11 @@ insert_rune_at_cursor :: (using view : *Text_View, codepoint : Rune)
 
 backspace_remove_rune_at_cursor :: (using view : *Text_View)
 {
-	if buffer.count > 0 && cursor > 0
+	if buffer.cursor > 0
 	{
-		array_ordered_remove_by_index (*buffer, cursor - 1);
-		move_text_view_cursor_left (view);
+		backspace (*buffer);
 		// @Cleanup
-		line_count = get_line_count (view.buffer);
+		line_count = get_line_count (view);
 		wrapped_line_count = get_wrapped_line_count (view);
 		update_text_view_xoffset (view);
 		scroll_text_view_to_cursor (view);
@@ -131,17 +129,18 @@ backspace_remove_rune_at_cursor :: (using view : *Text_View)
 
 remove_rune_at_cursor :: (using view : *Text_View)
 {
-	if buffer.count > 0 && cursor < buffer.count
+	if buffer.cursor < gap_buffer_count (buffer)
 	{
-		array_ordered_remove_by_index (*buffer, cursor);
+		delete (*buffer);
 		// @Cleanup
-		line_count = get_line_count (view.buffer);
+		line_count = get_line_count (view);
 		wrapped_line_count = get_wrapped_line_count (view);
 		update_text_view_xoffset (view);
 		scroll_text_view_to_cursor (view);
 	}
 }
 
+/*
 write_string_to_view :: (using view : *Screen_View, runes : []Rune, x_min : int, y_min : int, x_max : int = -1, y_max : int = -1, foreground_color := COLOR_WHITE, background_color := COLOR_BLACK)
 {
 	if x_max == -1  x_max = w;
@@ -190,13 +189,14 @@ write_string_to_view :: (using view : *Screen_View, str : string, x_min : int, y
 	runes, valid := utf8_string_to_runes (str, __temporary_allocator);
 	if valid  write_string_to_view (view, runes, x_min, y_min, x_max, y_max, foreground_color, background_color);
 }
+*/
 
-get_line_count :: (buffer : []Rune) -> int
+get_line_count :: (using view : *Text_View) -> int
 {
 	count := 1;
-	for rune : buffer
+	for buffer
 	{
-		if rune == #char "\n" count += 1;
+		if it == #char "\n" count += 1;
 	}
 
 	return count;
@@ -207,7 +207,7 @@ get_wrapped_line_count :: (using view : *Text_View) -> int
 	column := xoffset;
 	row    := 0;
 	i := 0;
-	while i < buffer.count
+	while i < gap_buffer_count (buffer)
 	{
 		codepoint := buffer[i];
 		column += 1;
@@ -253,7 +253,7 @@ refresh_text_view :: (using view : *Text_View)
 		i := 0;
 		x_pos := xoffset;
 		y_pos := 0;
-		while i < buffer.count && y_pos < scroll_y
+		while i < gap_buffer_count (buffer) && y_pos < scroll_y
 		{
 			codepoint := buffer[i];
 			x_pos += 1;
@@ -263,7 +263,7 @@ refresh_text_view :: (using view : *Text_View)
 				while x_pos % 4 != 0 && x_pos < w  x_pos += 1;
 			}
 
-			if x_pos >= w - 1 || codepoint == #char "\n"
+			if x_pos > w - 1 || codepoint == #char "\n"
 			{
 				x_pos = xoffset;
 				y_pos += 1;
@@ -279,7 +279,7 @@ refresh_text_view :: (using view : *Text_View)
 	{
 		i := 0;
 		line := 1;
-		while i < pos && i < buffer.count
+		while i < pos && i < gap_buffer_count (buffer)
 		{
 			if buffer[i] == #char "\n"  line += 1;
 			i += 1;
@@ -312,7 +312,7 @@ refresh_text_view :: (using view : *Text_View)
 		}
 	}
 
-	//line_count = get_line_count (view.buffer);
+	//line_count = get_line_count (view);
 	//update_text_view_xoffset (view);
 
 	{
@@ -321,7 +321,7 @@ refresh_text_view :: (using view : *Text_View)
 		current_line := get_line_number_at_cursor (view, i);
 		x_pos := xoffset;
 		y_pos := 0;
-		while i < buffer.count && y_pos < h
+		while i < gap_buffer_count (buffer) && y_pos < h
 		{
 			codepoint := buffer[i];
 			cell := *screen.cells[(y + y_pos) + screen.rows * (x + x_pos)];
@@ -366,8 +366,8 @@ refresh_text_view :: (using view : *Text_View)
 get_text_view_cursor_pos_in_text :: (using view : *Text_View) -> int, int
 {
 	column := xoffset;
-	line : int;
-	for i : 0..cursor-1
+	line   : int;
+	for i : 0..buffer.cursor-1
 	{
 		column += 1;
 		if buffer[i] == #char "\t"
@@ -390,10 +390,10 @@ get_text_view_cursor_pos_in_text :: (using view : *Text_View) -> int, int
 
 move_text_view_cursor_to_target :: (using view : *Text_View, target_x : int, target_y : int)
 {
-	i := 0;
+	i      := 0;
 	column := xoffset;
-	row := 0;
-	while i < buffer.count && row < target_y
+	row    := 0;
+	while i < gap_buffer_count (buffer) && row < target_y
 	{
 		column += 1;
 		if buffer[i] == #char "\t"
@@ -414,7 +414,7 @@ move_text_view_cursor_to_target :: (using view : *Text_View, target_x : int, tar
 	}
 
 	column = xoffset;
-	while i < buffer.count && column < target_x
+	while i < gap_buffer_count (buffer) && column < target_x
 	{
 		column += 1;
 		if buffer[i] == #char "\t"
@@ -433,8 +433,9 @@ move_text_view_cursor_to_target :: (using view : *Text_View, target_x : int, tar
 		i += 1;
 	}
 
-	cursor = i;
-	col_in_text, line_in_text = get_text_view_cursor_pos_in_text (view);		// @Cleanup (stefan): This can be returned by move_text_view_cursor_to_target...
+	set_cursor (*buffer, i);
+	col_in_text  = column - xoffset;
+	line_in_text = row;
 	scroll_text_view_to_cursor (view);
 }
 
@@ -452,30 +453,28 @@ move_text_view_cursor_down :: inline (using view : *Text_View)
 
 move_text_view_cursor_left :: inline (using view : *Text_View)
 {
-	// @Note (stefan): Maybe we should also update the cursor position in the view, instead of doing it when refreshing.
-	// This would also mean that we can rely on cursor_x and cursor_y being correct in other procedures such as move_cursor_up/down.
-	cursor = clamp (cursor - 1, 0, buffer.count);
+	move_cursor_backward (*buffer);
 	col_in_text, line_in_text = get_text_view_cursor_pos_in_text (view);
 	scroll_text_view_to_cursor (view);
 }
 
 move_text_view_cursor_right :: inline (using view : *Text_View)
 {
-	cursor = clamp (cursor + 1, 0, buffer.count);
+	move_cursor_forward (*buffer);
 	col_in_text, line_in_text = get_text_view_cursor_pos_in_text (view);
 	scroll_text_view_to_cursor (view);
 }
 
 move_text_view_cursor_to_buffer_start :: inline (using view : *Text_View)
 {
-	cursor = 0;
+	set_cursor (*buffer, 0);
 	col_in_text, line_in_text = get_text_view_cursor_pos_in_text (view);
 	scroll_text_view_to_cursor (view);
 }
 
 move_text_view_cursor_to_buffer_end :: inline (using view : *Text_View)
 {
-	cursor = buffer.count;
+	set_cursor (*buffer, gap_buffer_count (buffer));
 	col_in_text, line_in_text = get_text_view_cursor_pos_in_text (view);
 	scroll_text_view_to_cursor (view);
 }
@@ -501,7 +500,7 @@ scroll_text_view_up :: inline (using view : *Text_View, amount := 1)
 
 scroll_text_view_down :: inline (using view : *Text_View, amount := 1)
 {
-	scroll_y = clamp (scroll_y + amount, 0, wrapped_line_count - 1);
+	scroll_y = clamp (scroll_y + amount, 0, wrapped_line_count - 1 - TEXT_VIEW_SCROLL_MARGIN);
 }
 
 text_view_handle_event :: (using view : *Text_View, event : Event)
