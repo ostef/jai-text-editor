@@ -217,19 +217,21 @@ draw_screen :: (renderer : *Screen_Renderer, screen : *Screen)
 		for j : 0..screen.cols - 1
 		{
 			elem := screen.cells[i + screen.rows * j];
+			
+			if screen.active_view.draw_cursor &&
+			   j == screen.active_view.x + screen.active_view.cursor_x &&
+			   i == screen.active_view.y + screen.active_view.cursor_y
+			{
+				elem.foreground_color = invert_color (elem.foreground_color);
+				elem.background_color = COLOR_WHITE;
+			}
+
 			draw_screen_element (renderer, cast (float) x, cast (float) y, elem);
 			x += 1;
 		}
 
 		y += 1;
 		x = 0;
-	}
-
-	if screen.active_view.draw_cursor
-	{
-		cursor : Screen_Element;
-		cursor.background_color = COLOR_WHITE;
-		draw_screen_element (renderer, cast (float) screen.active_view.x + screen.active_view.cursor_x, cast (float) screen.active_view.y + screen.active_view.cursor_y, cursor);
 	}
 
 	flush_screen_renderer (renderer);
