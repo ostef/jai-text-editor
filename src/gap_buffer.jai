@@ -22,7 +22,7 @@ destroy_gap_buffer :: inline (using buffer : *Gap_Buffer)
 	gap        = 0;
 }
 
-insert_to_gap_buffer :: inline (using buffer : *Gap_Buffer, codepoint : Rune)
+insert :: inline (using buffer : *Gap_Buffer, codepoint : Rune)
 {
 	if gap == 0  gap_buffer_grow (buffer, 2);
 	data[cursor] = codepoint;
@@ -41,7 +41,7 @@ backspace :: inline (using buffer : *Gap_Buffer)
 
 delete :: inline (using buffer : *Gap_Buffer)
 {
-	if data.count > cursor + gap
+	if cursor < gap_buffer_count (buffer)
 	{
 		gap += 1;
 	}
@@ -49,8 +49,7 @@ delete :: inline (using buffer : *Gap_Buffer)
 
 move_cursor_forward :: inline (using buffer : *Gap_Buffer)
 {
-	back := data.count - cursor + gap;
-	if back > 0
+	if cursor < gap_buffer_count (buffer)
 	{
 		data[cursor] = data[cursor + gap];
 		cursor      += 1;
@@ -61,26 +60,36 @@ move_cursor_backward :: inline (using buffer : *Gap_Buffer)
 {
 	if cursor > 0
 	{
-		data[cursor + gap] = data[cursor];
-		cursor            -= 1;
+		data[cursor + gap - 1] = data[cursor - 1];
+		cursor -= 1;
 	}
 }
 
-set_cursor :: (using buffer : *Gap_Buffer, new_cursor : s64)
+set_cursor :: inline (using buffer : *Gap_Buffer, new_cursor : s64)
 {
-	assert (new_cursor >= 0 && new_cursor <= data.count - gap);
-	// @Cleanup (stefan): Obviously this is not the fastest implementation AT ALL.
+	assert (new_cursor >= 0 && new_cursor <= gap_buffer_count (buffer));
+	// @Cleanup (stefan): This is not the fastest implementation.
 	while cursor < new_cursor  move_cursor_forward  (buffer);
 	while cursor > new_cursor  move_cursor_backward (buffer);
 }
 
+gap_buffer_count :: inline (using buffer : *Gap_Buffer) -> int
+{
+	return data.count - gap;
+}
+
+gap_buffer_count :: inline (using buffer : Gap_Buffer) -> int
+{
+	return data.count - gap;
+}
+
 gap_buffer_grow :: (using buffer : *Gap_Buffer, factor : int)
 {
-	back    := data.count - cursor;
-	new_gap := data.count;
+	back    := data.count - cursor + gap;
+	new_gap := gap + data.count;
 	new_data     := NewArray (data.count * 2, Rune);
 	memcpy (new_data.data, data.data, size_of (Rune) * cursor);
-	//memset (new_data.data + cursor, 0, size_of (Rune) * new_gap);		// Is this necessary ??
+	memset (new_data.data + cursor, 1, size_of (Rune) * new_gap);		// Is this necessary ??
 	memcpy (new_data.data + cursor + new_gap, data.data + cursor + gap, size_of (Rune) * back);
 	
 	free (data.data);
@@ -88,76 +97,42 @@ gap_buffer_grow :: (using buffer : *Gap_Buffer, factor : int)
 	gap  = new_gap;
 }
 
-for_expansion :: (using buffer : *Gap_Buffer, body : Code, by_pointer : bool, reverse : bool) #expand
+operator [] :: inline (using buffer : Gap_Buffer, index : int) -> Rune
 {
-	#assert (!reverse);		// @Incomplete
-
-	`it_index := 0;
-	should_break := false;
-	while it_index < cursor && !should_break
-	{
-		#if by_pointer
-		{
-			`it := *data[it_index];
-		}
-		else
-		{
-			`it := data[it_index];
-		}
-		
-		#insert body;	// @Incomplete (stefan): We should handle break and remove.
-	}
-
-	it_index += gap;
-	while it_index < data.count && !should_break
-	{
-		#if by_pointer
-		{
-			`it := *data[it_index];
-		}
-		else
-		{
-			`it := data[it_index];
-		}
-		
-		#insert body;
-	}
+	assert (index >= 0 && index < gap_buffer_count (buffer), "Bounds check failed: index was %, should be in range [0; %]", index, gap_buffer_count (buffer) - 1);
+	if index < cursor   return data[index];
+	else                return data[gap + index];
 }
 
-front :: (using buffer : Gap_Buffer, body : Code, by_pointer : bool, reverse : bool) #expand
-{
-	#assert (!reverse);		// @Incomplete
+for_expansion :: #bake_arguments for_expansion_helper (do_front = true,  do_back = true);
+front         :: #bake_arguments for_expansion_helper (do_front = true,  do_back = false);
+back          :: #bake_arguments for_expansion_helper (do_front = false, do_back = true);
 
-	for `it_index : 0..cursor - 1
+#scope_file
+
+for_expansion_helper :: (buffer : *Gap_Buffer, body : Code, by_pointer : bool, reverse : bool, do_front : bool, do_back : bool) #expand
+{
+	#assert (do_front || do_back);
+	#assert (!by_pointer);
+
+	#if reverse
 	{
-		#if by_pointer
-		{
-			`it := *data[it_index];
-		}
-		else
-		{
-			`it := data[it_index];
-		}
-		
-		#insert body;
+		#if do_back   start := gap_buffer_count (buffer) - 1;
+		else          start := buffer.cursor - 1;
+		#if do_front  end   := 0;
+		else          end   := buffer.cursor;
 	}
-}
-
-back :: (using buffer : Gap_Buffer, body : Code, by_pointer : bool, reverse : bool) #expand
-{
-	#assert (!reverse);		// @Incomplete
-
-	for `it_index : cursor + gap..data.count - 1
+	else
 	{
-		#if by_pointer
-		{
-			`it := *data[it_index];
-		}
-		else
-		{
-			`it := data[it_index];
-		}
-		
-		#insert body;
+		#if do_front  start := 0;
+		else          start := buffer.cursor;
+		#if do_back   end   := gap_buffer_count (<<buffer) - 1;
+		else          end   := buffer.cursor - 1;
+	}
+
+	for <=reverse `it_index : start..end
+	{
+		`it := (<<buffer)[`it_index];
+		#insert (remove = #assert (false/*, "If you want to modify the contents of a gap buffer, move the cursor and do the operation."*/)) body;	// @Compiler_Bug
 	}
 }
