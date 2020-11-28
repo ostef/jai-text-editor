@@ -32,7 +32,6 @@ main :: ()
 	//Debug.attach_to_debugger ();
 	glfwInit ();
 	defer glfwTerminate ();
-	//glfwWindowHint (GLFW_RESIZABLE, 0);
 	window := glfwCreateWindow (SCREEN_COLUMN_COUNT * FONT_ATLAS_CELL_WIDTH, SCREEN_ROW_COUNT * FONT_ATLAS_CELL_HEIGHT, "Text", null, null);
 	defer glfwDestroyWindow (window);
 	glfwMakeContextCurrent (window);
@@ -166,7 +165,7 @@ main :: ()
 	renderer : Screen_Renderer;
 	renderer.atlas = atlas;
 	window_data.renderer = *renderer;
-	init_screen_renderer (*renderer, 10_000, viewport_width, viewport_height, Vec3.{ 0.2, 0.2, 0.2 });
+	init_screen_renderer (*renderer, 10_000, viewport_width, viewport_height, Vec3.{ 0, 0, 0 });
 	defer destroy_screen_renderer (*renderer);
 
 	while !glfwWindowShouldClose (window)
