@@ -1,0 +1,8 @@
+#include <stdio.h>
+
+int main (int arg_count, char **args)
+{
+	printf ("Hello World!");
+
+	return 0;
+}

@@ -1,3 +1,6 @@
+#import "File";
+#import "Windows";
+
 Gap_Buffer :: struct
 {
 	data   : []Rune;
@@ -97,6 +100,49 @@ gap_buffer_grow :: (using buffer : *Gap_Buffer, factor : int)
 	gap  = new_gap;
 }
 
+get_front_part :: (using buffer : *Gap_Buffer) -> []Rune
+{
+	result : []Rune;
+	result.data = data.data;
+	result.count = cursor;
+
+	return result;
+}
+
+get_back_part :: (using buffer : *Gap_Buffer) -> []Rune
+{
+	result : []Rune;
+	result.data = data.data + cursor + gap;
+	result.count = data.count - cursor - gap;
+
+	return result;
+}
+
+write_gap_buffer_to_file :: (using buffer : *Gap_Buffer, filepath : string) -> bool
+{
+	file, ok := file_open (filepath, for_writing = true);
+	if !ok
+	{
+		err := GetLastError ();
+		println ("Error: %", err);
+
+		return false;
+	}
+
+	defer file_close (*file);
+
+	front := get_front_part (buffer);
+	back  := get_back_part  (buffer);
+	str, valid := utf8_runes_to_string (front, allocator = __temporary_allocator);
+	if !valid  println ("Uh Ooooh");
+	file_write (*file, str.data, str.count);
+	str, valid  = utf8_runes_to_string (back,  allocator = __temporary_allocator);
+	if !valid  println ("Uh Ooooh");
+	file_write (*file, str.data, str.count);
+
+	return true;
+}
+
 operator [] :: inline (using buffer : Gap_Buffer, index : int) -> Rune
 {
 	assert (index >= 0 && index < gap_buffer_count (buffer), "Bounds check failed: index was %, should be in range [0; %]", index, gap_buffer_count (buffer) - 1);
@@ -133,6 +179,6 @@ for_expansion_helper :: (buffer : *Gap_Buffer, body : Code, by_pointer : bool, r
 	for <=reverse `it_index : start..end
 	{
 		`it := (<<buffer)[`it_index];
-		#insert (remove = #assert (false/*, "If you want to modify the contents of a gap buffer, move the cursor and do the operation."*/)) body;	// @Compiler_Bug
+		#insert (remove = #assert false "If you want to modify the contents of a gap buffer, move the cursor and do the operation.") body;	// @Compiler_Bug
 	}
 }

@@ -1,6 +1,7 @@
 #scope_file
-INIT_WITH_FILE :: false;
-FILEPATH       :: #file;
+INIT_WITH_FILE :: true;
+FILEPATH       :: "out.txt";
+OUTPUT_FILE    :: "out.txt";
 #scope_export
 
 /*
@@ -572,6 +573,14 @@ text_view_handle_event :: (using view : *Text_View, event : Event)
 			case GLFW_KEY_DELETE;     remove_rune_at_cursor (view);
 			case GLFW_KEY_PAGE_UP;    scroll_text_area_up (view);
 			case GLFW_KEY_PAGE_DOWN;  scroll_text_area_down (view);
+		}
+
+		if event.key_event.mods == GLFW_MOD_CONTROL && event.key_event.key == GLFW_KEY_S
+		{
+			println ("Saving to '%'...", OUTPUT_FILE);
+			ok := write_gap_buffer_to_file (*buffer, OUTPUT_FILE);
+			if ok  println ("Success");
+			else   println ("Failure");
 		}
 	}
 	else if event.type == .CHAR_INPUT
