@@ -4,7 +4,7 @@ FILEPATH       :: #file;
 #scope_export
 
 /*
- * UPDATE ON THE COMMENT BELOW: I just monitored how many calls to the expensive procedures (when I say expensive,
+ * I just monitored how many calls to the expensive procedures (when I say expensive,
  * I mean the procedures that loop over the whole buffer). At most, 2 calls are made to get_text_area_cursor_position.
  * The other procedures (get_line_count, get_wrapped_line_count and scroll_text_area_to_cursor)
  * are called only once when writing to the buffer. That's it. So what I wrote before, not being actually based on any
@@ -13,28 +13,7 @@ FILEPATH       :: #file;
  *																		ostef, November 29 2020
  */
 
-/*
- * SEE COMMENT ABOVE
- *
- * One of the biggest difficulty I encountered has to do with the fact that the text view has to know
- * where things are placed on the screen to be able to move the cursor properly and select things with
- * the mouse. We essentially want to have the cursor position, line number display width ect. up to date at all
- * time. Luckily, there only a handful of procedures that modify the way things are placed on the screen:
- *    * Scroll up, down, left and right,
- *    * Inserting, backspace remove, remove rune at cursor,
- *    * Moving the cursor (this one does not directly affect the final render, just the cursor placement).
- *
- * And the following procedures need to know how things are placed on the screen:
- *    * Moving the cursor,
- *    * Refreshing the text view.
- *
- * On the other hand, usually only one thing is done per event, so we would want to update the positions of things
- * one time per refresh. (Add a dirty flag ???).
- *
- *																		ostef, November 24 2020
- */
-
-TEXT_VIEW_SCROLL_MARGIN :: 3;
+TEXT_VIEW_SCROLL_MARGIN    :: 3;
 TEXT_VIEW_SCROLL_INCREMENT :: 2;
 
 Text_View :: struct
@@ -93,6 +72,7 @@ init_text_view :: (view : *Text_View, screen : *Screen, x : int, y : int, w : in
 	view.line_count = get_line_count (view);
 	view.wrapped_line_count = get_wrapped_line_count (view);
 	view.line_area_width = get_line_area_width (view);
+	set_cursor (*view.buffer, 0);
 	view.text_area.column, view.text_area.line = get_text_area_cursor_position (view);
 	scroll_text_area_to_cursor (view);
 }

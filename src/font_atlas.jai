@@ -3,6 +3,8 @@
 #import "freetype255";
 #import "stb_image";
 
+// @Todo (stefan): Character map
+
 Font :: struct
 {
 	atlases : [..]Font_Atlas;
@@ -147,7 +149,8 @@ destroy_font_atlas :: (atlas : *Font_Atlas)
 get_glyph_coords_in_font_atlas :: (atlas : *Font_Atlas, codepoint : Rune) -> int, int
 {
 	columns := FONT_ATLAS_SIZE / atlas.cell_w;
-	codepoint = clamp (codepoint, 0, 255);
+	rows    := FONT_ATLAS_SIZE / atlas.cell_h;
+	codepoint = clamp (codepoint, 0, xx (columns * rows - 1));
 
 	return codepoint % columns, codepoint / columns;
 }
