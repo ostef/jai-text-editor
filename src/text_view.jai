@@ -1,5 +1,5 @@
 #scope_file
-INIT_WITH_FILE :: true;
+INIT_WITH_FILE :: false;
 FILEPATH       :: #file;
 #scope_export
 
@@ -199,7 +199,7 @@ get_wrapped_line_count :: (using view : *Text_View) -> int #must
 
 		if codepoint == #char "\t"
 		{
-			while column % 4 != 0 && column < w
+			while (column - line_area_width) % 4 != 0 && column < w
 			{
 				column += 1;
 			}
@@ -244,7 +244,7 @@ refresh_text_view :: (using view : *Text_View)
 
 			if codepoint == #char "\t"
 			{
-				while x_pos % 4 != 0 && x_pos < w  x_pos += 1;
+				while (x_pos - line_area_width) % 4 != 0 && x_pos < w  x_pos += 1;
 			}
 
 			if x_pos > w - 1 || codepoint == #char "\n"
@@ -313,7 +313,7 @@ refresh_text_view :: (using view : *Text_View)
 
 			if codepoint == #char "\t"
 			{
-				while x_pos % 4 != 0 && x_pos < w
+				while (x_pos - line_area_width) % 4 != 0 && x_pos < w
 				{
 					cell := *screen.cells[(y + y_pos) + screen.rows * (x + x_pos)];
 					cell.codepoint = 0;
@@ -353,7 +353,7 @@ get_text_area_cursor_position :: (using view : *Text_View) -> int, int #must
 		column += 1;
 		if buffer[i] == #char "\t"
 		{
-			while column % 4 != 0 && column < w
+			while (column - line_area_width) % 4 != 0 && column < w
 			{
 				column += 1;
 			}
@@ -379,7 +379,7 @@ move_text_area_cursor_to_target :: (using view : *Text_View, target_x : int, tar
 		column += 1;
 		if buffer[i] == #char "\t"
 		{
-			while column % 4 != 0 && column < w
+			while (column - line_area_width) % 4 != 0 && column < w
 			{
 				column += 1;
 			}
@@ -400,7 +400,7 @@ move_text_area_cursor_to_target :: (using view : *Text_View, target_x : int, tar
 		column += 1;
 		if buffer[i] == #char "\t"
 		{
-			while column % 4 != 0 && column < w
+			while (column - line_area_width) % 4 != 0 && column < w
 			{
 				column += 1;
 			}
