@@ -50,6 +50,36 @@ delete :: inline (using buffer : *Gap_Buffer)
 	}
 }
 
+backspace_word :: inline (using buffer : *Gap_Buffer)
+{
+	backspace (buffer);
+	
+	while cursor > 0 && is_space ((<<buffer)[cursor - 1]) && (<<buffer)[cursor - 1] != #char "\n"
+	{
+		backspace (buffer);
+	}
+
+	while cursor > 0 && is_alpha_num ((<<buffer)[cursor - 1])
+	{
+		backspace (buffer);
+	}
+}
+
+delete_word :: inline (using buffer : *Gap_Buffer)
+{
+	delete (buffer);
+	
+	while cursor < gap_buffer_count (buffer) && is_space ((<<buffer)[cursor]) && (<<buffer)[cursor] != #char "\n"
+	{
+		delete (buffer);
+	}
+
+	while cursor < gap_buffer_count (buffer) && is_alpha_num ((<<buffer)[cursor])
+	{
+		delete (buffer);
+	}
+}
+
 move_cursor_forward :: inline (using buffer : *Gap_Buffer)
 {
 	if cursor < gap_buffer_count (buffer)
@@ -65,6 +95,36 @@ move_cursor_backward :: inline (using buffer : *Gap_Buffer)
 	{
 		data[cursor + gap - 1] = data[cursor - 1];
 		cursor -= 1;
+	}
+}
+
+skip_word_forward :: inline (using buffer : *Gap_Buffer)
+{
+	move_cursor_forward (buffer);
+	
+	while cursor < gap_buffer_count (buffer) && is_space ((<<buffer)[cursor]) && (<<buffer)[cursor] != #char "\n"
+	{
+		move_cursor_forward (buffer);
+	}
+
+	while cursor < gap_buffer_count (buffer) && is_alpha_num ((<<buffer)[cursor])
+	{
+		move_cursor_forward (buffer);
+	}
+}
+
+skip_word_backward :: inline (using buffer : *Gap_Buffer)
+{
+	move_cursor_backward (buffer);
+	
+	while cursor > 0 && is_space ((<<buffer)[cursor - 1]) && (<<buffer)[cursor - 1] != #char "\n"
+	{
+		move_cursor_backward (buffer);
+	}
+
+	while cursor > 0 && is_alpha_num ((<<buffer)[cursor - 1])
+	{
+		move_cursor_backward (buffer);
 	}
 }
 

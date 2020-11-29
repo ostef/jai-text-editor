@@ -126,6 +126,30 @@ remove_rune_at_cursor :: (using view : *Text_View)
 	}
 }
 
+backspace_remove_word_at_cursor :: (using view : *Text_View)
+{
+	if buffer.cursor > 0
+	{
+		backspace_word (*buffer);
+		line_count = get_line_count (view);
+		wrapped_line_count = get_wrapped_line_count (view);
+		line_area_width = get_line_area_width (view);
+		scroll_text_area_to_cursor (view);
+	}
+}
+
+remove_word_at_cursor :: (using view : *Text_View)
+{
+	if buffer.cursor < gap_buffer_count (buffer)
+	{
+		delete_word (*buffer);
+		line_count = get_line_count (view);
+		wrapped_line_count = get_wrapped_line_count (view);
+		line_area_width = get_line_area_width (view);
+		scroll_text_area_to_cursor (view);
+	}
+}
+
 /*
 write_string_to_view :: (using view : *Screen_View, runes : []Rune, x_min : int, y_min : int, x_max : int = -1, y_max : int = -1, foreground_color := COLOR_WHITE, background_color := COLOR_BLACK)
 {
@@ -449,36 +473,14 @@ move_text_area_cursor_right :: inline (using view : *Text_View)
 
 skip_word_right :: inline (using view : *Text_View)
 {
-	move_cursor_forward (*buffer);
-	
-	while buffer.cursor < gap_buffer_count (buffer) && is_space (buffer[buffer.cursor]) && buffer[buffer.cursor] != #char "\n"
-	{
-		move_cursor_forward (*buffer);
-	}
-
-	while buffer.cursor < gap_buffer_count (buffer) && is_alpha_num (buffer[buffer.cursor])
-	{
-		move_cursor_forward (*buffer);
-	}
-
+	skip_word_forward (*buffer);
 	text_area.column, text_area.line = get_text_area_cursor_position (view);
 	scroll_text_area_to_cursor (view);
 }
 
 skip_word_left :: inline (using view : *Text_View)
 {
-	move_cursor_backward (*buffer);
-	
-	while buffer.cursor > 0 && is_space (buffer[buffer.cursor - 1]) && buffer[buffer.cursor - 1] != #char "\n"
-	{
-		move_cursor_backward (*buffer);
-	}
-
-	while buffer.cursor > 0 && is_alpha_num (buffer[buffer.cursor - 1])
-	{
-		move_cursor_backward (*buffer);
-	}
-
+	skip_word_backward (*buffer);
 	text_area.column, text_area.line = get_text_area_cursor_position (view);
 	scroll_text_area_to_cursor (view);
 }
@@ -569,8 +571,26 @@ text_view_handle_event :: (using view : *Text_View, event : Event)
 
 			case GLFW_KEY_ENTER; insert_rune_at_cursor (view, #char "\n");
 			case GLFW_KEY_TAB;   insert_rune_at_cursor (view, #char "\t");
-			case GLFW_KEY_BACKSPACE;  backspace_remove_rune_at_cursor (view);
-			case GLFW_KEY_DELETE;     remove_rune_at_cursor (view);
+			case GLFW_KEY_BACKSPACE;
+				if event.key_event.mods == GLFW_MOD_CONTROL
+				{
+					backspace_remove_word_at_cursor (view);
+				}
+				else
+				{
+					backspace_remove_rune_at_cursor (view);
+				}
+
+			case GLFW_KEY_DELETE;
+				if event.key_event.mods == GLFW_MOD_CONTROL
+				{
+					remove_word_at_cursor (view);
+				}
+				else
+				{
+					remove_rune_at_cursor (view);
+				}
+
 			case GLFW_KEY_PAGE_UP;    scroll_text_area_up (view);
 			case GLFW_KEY_PAGE_DOWN;  scroll_text_area_down (view);
 		}
