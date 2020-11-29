@@ -455,7 +455,7 @@ skip_word_right :: inline (using view : *Text_View)
 		move_cursor_forward (*buffer);
 	}
 
-	while buffer.cursor < gap_buffer_count (buffer) && !is_space (buffer[buffer.cursor])
+	while buffer.cursor < gap_buffer_count (buffer) && is_alpha_num (buffer[buffer.cursor])
 	{
 		move_cursor_forward (*buffer);
 	}
@@ -473,7 +473,7 @@ skip_word_left :: inline (using view : *Text_View)
 		move_cursor_backward (*buffer);
 	}
 
-	while buffer.cursor > 0 && !is_space (buffer[buffer.cursor - 1])
+	while buffer.cursor > 0 && is_alpha_num (buffer[buffer.cursor - 1])
 	{
 		move_cursor_backward (*buffer);
 	}
