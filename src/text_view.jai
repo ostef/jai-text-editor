@@ -95,7 +95,6 @@ resize_text_view :: (using view : *Text_View, new_w : int, new_h : int)
 insert_rune_at_cursor :: (using view : *Text_View, codepoint : Rune)
 {
 	insert (*buffer, codepoint);
-	// @Cleanup
 	line_count = get_line_count (view);
 	wrapped_line_count = get_wrapped_line_count (view);
 	line_area_width = get_line_area_width (view);
@@ -107,7 +106,6 @@ backspace_remove_rune_at_cursor :: (using view : *Text_View)
 	if buffer.cursor > 0
 	{
 		backspace (*buffer);
-		// @Cleanup
 		line_count = get_line_count (view);
 		wrapped_line_count = get_wrapped_line_count (view);
 		line_area_width = get_line_area_width (view);
@@ -120,7 +118,6 @@ remove_rune_at_cursor :: (using view : *Text_View)
 	if buffer.cursor < gap_buffer_count (buffer)
 	{
 		delete (*buffer);
-		// @Cleanup
 		line_count = get_line_count (view);
 		wrapped_line_count = get_wrapped_line_count (view);
 		line_area_width = get_line_area_width (view);
@@ -299,9 +296,6 @@ refresh_text_view :: (using view : *Text_View)
 		}
 	}
 
-	//line_count = get_line_count (view);
-	//line_area_width = get_line_area_width (view);
-
 	{
 		i := get_cursor_of_first_displayed_line (view);
 		previous_line := 0;
@@ -452,6 +446,42 @@ move_text_area_cursor_right :: inline (using view : *Text_View)
 	scroll_text_area_to_cursor (view);
 }
 
+skip_word_right :: inline (using view : *Text_View)
+{
+	move_cursor_forward (*buffer);
+	
+	while buffer.cursor < gap_buffer_count (buffer) && is_space (buffer[buffer.cursor]) && buffer[buffer.cursor] != #char "\n"
+	{
+		move_cursor_forward (*buffer);
+	}
+
+	while buffer.cursor < gap_buffer_count (buffer) && !is_space (buffer[buffer.cursor])
+	{
+		move_cursor_forward (*buffer);
+	}
+
+	text_area.column, text_area.line = get_text_area_cursor_position (view);
+	scroll_text_area_to_cursor (view);
+}
+
+skip_word_left :: inline (using view : *Text_View)
+{
+	move_cursor_backward (*buffer);
+	
+	while buffer.cursor > 0 && is_space (buffer[buffer.cursor - 1]) && buffer[buffer.cursor - 1] != #char "\n"
+	{
+		move_cursor_backward (*buffer);
+	}
+
+	while buffer.cursor > 0 && !is_space (buffer[buffer.cursor - 1])
+	{
+		move_cursor_backward (*buffer);
+	}
+
+	text_area.column, text_area.line = get_text_area_cursor_position (view);
+	scroll_text_area_to_cursor (view);
+}
+
 move_text_area_cursor_to_buffer_start :: inline (using view : *Text_View)
 {
 	set_cursor (*buffer, 0);
@@ -516,8 +546,26 @@ text_view_handle_event :: (using view : *Text_View, event : Event)
 					move_text_area_cursor_down (view);
 				}
 
-			case GLFW_KEY_LEFT;  move_text_area_cursor_left (view);
-			case GLFW_KEY_RIGHT; move_text_area_cursor_right (view);
+			case GLFW_KEY_LEFT;
+				if event.key_event.mods == GLFW_MOD_CONTROL
+				{
+					skip_word_left (view);
+				}
+				else
+				{
+					move_text_area_cursor_left (view);
+				}
+			
+			case GLFW_KEY_RIGHT;
+				if event.key_event.mods == GLFW_MOD_CONTROL
+				{
+					skip_word_right (view);
+				}
+				else
+				{
+					move_text_area_cursor_right (view);
+				}
+
 			case GLFW_KEY_ENTER; insert_rune_at_cursor (view, #char "\n");
 			case GLFW_KEY_TAB;   insert_rune_at_cursor (view, #char "\t");
 			case GLFW_KEY_BACKSPACE;  backspace_remove_rune_at_cursor (view);
