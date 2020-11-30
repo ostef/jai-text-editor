@@ -54,20 +54,20 @@ init_text_view :: (view : *Text_View, screen : *Screen, x : int, y : int, w : in
 		data, ok := read_entire_file (FILEPATH);
 		assert (ok, "Could not read file %", FILEPATH);
 		defer free (data);
-		view.buffer = make_gap_buffer (data.count);
+		view.buffer = make_gap_buffer (data.count, 1_000);
 		
 		i := 0;
 		newlines := 0;
 		while i < data.count
 		{
 			codepoint, size := utf8_rune_at_byte (data, xx i);
-			if codepoint != #char "\r" insert (*view.buffer, codepoint);	// Ignore freaking '\r'
+			if codepoint != #char "\r" insert (*view.buffer, codepoint, false);	// Ignore freaking '\r'
 			i += xx size;
 		}
 	}
 	else
 	{
-		view.buffer = make_gap_buffer (5_000);
+		view.buffer = make_gap_buffer (5_000, 1_000);
 	}
 
 	view.line_count = get_line_count (view);
@@ -104,9 +104,8 @@ insert_rune_at_cursor :: (using view : *Text_View, codepoint : Rune)
 
 backspace_remove_rune_at_cursor :: (using view : *Text_View)
 {
-	if buffer.cursor > 0
+	if backspace (*buffer)
 	{
-		backspace (*buffer);
 		line_count = get_line_count (view);
 		wrapped_line_count = get_wrapped_line_count (view);
 		line_area_width = get_line_area_width (view);
@@ -116,9 +115,8 @@ backspace_remove_rune_at_cursor :: (using view : *Text_View)
 
 remove_rune_at_cursor :: (using view : *Text_View)
 {
-	if buffer.cursor < gap_buffer_count (buffer)
+	if delete (*buffer)
 	{
-		delete (*buffer);
 		line_count = get_line_count (view);
 		wrapped_line_count = get_wrapped_line_count (view);
 		line_area_width = get_line_area_width (view);
@@ -128,9 +126,8 @@ remove_rune_at_cursor :: (using view : *Text_View)
 
 backspace_remove_word_at_cursor :: (using view : *Text_View)
 {
-	if buffer.cursor > 0
+	if backspace_word (*buffer)
 	{
-		backspace_word (*buffer);
 		line_count = get_line_count (view);
 		wrapped_line_count = get_wrapped_line_count (view);
 		line_area_width = get_line_area_width (view);
@@ -140,9 +137,8 @@ backspace_remove_word_at_cursor :: (using view : *Text_View)
 
 remove_word_at_cursor :: (using view : *Text_View)
 {
-	if buffer.cursor < gap_buffer_count (buffer)
+	if delete_word (*buffer)
 	{
-		delete_word (*buffer);
 		line_count = get_line_count (view);
 		wrapped_line_count = get_wrapped_line_count (view);
 		line_area_width = get_line_area_width (view);
@@ -595,12 +591,35 @@ text_view_handle_event :: (using view : *Text_View, event : Event)
 			case GLFW_KEY_PAGE_DOWN;  scroll_text_area_down (view);
 		}
 
-		if event.key_event.mods == GLFW_MOD_CONTROL && event.key_event.key == GLFW_KEY_S
+		if event.key_event.mods == GLFW_MOD_CONTROL
 		{
-			println ("Saving to '%'...", OUTPUT_FILE);
-			ok := write_gap_buffer_to_file (*buffer, OUTPUT_FILE);
-			if ok  println ("Success");
-			else   println ("Failure");
+			if event.key_event.key ==
+			{
+			case GLFW_KEY_S;
+				println ("Saving to '%'...", OUTPUT_FILE);
+				ok := write_gap_buffer_to_file (*buffer, OUTPUT_FILE);
+				if ok  println ("Success");
+				else   println ("Failure");
+			
+			case GLFW_KEY_Z;
+				if undo_operation (*buffer)
+				{
+					line_count = get_line_count (view);
+					wrapped_line_count = get_wrapped_line_count (view);
+					line_area_width = get_line_area_width (view);
+					scroll_text_area_to_cursor (view);
+				}
+
+			case GLFW_KEY_Y;
+				if redo_operation (*buffer)
+				{
+					line_count = get_line_count (view);
+					wrapped_line_count = get_wrapped_line_count (view);
+					line_area_width = get_line_area_width (view);
+					scroll_text_area_to_cursor (view);
+				}
+
+			}
 		}
 	}
 	else if event.type == .CHAR_INPUT
