@@ -14,6 +14,7 @@ Debug :: #import "Debug";
 #load "screen.jai";
 #load "gap_buffer.jai";
 #load "text_view.jai";
+#load "circular_stack.jai";	// @Todo (stefan): Make this into its own module.
 
 FONT_ATLAS_CELL_WIDTH  :: 9;
 FONT_ATLAS_CELL_HEIGHT :: 17;
