@@ -3,12 +3,12 @@
 
 Gap_Buffer :: struct
 {
-	data   : []Rune;
+	data   : *Rune;
+	count  : s64;
 	cursor : int;
 	gap    : int;
 	undo_buffer : Circular_Stack (Operation);
 	redo_buffer : Circular_Stack (Operation);
-	ignore_redo_count : int;
 
 	allocator      : Allocator;
 	allocator_data : *void;
@@ -36,7 +36,9 @@ Gap_Buffer_Operation_Type :: Gap_Buffer_Operation.Type;
 make_gap_buffer :: inline (capacity : int, undo_redo_capacity : int, allocator : Allocator = null, allocator_data := null) -> Gap_Buffer #must
 {
 	result : Gap_Buffer;
-	result.data     = NewArray (capacity, Rune, allocator = allocator, allocator_data = allocator_data);
+	data := NewArray (capacity, Rune, allocator = allocator, allocator_data = allocator_data);
+	result.data     = data.data;
+	result.count    = data.count;
 	result.gap      = capacity;
 	result.allocator      = allocator;
 	result.allocator_data = allocator_data;
@@ -50,8 +52,8 @@ destroy_gap_buffer :: inline (using buffer : *Gap_Buffer)
 {
 	destroy_circular_stack (*undo_buffer);
 	destroy_circular_stack (*redo_buffer);
-	free (data.data, allocator = allocator, allocator_data = allocator_data);
-	data.count = 0;
+	free (data, allocator = allocator, allocator_data = allocator_data);
+	count = 0;
 	cursor     = 0;
 	gap        = 0;
 }
@@ -330,32 +332,33 @@ set_cursor :: inline (using buffer : *Gap_Buffer, new_cursor : int) -> bool
 
 gap_buffer_count :: inline (using buffer : *Gap_Buffer) -> int
 {
-	return data.count - gap;
+	return count - gap;
 }
 
 gap_buffer_count :: inline (using buffer : Gap_Buffer) -> int
 {
-	return data.count - gap;
+	return count - gap;
 }
 
 gap_buffer_grow :: (using buffer : *Gap_Buffer, factor : int)
 {
-	back    := data.count - cursor + gap;
-	new_gap := gap + data.count;
-	new_data     := NewArray (data.count * 2, Rune, allocator = allocator, allocator_data = allocator_data);
-	memcpy (new_data.data, data.data, size_of (Rune) * cursor);
+	back    := count - cursor + gap;
+	new_gap := gap + count;
+	new_data     := NewArray (count * 2, Rune, allocator = allocator, allocator_data = allocator_data);
+	memcpy (new_data.data, data, size_of (Rune) * cursor);
 	memset (new_data.data + cursor, 1, size_of (Rune) * new_gap);		// Is this necessary ??
-	memcpy (new_data.data + cursor + new_gap, data.data + cursor + gap, size_of (Rune) * back);
+	memcpy (new_data.data + cursor + new_gap, data + cursor + gap, size_of (Rune) * back);
 	
-	free (data.data, allocator = allocator, allocator_data = allocator_data);
-	data = new_data;
-	gap  = new_gap;
+	free (data, allocator = allocator, allocator_data = allocator_data);
+	data  = new_data.data;
+	count = new_data.count;
+	gap   = new_gap;
 }
 
 get_front_part :: (using buffer : *Gap_Buffer) -> []Rune
 {
 	result : []Rune;
-	result.data = data.data;
+	result.data = data;
 	result.count = cursor;
 
 	return result;
@@ -364,8 +367,8 @@ get_front_part :: (using buffer : *Gap_Buffer) -> []Rune
 get_back_part :: (using buffer : *Gap_Buffer) -> []Rune
 {
 	result : []Rune;
-	result.data = data.data + cursor + gap;
-	result.count = data.count - cursor - gap;
+	result.data = data + cursor + gap;
+	result.count = count - cursor - gap;
 
 	return result;
 }

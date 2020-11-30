@@ -1,9 +1,10 @@
 Circular_Stack :: struct (T : Type)
 {
-	data : []T;
-	head : int;
-	tail : int;
-	full : bool;
+	data  : *T;
+	count : s64;
+	head  : int;
+	tail  : int;
+	full  : bool;
 
 	allocator      : Allocator;
 	allocator_data : *void;
@@ -12,7 +13,9 @@ Circular_Stack :: struct (T : Type)
 make_circular_stack :: ($T : Type, capacity : int, allocator : Allocator = null, allocator_data := null) -> Circular_Stack (T) #must
 {
 	result : Circular_Stack (T);
-	result.data = NewArray (xx capacity, T, allocator = allocator, allocator_data = null);
+	data := NewArray (xx capacity, T, allocator = allocator, allocator_data = null);
+	result.data = data.data;
+	result.count = data.count;
 	result.allocator      = allocator;
 	result.allocator_data = allocator_data;
 
@@ -22,8 +25,8 @@ make_circular_stack :: ($T : Type, capacity : int, allocator : Allocator = null,
 destroy_circular_stack :: (using stack : *$T/Circular_Stack)
 {
 	reset (stack);
-	free (data.data, allocator = allocator, allocator_data = allocator_data);
-	data.count = 0;
+	free (data, allocator = allocator, allocator_data = allocator_data);
+	count = 0;
 }
 
 reset :: (using stack : *$T/Circular_Stack)
@@ -36,8 +39,8 @@ reset :: (using stack : *$T/Circular_Stack)
 push :: (using stack : *$T/Circular_Stack, elem : T.T)
 {
 	data[head] = elem;
-	if full  tail = (tail + 1) % data.count;
-	head = (head + 1) % data.count;
+	if full  tail = (tail + 1) % count;
+	head = (head + 1) % count;
 	full = head == tail;
 }
 
@@ -51,7 +54,7 @@ peek :: (using stack : *$T/Circular_Stack) -> T.T
 pop :: (using stack : *$T/Circular_Stack) -> T.T
 {
 	assert (!is_empty (<<stack), "Cannot pop: stack is empty.");
-	head  = (head + data.count - 1) % data.count;
+	head  = (head + count - 1) % count;
 	elem := data[head];
 	full  = false;
 
@@ -73,10 +76,10 @@ get_count :: inline (using stack : $T/Circular_Stack) -> int
 	if !full
 	{
 		if head >= tail  return head - tail;
-		else             return data.count + head - tail;
+		else             return count + head - tail;
 	}
 
-	return data.count;
+	return count;
 }
 
 get_count :: inline (using stack : *$T/Circular_Stack) -> int
