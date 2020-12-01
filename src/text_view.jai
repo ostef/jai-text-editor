@@ -32,6 +32,7 @@ Text_View :: struct
 
 	line_count, wrapped_line_count : int;
 	line_area_width : int;
+	mouse_selection : bool;
 }
 
 init_text_view :: (view : *Text_View, screen : *Screen, x : int, y : int, w : int, h : int)
@@ -54,7 +55,7 @@ init_text_view :: (view : *Text_View, screen : *Screen, x : int, y : int, w : in
 		data, ok := read_entire_file (FILEPATH);
 		assert (ok, "Could not read file %", FILEPATH);
 		defer free (data);
-		view.buffer = make_gap_buffer (data.count, 1_000);
+		view.buffer = make_gap_buffer (data.count);
 		
 		i := 0;
 		newlines := 0;
@@ -67,7 +68,7 @@ init_text_view :: (view : *Text_View, screen : *Screen, x : int, y : int, w : in
 	}
 	else
 	{
-		view.buffer = make_gap_buffer (5_000, 1_000);
+		view.buffer = make_gap_buffer (5_000);
 	}
 
 	view.line_count = get_line_count (view);
@@ -328,8 +329,19 @@ refresh_text_view :: (using view : *Text_View)
 			codepoint := buffer[i];
 			cell := *screen.cells[(y + y_pos) + screen.rows * (x + x_pos)];
 			cell.codepoint = codepoint;
-			cell.foreground_color = COLOR_WHITE;
-			cell.background_color = COLOR_BLACK;
+			
+			if buffer.selection > 0 && i > buffer.cursor && i < buffer.cursor + buffer.selection ||
+			   buffer.selection < 0 && i >= buffer.cursor + buffer.selection && i < buffer.cursor
+			{
+				cell.foreground_color = COLOR_BLACK;
+				cell.background_color = Color.{ 200, 200, 200 };
+			}
+			else
+			{
+				cell.foreground_color = COLOR_WHITE;
+				cell.background_color = COLOR_BLACK;
+			}
+
 			x_pos += 1;
 
 			if codepoint == #char "\t"
@@ -338,8 +350,19 @@ refresh_text_view :: (using view : *Text_View)
 				{
 					cell := *screen.cells[(y + y_pos) + screen.rows * (x + x_pos)];
 					cell.codepoint = 0;
-					cell.foreground_color = COLOR_WHITE;
-					cell.background_color = COLOR_BLACK;
+					
+					if buffer.selection > 0 && i > buffer.cursor && i < buffer.cursor + buffer.selection ||
+					   buffer.selection < 0 && i >= buffer.cursor + buffer.selection && i < buffer.cursor
+					{
+						cell.foreground_color = COLOR_BLACK;
+						cell.background_color = Color.{ 200, 200, 200 };
+					}
+					else
+					{
+						cell.foreground_color = COLOR_WHITE;
+						cell.background_color = COLOR_BLACK;
+					}
+
 					x_pos += 1;
 				}
 			}
@@ -390,7 +413,7 @@ get_text_area_cursor_position :: (using view : *Text_View) -> int, int #must
 	return column - line_area_width, line;
 }
 
-move_text_area_cursor_to_target :: (using view : *Text_View, target_x : int, target_y : int)
+move_text_area_cursor_to_target :: (using view : *Text_View, target_x : int, target_y : int, select := false)
 {
 	i      := 0;
 	column := line_area_width;
@@ -435,7 +458,8 @@ move_text_area_cursor_to_target :: (using view : *Text_View, target_x : int, tar
 		i += 1;
 	}
 
-	set_cursor (*buffer, i);
+	if select  select_to (*buffer, i);
+	else       set_cursor (*buffer, i);
 	text_area.column  = column - line_area_width;
 	text_area.line = row;
 	scroll_text_area_to_cursor (view);
@@ -455,44 +479,104 @@ move_text_area_cursor_down :: inline (using view : *Text_View)
 
 move_text_area_cursor_left :: inline (using view : *Text_View)
 {
-	move_cursor_backward (*buffer);
-	text_area.column, text_area.line = get_text_area_cursor_position (view);
-	scroll_text_area_to_cursor (view);
+	if move_cursor_backward (*buffer)
+	{
+		text_area.column, text_area.line = get_text_area_cursor_position (view);
+		scroll_text_area_to_cursor (view);
+	}
 }
 
 move_text_area_cursor_right :: inline (using view : *Text_View)
 {
-	move_cursor_forward (*buffer);
-	text_area.column, text_area.line = get_text_area_cursor_position (view);
-	scroll_text_area_to_cursor (view);
+	if move_cursor_forward (*buffer)
+	{
+		text_area.column, text_area.line = get_text_area_cursor_position (view);
+		scroll_text_area_to_cursor (view);
+	}
 }
 
 skip_word_right :: inline (using view : *Text_View)
 {
-	skip_word_forward (*buffer);
-	text_area.column, text_area.line = get_text_area_cursor_position (view);
-	scroll_text_area_to_cursor (view);
+	if skip_word_forward (*buffer)
+	{
+		text_area.column, text_area.line = get_text_area_cursor_position (view);
+		scroll_text_area_to_cursor (view);
+	}
 }
 
 skip_word_left :: inline (using view : *Text_View)
 {
-	skip_word_backward (*buffer);
-	text_area.column, text_area.line = get_text_area_cursor_position (view);
-	scroll_text_area_to_cursor (view);
+	if skip_word_backward (*buffer)
+	{
+		text_area.column, text_area.line = get_text_area_cursor_position (view);
+		scroll_text_area_to_cursor (view);
+	}
 }
 
 move_text_area_cursor_to_buffer_start :: inline (using view : *Text_View)
 {
-	set_cursor (*buffer, 0);
-	text_area.column, text_area.line = get_text_area_cursor_position (view);
-	scroll_text_area_to_cursor (view);
+	if set_cursor (*buffer, 0)
+	{
+		text_area.column, text_area.line = get_text_area_cursor_position (view);
+		scroll_text_area_to_cursor (view);
+	}
 }
 
 move_text_area_cursor_to_buffer_end :: inline (using view : *Text_View)
 {
-	set_cursor (*buffer, gap_buffer_count (buffer));
-	text_area.column, text_area.line = get_text_area_cursor_position (view);
-	scroll_text_area_to_cursor (view);
+	if set_cursor (*buffer, gap_buffer_count (buffer))
+	{
+		text_area.column, text_area.line = get_text_area_cursor_position (view);
+		scroll_text_area_to_cursor (view);
+	}
+}
+
+text_area_select_up :: inline (using view : *Text_View)
+{
+	column, row := get_text_area_cursor_position (view);
+	move_text_area_cursor_to_target (view, column + line_area_width, row - 1, select = true);
+}
+
+text_area_select_down :: inline (using view : *Text_View)
+{
+	column, row := get_text_area_cursor_position (view);
+	move_text_area_cursor_to_target (view, column + line_area_width, row + 1, select = true);
+}
+
+text_area_select_left :: inline (using view : *Text_View)
+{
+	if select_backward (*buffer)
+	{
+		text_area.column, text_area.line = get_text_area_cursor_position (view);
+		scroll_text_area_to_cursor (view);
+	}
+}
+
+text_area_select_right :: inline (using view : *Text_View)
+{
+	if select_forward (*buffer)
+	{
+		text_area.column, text_area.line = get_text_area_cursor_position (view);
+		scroll_text_area_to_cursor (view);
+	}
+}
+
+text_area_select_word_left :: inline (using view : *Text_View)
+{
+	if select_word_backward (*buffer)
+	{
+		text_area.column, text_area.line = get_text_area_cursor_position (view);
+		scroll_text_area_to_cursor (view);
+	}
+}
+
+text_area_select_word_right :: inline (using view : *Text_View)
+{
+	if select_word_forward (*buffer)
+	{
+		text_area.column, text_area.line = get_text_area_cursor_position (view);
+		scroll_text_area_to_cursor (view);
+	}
 }
 
 scroll_text_area_to_cursor :: inline (using view : *Text_View)
@@ -530,6 +614,10 @@ text_view_handle_event :: (using view : *Text_View, event : Event)
 				{
 					move_text_area_cursor_to_buffer_start (view);
 				}
+				else if event.key_event.mods == GLFW_MOD_SHIFT
+				{
+					text_area_select_up (view);
+				}
 				else
 				{
 					move_text_area_cursor_up (view);
@@ -539,6 +627,10 @@ text_view_handle_event :: (using view : *Text_View, event : Event)
 				if event.key_event.mods == GLFW_MOD_CONTROL
 				{
 					move_text_area_cursor_to_buffer_end (view);
+				}
+				else if event.key_event.mods == GLFW_MOD_SHIFT
+				{
+					text_area_select_down (view);
 				}
 				else
 				{
@@ -550,6 +642,14 @@ text_view_handle_event :: (using view : *Text_View, event : Event)
 				{
 					skip_word_left (view);
 				}
+				else if event.key_event.mods == GLFW_MOD_SHIFT
+				{
+					text_area_select_left (view);
+				}
+				else if (event.key_event.mods & GLFW_MOD_SHIFT) && (event.key_event.mods & GLFW_MOD_CONTROL)
+				{
+					text_area_select_word_left (view);
+				}
 				else
 				{
 					move_text_area_cursor_left (view);
@@ -560,6 +660,14 @@ text_view_handle_event :: (using view : *Text_View, event : Event)
 				{
 					skip_word_right (view);
 				}
+				else if event.key_event.mods == GLFW_MOD_SHIFT
+				{
+					text_area_select_right (view);
+				}
+				else if (event.key_event.mods & GLFW_MOD_SHIFT) && (event.key_event.mods & GLFW_MOD_CONTROL)
+				{
+					text_area_select_word_right (view);
+				}
 				else
 				{
 					move_text_area_cursor_right (view);
@@ -568,7 +676,7 @@ text_view_handle_event :: (using view : *Text_View, event : Event)
 			case GLFW_KEY_ENTER; insert_rune_at_cursor (view, #char "\n");
 			case GLFW_KEY_TAB;   insert_rune_at_cursor (view, #char "\t");
 			case GLFW_KEY_BACKSPACE;
-				if event.key_event.mods == GLFW_MOD_CONTROL
+				if event.key_event.mods == GLFW_MOD_CONTROL && buffer.selection == 0
 				{
 					backspace_remove_word_at_cursor (view);
 				}
@@ -630,9 +738,26 @@ text_view_handle_event :: (using view : *Text_View, event : Event)
 	{
 		if event.mouse_button_event.button == GLFW_MOUSE_BUTTON_LEFT
 		{
+			mouse_selection = true;
 			target_x := event.mouse_button_event.col - x;
 			target_y := event.mouse_button_event.row - y;
 			move_text_area_cursor_to_target (view, target_x, target_y + text_area.scroll_y);
+		}
+	}
+	else if event.type == .MOUSE_BUTTON_RELEASE
+	{
+		if event.mouse_button_event.button == GLFW_MOUSE_BUTTON_LEFT
+		{
+			mouse_selection = false;
+		}
+	}
+	else if event.type == .MOUSE_MOVE
+	{
+		if mouse_selection
+		{
+			target_x := event.mouse_move_event.col - x;
+			target_y := event.mouse_move_event.row - y;
+			move_text_area_cursor_to_target (view, target_x, target_y + text_area.scroll_y, select = true);
 		}
 	}
 	else if event.type == .SCROLL

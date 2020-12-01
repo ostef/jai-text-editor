@@ -1,12 +1,15 @@
 #import "File";
 #import "Windows";
 
+DEFAULT_UNDO_REDO_CAPACITY :: 10_000;
+
 Gap_Buffer :: struct
 {
 	data   : *Rune;
 	count  : s64;
 	cursor : int;
 	gap    : int;
+	selection   : int;
 	undo_buffer : Circular_Stack (Operation);
 	redo_buffer : Circular_Stack (Operation);
 
@@ -33,7 +36,7 @@ Gap_Buffer :: struct
 Gap_Buffer_Operation      :: Gap_Buffer.Operation;
 Gap_Buffer_Operation_Type :: Gap_Buffer_Operation.Type;
 
-make_gap_buffer :: inline (capacity : int, undo_redo_capacity : int, allocator : Allocator = null, allocator_data := null) -> Gap_Buffer #must
+make_gap_buffer :: inline (capacity : int, undo_redo_capacity := DEFAULT_UNDO_REDO_CAPACITY, allocator : Allocator = null, allocator_data := null) -> Gap_Buffer #must
 {
 	result : Gap_Buffer;
 	data := NewArray (capacity, Rune, allocator = allocator, allocator_data = allocator_data);
@@ -62,6 +65,7 @@ insert :: inline (using buffer : *Gap_Buffer, codepoint : Rune, buffer_operation
 {
 	if gap == 0  gap_buffer_grow (buffer, 2);
 	
+	if selection != 0  delete (buffer);
 	if buffer_operation
 	{
 		reset (*redo_buffer);
@@ -79,6 +83,8 @@ insert :: inline (using buffer : *Gap_Buffer, codepoint : Rune, buffer_operation
 
 backspace :: inline (using buffer : *Gap_Buffer, buffer_operation := true) -> bool
 {
+	if selection != 0  return delete (buffer, buffer_operation);
+
 	if cursor > 0
 	{
 		if buffer_operation
@@ -93,6 +99,7 @@ backspace :: inline (using buffer : *Gap_Buffer, buffer_operation := true) -> bo
 
 		cursor -= 1;
 		gap    += 1;
+		selection = 0;
 
 		return true;
 	}
@@ -102,7 +109,7 @@ backspace :: inline (using buffer : *Gap_Buffer, buffer_operation := true) -> bo
 
 delete :: inline (using buffer : *Gap_Buffer, buffer_operation := true) -> bool
 {
-	if cursor < gap_buffer_count (buffer)
+	delete_helper :: inline (using buffer : *Gap_Buffer, buffer_operation := true)
 	{
 		if buffer_operation
 		{
@@ -115,6 +122,37 @@ delete :: inline (using buffer : *Gap_Buffer, buffer_operation := true) -> bool
 		}
 
 		gap += 1;
+	}
+
+	if cursor < gap_buffer_count (buffer) || selection != 0
+	{
+		if selection != 0
+		{
+			op : Gap_Buffer_Operation;
+			op.type = .BATCH_BEGIN;
+			if buffer_operation  push (*undo_buffer, op);
+
+			while selection != 0
+			{
+				if selection < 0
+				{
+					select_backward (buffer);
+					delete_helper (buffer, buffer_operation);
+				}
+				else
+				{
+					selection -= 1;
+					delete_helper (buffer, buffer_operation);
+				}
+			}
+
+			op.type = .BATCH_END;
+			if buffer_operation  push (*undo_buffer, op);
+		}
+		else
+		{
+			delete_helper (buffer, buffer_operation);
+		}
 
 		return true;
 	}
@@ -170,64 +208,164 @@ delete_word :: inline (using buffer : *Gap_Buffer) -> bool
 	return modified;
 }
 
-move_cursor_forward :: inline (using buffer : *Gap_Buffer) -> bool
+move_cursor_forward :: inline (using buffer : *Gap_Buffer, clear_selection := true) -> bool
 {
+	modified := false;
+	if selection != 0 && clear_selection
+	{
+		selection = 0;
+		modified = true;
+	}
+
 	if cursor < gap_buffer_count (buffer)
 	{
 		data[cursor] = data[cursor + gap];
 		cursor      += 1;
-	
-		return true;
+		modified     = true;
 	}
 
-	return false;
+	return modified;
 }
 
-move_cursor_backward :: inline (using buffer : *Gap_Buffer) -> bool
+move_cursor_backward :: inline (using buffer : *Gap_Buffer, clear_selection := true) -> bool
 {
+	modified := false;
+	if selection != 0 && clear_selection
+	{
+		selection = 0;
+		modified = true;
+	}
+
 	if cursor > 0
 	{
 		data[cursor + gap - 1] = data[cursor - 1];
 		cursor -= 1;
-
-		return true;
+		modified = true;
 	}
 
-	return false;
+	return modified;
 }
 
-skip_word_forward :: inline (using buffer : *Gap_Buffer) -> bool
+
+set_cursor :: inline (using buffer : *Gap_Buffer, new_cursor : int) -> bool
 {
-	modified := move_cursor_forward (buffer);
+	assert (new_cursor >= 0 && new_cursor <= gap_buffer_count (buffer), "Cursor is %, should be in [0; %]", new_cursor, gap_buffer_count (buffer));
+	// @Cleanup (stefan): This is not the fastest implementation.
+	modified : bool;
+	
+	if selection != 0
+	{
+		selection = 0;
+		modified = true;
+	}
+
+	while cursor < new_cursor  { if move_cursor_forward  (buffer)  modified = true; }
+	while cursor > new_cursor  { if move_cursor_backward (buffer)  modified = true; }
+
+	return modified;
+}
+
+skip_word_forward :: inline (using buffer : *Gap_Buffer) -> int
+{
+	cached_cursor := cursor;
+	move_cursor_forward (buffer);
 	
 	while cursor < gap_buffer_count (buffer) && is_space ((<<buffer)[cursor]) && (<<buffer)[cursor] != #char "\n"
 	{
-		if move_cursor_forward (buffer)  modified = true;
+		move_cursor_forward (buffer);
 	}
 
 	while cursor < gap_buffer_count (buffer) && is_alpha_num ((<<buffer)[cursor])
 	{
-		if move_cursor_forward (buffer)  modified = true;
+		move_cursor_forward (buffer);
 	}
 
-	return modified;
+	return cursor - cached_cursor;
 }
 
-skip_word_backward :: inline (using buffer : *Gap_Buffer) -> bool
+skip_word_backward :: inline (using buffer : *Gap_Buffer) -> int
 {
-	modified := move_cursor_backward (buffer);
+	cached_cursor := cursor;
+	move_cursor_backward (buffer);
 	
 	while cursor > 0 && is_space ((<<buffer)[cursor - 1]) && (<<buffer)[cursor - 1] != #char "\n"
 	{
-		if move_cursor_backward (buffer)  modified = true;
+		move_cursor_backward (buffer);
 	}
 
 	while cursor > 0 && is_alpha_num ((<<buffer)[cursor - 1])
 	{
-		if move_cursor_backward (buffer)  modified = true;
+		move_cursor_backward (buffer);
 	}
 
+	return cursor - cached_cursor;
+}
+
+select_forward :: inline (using buffer : *Gap_Buffer) -> bool
+{
+	cached_selection := selection;
+	modified := move_cursor_forward (buffer, false);
+	if modified  cached_selection -= 1;
+	selection = cached_selection;
+
 	return modified;
+}
+
+select_backward :: inline (using buffer : *Gap_Buffer) -> bool
+{
+	cached_selection := selection;
+	modified := move_cursor_backward (buffer, false);
+	if modified  cached_selection += 1;
+	selection = cached_selection;
+
+	return modified;
+}
+
+select_to :: inline (using buffer : *Gap_Buffer, new_cursor : int) -> bool
+{
+	assert (new_cursor >= 0 && new_cursor <= gap_buffer_count (buffer), "Cursor is %, should be in [0; %]", new_cursor, gap_buffer_count (buffer));
+	// @Cleanup (stefan): This is not the fastest implementation.
+	modified : bool;
+	while cursor < new_cursor  { if select_forward  (buffer)  modified = true; }
+	while cursor > new_cursor  { if select_backward (buffer)  modified = true; }
+
+	return modified;
+}
+
+select_word_forward :: inline (using buffer : *Gap_Buffer) -> int
+{
+	cached_cursor := cursor;
+	select_forward (buffer);
+	
+	while cursor < gap_buffer_count (buffer) && is_space ((<<buffer)[cursor]) && (<<buffer)[cursor] != #char "\n"
+	{
+		select_forward (buffer);
+	}
+
+	while cursor < gap_buffer_count (buffer) && is_alpha_num ((<<buffer)[cursor])
+	{
+		select_forward (buffer);
+	}
+
+	return cursor - cached_cursor;
+}
+
+select_word_backward :: inline (using buffer : *Gap_Buffer) -> int
+{
+	cached_cursor := cursor;
+	select_backward (buffer);
+
+	while cursor > 0 && is_space ((<<buffer)[cursor - 1]) && (<<buffer)[cursor - 1] != #char "\n"
+	{
+		select_backward (buffer);
+	}
+
+	while cursor > 0 && is_alpha_num ((<<buffer)[cursor - 1])
+	{
+		select_backward (buffer);
+	}
+
+	return cursor - cached_cursor;
 }
 
 undo_operation :: (using buffer : *Gap_Buffer) -> bool
@@ -260,7 +398,7 @@ undo_operation :: (using buffer : *Gap_Buffer) -> bool
 		op = pop (*undo_buffer);
 		push (*redo_buffer, op);
 		
-		while op.type != .BATCH_BEGIN
+		while op.type != .BATCH_BEGIN && !is_empty (undo_buffer)
 		{
 			perform_undo_for_single_operation (buffer, op);
 			op = pop (*undo_buffer);
@@ -304,7 +442,7 @@ redo_operation :: (using buffer : *Gap_Buffer) -> bool
 		op = pop (*redo_buffer);
 		push (*undo_buffer, op);
 
-		while op.type != .BATCH_END
+		while op.type != .BATCH_END && !is_empty (redo_buffer)
 		{
 			perform_redo_for_single_operation (buffer, op);
 			op = pop (*redo_buffer);
@@ -317,17 +455,6 @@ redo_operation :: (using buffer : *Gap_Buffer) -> bool
 	}
 
 	return true;
-}
-
-set_cursor :: inline (using buffer : *Gap_Buffer, new_cursor : int) -> bool
-{
-	assert (new_cursor >= 0 && new_cursor <= gap_buffer_count (buffer), "Cursor is %, should be in [0; %]", new_cursor, gap_buffer_count (buffer));
-	// @Cleanup (stefan): This is not the fastest implementation.
-	modified : bool;
-	while cursor < new_cursor  { if move_cursor_forward  (buffer)  modified = true; }
-	while cursor > new_cursor  { if move_cursor_backward (buffer)  modified = true; }
-
-	return modified;
 }
 
 gap_buffer_count :: inline (using buffer : *Gap_Buffer) -> int
