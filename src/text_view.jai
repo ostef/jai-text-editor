@@ -48,27 +48,14 @@ init_text_view :: (view : *Text_View, screen : *Screen, x : int, y : int, w : in
 	view.cursor_y = 0;
 	view.draw_cursor = true;
 	view.filepath = FILEPATH;
-	view.has_file = false;
+	view.has_file = INIT_WITH_FILE;
+
+	view.buffer = make_gap_buffer (5_000);
 
 	#if INIT_WITH_FILE
 	{
-		data, ok := read_entire_file (FILEPATH);
-		assert (ok, "Could not read file %", FILEPATH);
-		defer free (data);
-		view.buffer = make_gap_buffer (data.count);
-		
-		i := 0;
-		newlines := 0;
-		while i < data.count
-		{
-			codepoint, size := utf8_rune_at_byte (data, xx i);
-			if codepoint != #char "\r" insert (*view.buffer, codepoint, false);	// Ignore freaking '\r'
-			i += xx size;
-		}
-	}
-	else
-	{
-		view.buffer = make_gap_buffer (5_000);
+		ok := load_file (*view.buffer, view.filepath);
+		if !ok  println ("Could not load file % into buffer");
 	}
 
 	view.line_count = get_line_count (view);
@@ -324,17 +311,19 @@ refresh_text_view :: (using view : *Text_View)
 		current_line := get_line_number_at_cursor (view, i);
 		x_pos := line_area_width;
 		y_pos := 0;
-		while i < gap_buffer_count (buffer) && y_pos < h
+		while i < gap_buffer_count (buffer) && y_pos < h - 1
 		{
 			codepoint := buffer[i];
 			cell := *screen.cells[(y + y_pos) + screen.rows * (x + x_pos)];
 			cell.codepoint = codepoint;
 			
-			if buffer.selection > 0 && i > buffer.cursor && i < buffer.cursor + buffer.selection ||
-			   buffer.selection < 0 && i >= buffer.cursor + buffer.selection && i < buffer.cursor
+			if buffer.selection > 0 && i > buffer.cursor && i < buffer.cursor + buffer.selection  ||
+			   buffer.selection < 0 && i >= buffer.cursor + buffer.selection && i < buffer.cursor ||
+			   buffer.cursor == i
 			{
 				cell.foreground_color = COLOR_BLACK;
-				cell.background_color = Color.{ 200, 200, 200 };
+				if buffer.cursor == i  cell.background_color = COLOR_WHITE;
+				else                   cell.background_color = Color.{ 200, 200, 200 };
 			}
 			else
 			{
@@ -351,11 +340,13 @@ refresh_text_view :: (using view : *Text_View)
 					cell := *screen.cells[(y + y_pos) + screen.rows * (x + x_pos)];
 					cell.codepoint = 0;
 					
-					if buffer.selection > 0 && i > buffer.cursor && i < buffer.cursor + buffer.selection ||
-					   buffer.selection < 0 && i >= buffer.cursor + buffer.selection && i < buffer.cursor
+					if buffer.selection > 0 && i > buffer.cursor && i < buffer.cursor + buffer.selection  ||
+					   buffer.selection < 0 && i >= buffer.cursor + buffer.selection && i < buffer.cursor ||
+					   buffer.cursor == i
 					{
 						cell.foreground_color = COLOR_BLACK;
-						cell.background_color = Color.{ 200, 200, 200 };
+						if buffer.cursor == i  cell.background_color = COLOR_WHITE;
+						else                   cell.background_color = Color.{ 200, 200, 200 };
 					}
 					else
 					{
@@ -380,10 +371,54 @@ refresh_text_view :: (using view : *Text_View)
 			i += 1;
 		}
 
-		write_line_number (view, current_line, y_pos);
+		if buffer.cursor == gap_buffer_count (buffer)
+		{
+			cell := *screen.cells[(y + y_pos) + screen.rows * (x + x_pos)];
+			cell.foreground_color = COLOR_BLACK;
+			cell.background_color = COLOR_WHITE;
+		}
+
+		if y_pos < h - 1  write_line_number (view, current_line, y_pos);
 	}
 
-	text_area.column, text_area.line = get_text_area_cursor_position (view);
+	for xpos : 0..w - 1
+	{
+		cell := *screen.cells[(y + h - 1) + screen.rows * (x + xpos)];
+		cell.foreground_color = COLOR_BLACK;
+		cell.background_color = COLOR_WHITE;
+	}
+
+	{
+		// Write the filepath
+		i := 0;
+		xpos := 1;
+		ypos := h - 1;
+		while i < filepath.count && xpos < w
+		{
+			codepoint, size := utf8_rune_at_byte (filepath, xx i);
+			cell := *screen.cells[(y + ypos) + screen.rows * (x + xpos)];
+			cell.codepoint = codepoint;
+			i += xx size;
+			xpos += 1;
+		}
+
+		xpos = w - 1;
+
+		// Write the column and line in the text
+		right_part := sprint ("    %:%    UTF-8    LF  ", text_area.column + 1, text_area.line + 1);
+		defer free (right_part);
+		i = right_part.count - 1;
+		while i >= 0 && xpos >= 0
+		{
+			cell := *screen.cells[(y + ypos) + screen.rows * (x + xpos)];
+			if is_space (right_part[i])  cell.codepoint = 0;
+			else                         cell.codepoint = right_part[i];
+			i -= 1;
+			xpos -= 1;
+		}
+	}
+
+	//text_area.column, text_area.line = get_text_area_cursor_position (view);
 	cursor_x = text_area.column + line_area_width;
 	cursor_y = text_area.line - text_area.scroll_y;
 }
@@ -587,7 +622,7 @@ scroll_text_area_to_cursor :: inline (using view : *Text_View)
 		scroll_text_area_up (view);
 	}
 
-	while text_area.line - text_area.scroll_y > h - TEXT_VIEW_SCROLL_MARGIN
+	while text_area.line - text_area.scroll_y > h - TEXT_VIEW_SCROLL_MARGIN - 1
 	{
 		scroll_text_area_down (view);
 	}
