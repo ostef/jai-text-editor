@@ -11,7 +11,7 @@ Event_Type :: enum
 
 	MOUSE_BUTTON_PRESS;
 	MOUSE_BUTTON_RELEASE;
-	MOUSE_MOTION;
+	MOUSE_MOVE;
 	SCROLL;
 }
 
@@ -45,7 +45,7 @@ Event :: struct
 			row : int;
 		};
 
-		mouse_motion_event : struct
+		mouse_move_event : struct
 		{
 			x : int;
 			y : int;

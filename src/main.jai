@@ -124,6 +124,26 @@ main :: ()
 		}
 	});
 
+	glfwSetCursorPosCallback (window,
+	(window : *GLFWwindow, mouse_x : float64, mouse_y : float64) #c_call
+	{
+		new_context : Context;
+		push_context new_context
+		{
+			using data := cast (*Window_Data) glfwGetWindowUserPointer (window);
+
+			event : Event;
+			event.window = window;
+			event.type = .MOUSE_MOVE;
+			event.mouse_move_event.x = cast (int) mouse_x;
+			event.mouse_move_event.y = cast (int) mouse_y;
+			event.mouse_move_event.col = cast (int) mouse_x / renderer.atlas.cell_w;
+			event.mouse_move_event.row = cast (int) mouse_y / renderer.atlas.cell_h;
+
+			screen_handle_event (screen, event);
+		}
+	});
+
 	glfwSetScrollCallback (window,
 	(window : *GLFWwindow, xoffset : float64, yoffset : float64) #c_call
 	{
