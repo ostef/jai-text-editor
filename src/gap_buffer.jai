@@ -51,6 +51,24 @@ make_gap_buffer :: inline (capacity : int, undo_redo_capacity := DEFAULT_UNDO_RE
 	return result;
 }
 
+load_file :: inline (using buffer : *Gap_Buffer, filepath : string) -> bool
+{
+	file_data, ok := read_entire_file (filepath);
+	if !ok  return false;
+	defer free (file_data);
+	
+	i := 0;
+	newlines := 0;
+	while i < file_data.count
+	{
+		codepoint, size := utf8_rune_at_byte (file_data, xx i);
+		if codepoint != #char "\r" insert (buffer, codepoint, buffer_operation = false);	// Ignore freaking '\r'
+		i += xx size;
+	}
+
+	return true;
+}
+
 destroy_gap_buffer :: inline (using buffer : *Gap_Buffer)
 {
 	destroy_circular_stack (*undo_buffer);
