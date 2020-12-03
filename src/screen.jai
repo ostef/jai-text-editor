@@ -7,11 +7,16 @@ Screen_Element :: struct
 
 Screen :: struct
 {
-	cells : []Screen_Element;
-	cols : int;
-	rows : int;
-	views : [..]*Screen_View;
+	cells       : []Screen_Element;
+	cols        : int;
+	rows        : int;
+	views       : [..]*Screen_View;
 	active_view : *Screen_View;
+	bottom_area : struct
+	{
+		active  : bool;
+		buffer  : Gap_Buffer;
+	};
 }
 
 init_screen :: (screen : *Screen, cols : int, rows : int)
@@ -24,10 +29,13 @@ init_screen :: (screen : *Screen, cols : int, rows : int)
 	array_reserve (*screen.views, 10);
 	array_add (*screen.views, view);
 	screen.active_view = view;
+	screen.bottom_area.buffer = make_gap_buffer (200, 500);
 }
 
 destroy_screen :: (using screen : *Screen)
 {
+	destroy_gap_buffer (*bottom_area.buffer);
+
 	for view : views
 	{
 		if view.type ==
@@ -41,6 +49,22 @@ destroy_screen :: (using screen : *Screen)
 	array_reset (*views);
 	free (cells.data);
 	memset (screen, 0, size_of (Screen));
+}
+
+log_to_screen :: inline (using screen : *Screen, message : string)
+{
+	clear (*bottom_area.buffer);
+	for i : 0..message.count - 1
+	{
+		insert (*bottom_area.buffer, message[i]);
+	}
+}
+
+log_to_screen :: inline (using screen : *Screen, fmt : string, args : ..Any)
+{
+	str := sprint (fmt, ..args);
+	defer free (str);
+	log_to_screen (screen, str);
 }
 
 screen_handle_event :: inline (using screen : *Screen, event : Event)
@@ -97,11 +121,29 @@ refresh_screen :: inline (using screen : *Screen)
 	{
 		if view == active_view || view.refresh_if_inactive
 		{
-			if view.type == .TEXT_VIEW
+			if view.type == 
 			{
-				refresh_text_view (cast (*Text_View) view);
+			case .TEXT_VIEW; refresh_text_view (cast (*Text_View) view);
 			}
 		}
+	}
+
+	for i : 0..cols - 1
+	{
+		cell := *cells[rows - 1 + rows * i];
+		cell.codepoint        = 0;
+		cell.foreground_color = COLOR_WHITE;
+		cell.background_color = COLOR_BLACK;
+	}
+
+	for i : 0..gap_buffer_count (bottom_area.buffer) - 1
+	{
+		if i > cols - 1  break;
+		codepoint := bottom_area.buffer[i];
+		cell := *cells[rows - 1 + rows * i];
+		cell.codepoint = codepoint;
+		cell.foreground_color = COLOR_WHITE;
+		cell.background_color = COLOR_BLACK;
 	}
 }
 
@@ -144,11 +186,11 @@ Screen_View_Type :: enum
 
 Screen_View :: struct
 {
-	screen : *Screen;
-	type : Screen_View_Type;
-	x, y, w, h : int;
-	cursor_x, cursor_y : int;
-	draw_cursor : bool;
+	screen              : *Screen;
+	type                : Screen_View_Type;
+	x, y, w, h          : int;
+	cursor_x, cursor_y  : int;
+	draw_cursor         : bool;
 	refresh_if_inactive : bool;
 }
 
