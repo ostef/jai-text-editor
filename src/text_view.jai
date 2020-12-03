@@ -26,7 +26,8 @@ Text_View :: struct
 	
 	text_area : struct
 	{
-		column, line : int;
+		column, line       : int;
+		cursor_x, cursor_y : int;
 		scroll_x, scroll_y : int;
 	};
 
@@ -62,7 +63,7 @@ init_text_view :: (view : *Text_View, screen : *Screen, x : int, y : int, w : in
 	view.wrapped_line_count = get_wrapped_line_count (view);
 	view.line_area_width = get_line_area_width (view);
 	set_cursor (*view.buffer, 0);
-	view.text_area.column, view.text_area.line = get_text_area_cursor_position (view);
+	view.text_area.cursor_x, view.text_area.cursor_y = get_text_area_cursor_position (view);
 	scroll_text_area_to_cursor (view);
 }
 
@@ -76,9 +77,7 @@ resize_text_view :: (using view : *Text_View, new_w : int, new_h : int)
 {
 	w = new_w;
 	h = new_h;
-	line_count = get_line_count (view);
 	wrapped_line_count = get_wrapped_line_count (view);
-	line_area_width = get_line_area_width (view);
 }
 
 insert_rune_at_cursor :: (using view : *Text_View, codepoint : Rune)
@@ -241,6 +240,21 @@ get_line_area_width :: (using view : *Text_View) -> int #must
 
 refresh_text_view :: (using view : *Text_View)
 {
+	update_text_area_column_and_line :: (using view : *Text_View)
+	{
+		text_area.column, text_area.line = 1;
+		for i : 0..buffer.cursor-1
+		{
+			text_area.column += 1;
+
+			if buffer[i] == #char "\n"
+			{
+				text_area.column = 1;
+				text_area.line += 1;
+			}
+		}
+	}
+
 	get_cursor_of_first_displayed_line :: (using view : *Text_View) -> int #must
 	{
 		i := 0;
@@ -287,7 +301,7 @@ refresh_text_view :: (using view : *Text_View)
 		while line > 0
 		{
 			digit := line % 10;
-			cell := *screen.cells[(y + y_pos) + screen.rows * (x + i)];
+			cell := get_cell_at_pos (view, i, y_pos);
 			cell.codepoint = cast (Rune) (#char "0" + digit);
 			i -= 1;
 			line /= 10;
@@ -298,7 +312,7 @@ refresh_text_view :: (using view : *Text_View)
 	{
 		for j : x..w - 1
 		{
-			cell := *screen.cells[(y + i) + screen.rows * (x + j)];
+			cell := get_cell_at_pos (view, j, i);
 			cell.codepoint = 0;
 			cell.foreground_color = COLOR_WHITE;
 			cell.background_color = COLOR_BLACK;
@@ -314,7 +328,7 @@ refresh_text_view :: (using view : *Text_View)
 		while i < gap_buffer_count (buffer) && y_pos < h - 1
 		{
 			codepoint := buffer[i];
-			cell := *screen.cells[(y + y_pos) + screen.rows * (x + x_pos)];
+			cell := get_cell_at_pos (view, x_pos, y_pos);
 			cell.codepoint = codepoint;
 			
 			if buffer.selection > 0 && i > buffer.cursor && i < buffer.cursor + buffer.selection  ||
@@ -337,7 +351,7 @@ refresh_text_view :: (using view : *Text_View)
 			{
 				while (x_pos - line_area_width) % 4 != 0 && x_pos < w
 				{
-					cell := *screen.cells[(y + y_pos) + screen.rows * (x + x_pos)];
+					cell := get_cell_at_pos (view, x_pos, y_pos);
 					cell.codepoint = 0;
 					
 					if buffer.selection > 0 && i > buffer.cursor && i < buffer.cursor + buffer.selection  ||
@@ -373,7 +387,7 @@ refresh_text_view :: (using view : *Text_View)
 
 		if buffer.cursor == gap_buffer_count (buffer)
 		{
-			cell := *screen.cells[(y + y_pos) + screen.rows * (x + x_pos)];
+			cell := get_cell_at_pos (view, x_pos, y_pos);
 			cell.foreground_color = COLOR_BLACK;
 			cell.background_color = COLOR_WHITE;
 		}
@@ -381,46 +395,48 @@ refresh_text_view :: (using view : *Text_View)
 		if y_pos < h - 1  write_line_number (view, current_line, y_pos);
 	}
 
-	for xpos : 0..w - 1
+	for x_pos : 0..w - 1
 	{
-		cell := *screen.cells[(y + h - 1) + screen.rows * (x + xpos)];
+		cell := get_cell_at_pos (view, x_pos, h - 1);
 		cell.foreground_color = COLOR_BLACK;
 		cell.background_color = COLOR_WHITE;
 	}
 
+	update_text_area_column_and_line (view);
+
 	{
 		// Write the filepath
 		i := 0;
-		xpos := 1;
-		ypos := h - 1;
-		while i < filepath.count && xpos < w
+		x_pos := 1;
+		y_pos := h - 1;
+		while i < filepath.count && x_pos < w
 		{
 			codepoint, size := utf8_rune_at_byte (filepath, xx i);
-			cell := *screen.cells[(y + ypos) + screen.rows * (x + xpos)];
+			cell := get_cell_at_pos (view, x_pos, y_pos);
 			cell.codepoint = codepoint;
 			i += xx size;
-			xpos += 1;
+			x_pos += 1;
 		}
 
-		xpos = w - 1;
+		x_pos = w - 1;
 
 		// Write the column and line in the text
-		right_part := sprint ("    %:%    UTF-8    LF  ", text_area.column + 1, text_area.line + 1);
+		right_part := sprint ("    (%,%)    UTF-8    LF  ", text_area.column, text_area.line);
 		defer free (right_part);
 		i = right_part.count - 1;
-		while i >= 0 && xpos >= 0
+		while i >= 0 && x_pos >= 0
 		{
-			cell := *screen.cells[(y + ypos) + screen.rows * (x + xpos)];
+			cell := get_cell_at_pos (view, x_pos, y_pos);
 			if is_space (right_part[i])  cell.codepoint = 0;
 			else                         cell.codepoint = right_part[i];
 			i -= 1;
-			xpos -= 1;
+			x_pos -= 1;
 		}
 	}
 
-	//text_area.column, text_area.line = get_text_area_cursor_position (view);
-	cursor_x = text_area.column + line_area_width;
-	cursor_y = text_area.line - text_area.scroll_y;
+	//text_area.cursor_x, text_area.cursor_y = get_text_area_cursor_position (view);
+	cursor_x = text_area.cursor_x + line_area_width;
+	cursor_y = text_area.cursor_y - text_area.scroll_y;
 }
 
 get_text_area_cursor_position :: (using view : *Text_View) -> int, int #must
@@ -495,28 +511,28 @@ move_text_area_cursor_to_target :: (using view : *Text_View, target_x : int, tar
 
 	if select  select_to (*buffer, i);
 	else       set_cursor (*buffer, i);
-	text_area.column  = column - line_area_width;
-	text_area.line = row;
+	text_area.cursor_x  = column - line_area_width;
+	text_area.cursor_y = row;
 	scroll_text_area_to_cursor (view);
 }
 
-move_text_area_cursor_up :: inline (using view : *Text_View)
+move_text_area_cursor_up :: inline (using view : *Text_View, amount := 1)
 {
 	column, row := get_text_area_cursor_position (view);
-	move_text_area_cursor_to_target (view, column + line_area_width, row - 1);
+	move_text_area_cursor_to_target (view, column + line_area_width, clamp (row - amount, 0, row));
 }
 
-move_text_area_cursor_down :: inline (using view : *Text_View)
+move_text_area_cursor_down :: inline (using view : *Text_View, amount := 1)
 {
 	column, row := get_text_area_cursor_position (view);
-	move_text_area_cursor_to_target (view, column + line_area_width, row + 1);
+	move_text_area_cursor_to_target (view, column + line_area_width, row + amount);
 }
 
 move_text_area_cursor_left :: inline (using view : *Text_View)
 {
 	if move_cursor_backward (*buffer)
 	{
-		text_area.column, text_area.line = get_text_area_cursor_position (view);
+		text_area.cursor_x, text_area.cursor_y = get_text_area_cursor_position (view);
 		scroll_text_area_to_cursor (view);
 	}
 }
@@ -525,7 +541,7 @@ move_text_area_cursor_right :: inline (using view : *Text_View)
 {
 	if move_cursor_forward (*buffer)
 	{
-		text_area.column, text_area.line = get_text_area_cursor_position (view);
+		text_area.cursor_x, text_area.cursor_y = get_text_area_cursor_position (view);
 		scroll_text_area_to_cursor (view);
 	}
 }
@@ -534,7 +550,7 @@ skip_word_right :: inline (using view : *Text_View)
 {
 	if skip_word_forward (*buffer)
 	{
-		text_area.column, text_area.line = get_text_area_cursor_position (view);
+		text_area.cursor_x, text_area.cursor_y = get_text_area_cursor_position (view);
 		scroll_text_area_to_cursor (view);
 	}
 }
@@ -543,7 +559,7 @@ skip_word_left :: inline (using view : *Text_View)
 {
 	if skip_word_backward (*buffer)
 	{
-		text_area.column, text_area.line = get_text_area_cursor_position (view);
+		text_area.cursor_x, text_area.cursor_y = get_text_area_cursor_position (view);
 		scroll_text_area_to_cursor (view);
 	}
 }
@@ -552,7 +568,7 @@ move_text_area_cursor_to_buffer_start :: inline (using view : *Text_View)
 {
 	if set_cursor (*buffer, 0)
 	{
-		text_area.column, text_area.line = get_text_area_cursor_position (view);
+		text_area.cursor_x, text_area.cursor_y = get_text_area_cursor_position (view);
 		scroll_text_area_to_cursor (view);
 	}
 }
@@ -561,9 +577,17 @@ move_text_area_cursor_to_buffer_end :: inline (using view : *Text_View)
 {
 	if set_cursor (*buffer, gap_buffer_count (buffer))
 	{
-		text_area.column, text_area.line = get_text_area_cursor_position (view);
+		text_area.cursor_x, text_area.cursor_y = get_text_area_cursor_position (view);
 		scroll_text_area_to_cursor (view);
 	}
+}
+
+text_area_select_all :: inline (using view : *Text_View)
+{
+	set_cursor (*buffer, 0);
+	select_to (*buffer, gap_buffer_count (buffer));
+	text_area.cursor_x, text_area.cursor_y = get_text_area_cursor_position (view);
+	scroll_text_area_to_cursor (view);
 }
 
 text_area_select_up :: inline (using view : *Text_View)
@@ -582,7 +606,7 @@ text_area_select_left :: inline (using view : *Text_View)
 {
 	if select_backward (*buffer)
 	{
-		text_area.column, text_area.line = get_text_area_cursor_position (view);
+		text_area.cursor_x, text_area.cursor_y = get_text_area_cursor_position (view);
 		scroll_text_area_to_cursor (view);
 	}
 }
@@ -591,7 +615,7 @@ text_area_select_right :: inline (using view : *Text_View)
 {
 	if select_forward (*buffer)
 	{
-		text_area.column, text_area.line = get_text_area_cursor_position (view);
+		text_area.cursor_x, text_area.cursor_y = get_text_area_cursor_position (view);
 		scroll_text_area_to_cursor (view);
 	}
 }
@@ -600,7 +624,7 @@ text_area_select_word_left :: inline (using view : *Text_View)
 {
 	if select_word_backward (*buffer)
 	{
-		text_area.column, text_area.line = get_text_area_cursor_position (view);
+		text_area.cursor_x, text_area.cursor_y = get_text_area_cursor_position (view);
 		scroll_text_area_to_cursor (view);
 	}
 }
@@ -609,7 +633,7 @@ text_area_select_word_right :: inline (using view : *Text_View)
 {
 	if select_word_forward (*buffer)
 	{
-		text_area.column, text_area.line = get_text_area_cursor_position (view);
+		text_area.cursor_x, text_area.cursor_y = get_text_area_cursor_position (view);
 		scroll_text_area_to_cursor (view);
 	}
 }
@@ -617,12 +641,12 @@ text_area_select_word_right :: inline (using view : *Text_View)
 scroll_text_area_to_cursor :: inline (using view : *Text_View)
 {
 	// @Cleanup (stefan): There's probably a better way to do it without loops.
-	while text_area.line < text_area.scroll_y + min (text_area.line, TEXT_VIEW_SCROLL_MARGIN)
+	while text_area.cursor_y < text_area.scroll_y + min (text_area.cursor_y, TEXT_VIEW_SCROLL_MARGIN)
 	{
 		scroll_text_area_up (view);
 	}
 
-	while text_area.line - text_area.scroll_y > h - TEXT_VIEW_SCROLL_MARGIN - 1
+	while text_area.cursor_y - text_area.scroll_y > h - TEXT_VIEW_SCROLL_MARGIN - 1
 	{
 		scroll_text_area_down (view);
 	}
@@ -640,109 +664,110 @@ scroll_text_area_down :: inline (using view : *Text_View, amount := 1)
 
 text_view_handle_event :: (using view : *Text_View, event : Event)
 {
+	// @Cleanup
 	if event.type == .KEY_PRESS || event.type == .KEY_REPEAT
 	{
 		if event.key_event.key ==
 		{
-			case GLFW_KEY_UP;
-				if event.key_event.mods == GLFW_MOD_CONTROL
-				{
-					move_text_area_cursor_to_buffer_start (view);
-				}
-				else if event.key_event.mods == GLFW_MOD_SHIFT
-				{
-					text_area_select_up (view);
-				}
-				else
-				{
-					move_text_area_cursor_up (view);
-				}
+		case GLFW_KEY_UP;
+			if event.key_event.mods == GLFW_MOD_CONTROL
+			{
+				move_text_area_cursor_to_buffer_start (view);
+			}
+			else if event.key_event.mods == GLFW_MOD_SHIFT
+			{
+				text_area_select_up (view);
+			}
+			else
+			{
+				move_text_area_cursor_up (view);
+			}
 
-			case GLFW_KEY_DOWN;
-				if event.key_event.mods == GLFW_MOD_CONTROL
-				{
-					move_text_area_cursor_to_buffer_end (view);
-				}
-				else if event.key_event.mods == GLFW_MOD_SHIFT
-				{
-					text_area_select_down (view);
-				}
-				else
-				{
-					move_text_area_cursor_down (view);
-				}
+		case GLFW_KEY_DOWN;
+			if event.key_event.mods == GLFW_MOD_CONTROL
+			{
+				move_text_area_cursor_to_buffer_end (view);
+			}
+			else if event.key_event.mods == GLFW_MOD_SHIFT
+			{
+				text_area_select_down (view);
+			}
+			else
+			{
+				move_text_area_cursor_down (view);
+			}
 
-			case GLFW_KEY_LEFT;
-				if event.key_event.mods == GLFW_MOD_CONTROL
-				{
-					skip_word_left (view);
-				}
-				else if event.key_event.mods == GLFW_MOD_SHIFT
-				{
-					text_area_select_left (view);
-				}
-				else if (event.key_event.mods & GLFW_MOD_SHIFT) && (event.key_event.mods & GLFW_MOD_CONTROL)
-				{
-					text_area_select_word_left (view);
-				}
-				else
-				{
-					move_text_area_cursor_left (view);
-				}
-			
-			case GLFW_KEY_RIGHT;
-				if event.key_event.mods == GLFW_MOD_CONTROL
-				{
-					skip_word_right (view);
-				}
-				else if event.key_event.mods == GLFW_MOD_SHIFT
-				{
-					text_area_select_right (view);
-				}
-				else if (event.key_event.mods & GLFW_MOD_SHIFT) && (event.key_event.mods & GLFW_MOD_CONTROL)
-				{
-					text_area_select_word_right (view);
-				}
-				else
-				{
-					move_text_area_cursor_right (view);
-				}
+		case GLFW_KEY_LEFT;
+			if event.key_event.mods == GLFW_MOD_CONTROL
+			{
+				skip_word_left (view);
+			}
+			else if event.key_event.mods == GLFW_MOD_SHIFT
+			{
+				text_area_select_left (view);
+			}
+			else if (event.key_event.mods & GLFW_MOD_SHIFT) && (event.key_event.mods & GLFW_MOD_CONTROL)
+			{
+				text_area_select_word_left (view);
+			}
+			else
+			{
+				move_text_area_cursor_left (view);
+			}
+		
+		case GLFW_KEY_RIGHT;
+			if event.key_event.mods == GLFW_MOD_CONTROL
+			{
+				skip_word_right (view);
+			}
+			else if event.key_event.mods == GLFW_MOD_SHIFT
+			{
+				text_area_select_right (view);
+			}
+			else if (event.key_event.mods & GLFW_MOD_SHIFT) && (event.key_event.mods & GLFW_MOD_CONTROL)
+			{
+				text_area_select_word_right (view);
+			}
+			else
+			{
+				move_text_area_cursor_right (view);
+			}
 
-			case GLFW_KEY_ENTER; insert_rune_at_cursor (view, #char "\n");
-			case GLFW_KEY_TAB;   insert_rune_at_cursor (view, #char "\t");
-			case GLFW_KEY_BACKSPACE;
-				if event.key_event.mods == GLFW_MOD_CONTROL && buffer.selection == 0
-				{
-					backspace_remove_word_at_cursor (view);
-				}
-				else
-				{
-					backspace_remove_rune_at_cursor (view);
-				}
+		case GLFW_KEY_ENTER; insert_rune_at_cursor (view, #char "\n");
+		case GLFW_KEY_TAB;   insert_rune_at_cursor (view, #char "\t");
+		case GLFW_KEY_BACKSPACE;
+			if event.key_event.mods == GLFW_MOD_CONTROL && buffer.selection == 0
+			{
+				backspace_remove_word_at_cursor (view);
+			}
+			else
+			{
+				backspace_remove_rune_at_cursor (view);
+			}
 
-			case GLFW_KEY_DELETE;
-				if event.key_event.mods == GLFW_MOD_CONTROL
-				{
-					remove_word_at_cursor (view);
-				}
-				else
-				{
-					remove_rune_at_cursor (view);
-				}
+		case GLFW_KEY_DELETE;
+			if event.key_event.mods == GLFW_MOD_CONTROL
+			{
+				remove_word_at_cursor (view);
+			}
+			else
+			{
+				remove_rune_at_cursor (view);
+			}
 
-			case GLFW_KEY_PAGE_UP;    scroll_text_area_up (view);
-			case GLFW_KEY_PAGE_DOWN;  scroll_text_area_down (view);
+		case GLFW_KEY_PAGE_UP;    move_text_area_cursor_up (view, h - 1);
+		case GLFW_KEY_PAGE_DOWN;  move_text_area_cursor_down (view, h - 1);
 		}
 
 		if event.key_event.mods == GLFW_MOD_CONTROL
 		{
 			if event.key_event.key ==
 			{
+			case GLFW_KEY_A; text_area_select_all (view);
 			case GLFW_KEY_S;
-				println ("Saving to '%'...", OUTPUT_FILE);
-				ok := write_gap_buffer_to_file (*buffer, OUTPUT_FILE);
-				if ok  println ("Success");
-				else   println ("Failure");
+				written, ok := write_gap_buffer_to_file (*buffer, OUTPUT_FILE);
+				if ok  log_to_screen (screen, "Saved buffer to '%' (% bytes).", OUTPUT_FILE, written);
+				else   log_to_screen (screen, "Failed to save buffer to '%' (% bytes).", OUTPUT_FILE, written);
 			
 			case GLFW_KEY_Z;
 				if undo_operation (*buffer)
