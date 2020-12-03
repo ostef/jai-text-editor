@@ -1,7 +1,7 @@
 #import "File";
 #import "Windows";
 
-DEFAULT_UNDO_REDO_CAPACITY :: 10_000;
+DEFAULT_UNDO_REDO_CAPACITY :: 25_000;
 
 Gap_Buffer :: struct
 {
@@ -16,6 +16,11 @@ Gap_Buffer :: struct
 	allocator      : Allocator;
 	allocator_data : *void;
 
+	// @Robustness (stefan): The undo/redo system should be revised. Deleting a whole 800 line file
+	// and undoing does not work because there is not enough space for undos. The main concern for
+	// doing the BATCH_BEGIN and BETCH_END thing was to not allocate the contents on the heap, but
+	// it might be necessary to at least keep a string instead of a single character.
+	// A resizable stack allocator might work and is also much faster than the heap.
 	Operation :: struct
 	{
 		Type :: enum
@@ -77,6 +82,12 @@ destroy_gap_buffer :: inline (using buffer : *Gap_Buffer)
 	count = 0;
 	cursor     = 0;
 	gap        = 0;
+}
+
+clear :: inline (using buffer : *Gap_Buffer)
+{
+	cursor = 0;
+	gap    = count;
 }
 
 insert :: inline (using buffer : *Gap_Buffer, codepoint : Rune, buffer_operation := true)
@@ -518,43 +529,33 @@ get_back_part :: (using buffer : *Gap_Buffer) -> []Rune
 	return result;
 }
 
-write_gap_buffer_to_file :: (using buffer : *Gap_Buffer, filepath : string) -> bool
+write_gap_buffer_to_file :: (using buffer : *Gap_Buffer, filepath : string) -> u64, bool
 {
+	written : u64;
 	file, ok := file_open (filepath, for_writing = true);
 	if !ok
 	{
 		err := GetLastError ();
 		println ("write_gap_buffer_to_file: Error: %", err);
 
-		return false;
+		return 0, false;
 	}
 
 	defer file_close (*file);
 
 	front := get_front_part (buffer);
 	back  := get_back_part  (buffer);
+
 	str, valid := utf8_runes_to_string (front, allocator = __temporary_allocator);
-	
-	if !valid
-	{
-		println ("write_gap_buffer_to_file: Could not convert buffer to utf8 string");
-
-		return false;
-	}
-	
 	file_write (*file, str.data, str.count);
+	written += xx str.count;
+
 	str, valid  = utf8_runes_to_string (back,  allocator = __temporary_allocator);
-	
-	if !valid
-	{
-		println ("write_gap_buffer_to_file: Could not convert buffer to utf8 string");
 
-		return false;
-	}
-	
 	file_write (*file, str.data, str.count);
+	written += xx str.count;
 
-	return true;
+	return written, true;
 }
 
 operator [] :: inline (using buffer : Gap_Buffer, index : int) -> Rune
