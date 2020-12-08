@@ -44,6 +44,12 @@ offset_of :: inline ($T : Type, $member : string) -> s64
 	DONE
 }
 
+abs :: inline (val : $T) -> T
+{
+	if val < 0  return -val;
+	else        return  val;
+}
+
 print :: inline (val : $T)
 {
 	print ("%", val);
