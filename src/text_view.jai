@@ -91,7 +91,7 @@ insert_rune_at_cursor :: (using view : *Text_View, codepoint : Rune)
 
 backspace_remove_rune_at_cursor :: (using view : *Text_View)
 {
-	if backspace (*buffer)
+	if backspace_selection (*buffer)
 	{
 		line_count = get_line_count (view);
 		wrapped_line_count = get_wrapped_line_count (view);
@@ -102,7 +102,7 @@ backspace_remove_rune_at_cursor :: (using view : *Text_View)
 
 remove_rune_at_cursor :: (using view : *Text_View)
 {
-	if delete (*buffer)
+	if delete_selection (*buffer)
 	{
 		line_count = get_line_count (view);
 		wrapped_line_count = get_wrapped_line_count (view);
@@ -132,57 +132,6 @@ remove_word_at_cursor :: (using view : *Text_View)
 		scroll_text_area_to_cursor (view);
 	}
 }
-
-/*
-write_string_to_view :: (using view : *Screen_View, runes : []Rune, x_min : int, y_min : int, x_max : int = -1, y_max : int = -1, foreground_color := COLOR_WHITE, background_color := COLOR_BLACK)
-{
-	if x_max == -1  x_max = w;
-	if y_max == -1  y_max = h;
-	x_max = clamp (x_max, 0, w);
-	y_max = clamp (y_max, 0, h);
-
-	i : u64;
-	x_pos := x_min;
-	y_pos := y_min;
-	while i < xx runes.count && y_pos < y_max
-	{
-		codepoint := runes[i];
-		cell := *screen.cells[(y + y_pos) + screen.rows * (x + x_pos)];
-		cell.codepoint = codepoint;
-		cell.foreground_color = foreground_color;
-		cell.background_color = background_color;
-		x_pos += 1;
-
-		if codepoint == #char "\t"
-		{
-			while x_pos % 4 != 0 && x_pos < x_max
-			{
-				cell := *screen.cells[(y + y_pos) + screen.rows * (x + x_pos)];
-				cell.codepoint = 0;
-				cell.foreground_color = foreground_color;
-				cell.background_color = background_color;
-				x_pos += 1;
-			}
-		}
-
-		if x_pos >= x_max - 1 || codepoint == #char "\n"
-		{
-			x_pos = x_min;
-			y_pos += 1;
-		}
-
-		i += 1;
-	}
-}
-
-write_string_to_view :: (using view : *Screen_View, str : string, x_min : int, y_min : int, x_max : int = -1, y_max : int = -1, foreground_color := COLOR_WHITE, background_color := COLOR_BLACK)
-{
-	// @Note (stefan): We could do a better version without allocating but that would require 2 similar procedures to maintain.
-	// I dunno if we should choose the better version over the current one.
-	runes, valid := utf8_string_to_runes (str, __temporary_allocator);
-	if valid  write_string_to_view (view, runes, x_min, y_min, x_max, y_max, foreground_color, background_color);
-}
-*/
 
 get_line_count :: (using view : *Text_View) -> int #must
 {

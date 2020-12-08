@@ -9,18 +9,14 @@ Gap_Buffer :: struct
 	count  : s64;
 	cursor : int;
 	gap    : int;
-	selection   : int;
-	undo_buffer : Circular_Stack (Operation);
-	redo_buffer : Circular_Stack (Operation);
+	selection  : int;
+	undo_stack : Circular_Stack (Operation);
+	redo_stack : Circular_Stack (Operation);
 
 	allocator      : Allocator;
 	allocator_data : *void;
 
-	// @Robustness (stefan): The undo/redo system should be revised. Deleting a whole 800 line file
-	// and undoing does not work because there is not enough space for undos. The main concern for
-	// doing the BATCH_BEGIN and BETCH_END thing was to not allocate the contents on the heap, but
-	// it might be necessary to at least keep a string instead of a single character.
-	// A resizable stack allocator might work and is also much faster than the heap.
+	// @Todo (stefan): Allocate undo operations on a stack rather than on the heap.
 	Operation :: struct
 	{
 		Type :: enum
@@ -28,13 +24,11 @@ Gap_Buffer :: struct
 			INSERT;
 			BACKSPACE;
 			DELETE;
-			BATCH_BEGIN;
-			BATCH_END;
 		}
 
 		type   : Type;
 		cursor : int;
-		rune   : Rune;
+		buffer : []Rune;
 	}
 }
 
@@ -50,8 +44,8 @@ make_gap_buffer :: inline (capacity : int, undo_redo_capacity := DEFAULT_UNDO_RE
 	result.gap      = capacity;
 	result.allocator      = allocator;
 	result.allocator_data = allocator_data;
-	result.undo_buffer = make_circular_stack (Gap_Buffer_Operation, undo_redo_capacity, allocator = allocator, allocator_data = allocator_data);
-	result.redo_buffer = make_circular_stack (Gap_Buffer_Operation, undo_redo_capacity, allocator = allocator, allocator_data = allocator_data);
+	result.undo_stack = make_circular_stack (Gap_Buffer_Operation, undo_redo_capacity, allocator = allocator, allocator_data = allocator_data);
+	result.redo_stack = make_circular_stack (Gap_Buffer_Operation, undo_redo_capacity, allocator = allocator, allocator_data = allocator_data);
 
 	return result;
 }
@@ -76,8 +70,8 @@ load_file :: inline (using buffer : *Gap_Buffer, filepath : string) -> bool
 
 destroy_gap_buffer :: inline (using buffer : *Gap_Buffer)
 {
-	destroy_circular_stack (*undo_buffer);
-	destroy_circular_stack (*redo_buffer);
+	destroy_circular_stack (*undo_stack);
+	destroy_circular_stack (*redo_stack);
 	free (data, allocator = allocator, allocator_data = allocator_data);
 	count = 0;
 	cursor     = 0;
@@ -90,19 +84,20 @@ clear :: inline (using buffer : *Gap_Buffer)
 	gap    = count;
 }
 
-insert :: inline (using buffer : *Gap_Buffer, codepoint : Rune, buffer_operation := true)
+insert :: (using buffer : *Gap_Buffer, codepoint : Rune, buffer_operation := true)
 {
 	if gap == 0  gap_buffer_grow (buffer, 2);
-	
-	if selection != 0  delete (buffer);
+	if selection != 0  delete_selection (buffer);
+
 	if buffer_operation
 	{
-		reset (*redo_buffer);
+		clear_redo_data (buffer);
 		op : Gap_Buffer_Operation;
 		op.type   = .INSERT;
 		op.cursor = cursor;
-		op.rune   = codepoint;
-		push (*undo_buffer, op);
+		op.buffer = NewArray (1, Rune);
+		op.buffer[0] = codepoint;
+		push (*undo_stack, op);
 	}
 
 	data[cursor] = codepoint;
@@ -110,20 +105,36 @@ insert :: inline (using buffer : *Gap_Buffer, codepoint : Rune, buffer_operation
 	gap         -= 1;
 }
 
-backspace :: inline (using buffer : *Gap_Buffer, buffer_operation := true) -> bool
+insert :: (using buffer : *Gap_Buffer, runes : []Rune, buffer_operation := true)
 {
-	if selection != 0  return delete (buffer, buffer_operation);
+	if buffer_operation
+	{
+		op : Gap_Buffer_Operation;
+		op.type = .INSERT;
+		op.cursor = cursor;
+		op.buffer = NewArray (runes.count, Rune);	// @Speed (stefan): Use stack allocator
+		for runes  op.buffer[it_index] = it;
+		push (*undo_stack, op);
+	}
+
+	for runes  insert (buffer, it, false);
+}
+
+backspace_selection :: (using buffer : *Gap_Buffer, buffer_operation := true) -> bool
+{
+	if selection != 0  return delete_selection (buffer, buffer_operation);
 
 	if cursor > 0
 	{
 		if buffer_operation
 		{
-			reset (*redo_buffer);
+			clear_redo_data (buffer);
 			op : Gap_Buffer_Operation;
 			op.type   = .BACKSPACE;
 			op.cursor = cursor - 1;
-			op.rune   = (<<buffer)[cursor - 1];
-			push (*undo_buffer, op);
+			op.buffer = NewArray (1, Rune);
+			op.buffer[0] = (<<buffer)[cursor - 1];
+			push (*undo_stack, op);
 		}
 
 		cursor -= 1;
@@ -136,51 +147,61 @@ backspace :: inline (using buffer : *Gap_Buffer, buffer_operation := true) -> bo
 	return false;
 }
 
-delete :: inline (using buffer : *Gap_Buffer, buffer_operation := true) -> bool
+copy_selection_to_buffer :: inline (using buffer : Gap_Buffer, out_buffer : []Rune)
 {
-	delete_helper :: inline (using buffer : *Gap_Buffer, buffer_operation := true)
+	if selection > 0
+	{
+		for i : 0..selection - 1
+		{
+			out_buffer[i] = buffer[cursor + i];
+		}
+	}
+	else if selection < 0
+	{
+		for i : 1..-selection
+		{
+			out_buffer[-selection - i] = buffer[cursor - i];
+		}
+	}
+	else
+	{
+		out_buffer[0] = buffer[cursor];
+	}
+}
+
+delete_selection :: (using buffer : *Gap_Buffer, buffer_operation := true) -> bool
+{
+	if cursor < gap_buffer_count (buffer) || selection != 0
 	{
 		if buffer_operation
 		{
-			reset (*redo_buffer);
+			clear_redo_data (buffer);
 			op : Gap_Buffer_Operation;
 			op.type   = .DELETE;
-			op.cursor = cursor;
-			op.rune   = (<<buffer)[cursor];
-			push (*undo_buffer, op);
+			if selection >= 0  op.cursor = cursor;
+			else               op.cursor = cursor + selection;
+			count := 0;
+			if selection == 0  count = 1;
+			else               count = abs (selection);
+			op.buffer = NewArray (count, Rune);
+			copy_selection_to_buffer (<<buffer, op.buffer);
+			push (*undo_stack, op);
 		}
 
-		gap += 1;
-	}
+		
+		if selection == 0  gap += 1;
 
-	if cursor < gap_buffer_count (buffer) || selection != 0
-	{
-		if selection != 0
+		while selection < 0
 		{
-			op : Gap_Buffer_Operation;
-			op.type = .BATCH_BEGIN;
-			if buffer_operation  push (*undo_buffer, op);
-
-			while selection != 0
-			{
-				if selection < 0
-				{
-					select_backward (buffer);
-					delete_helper (buffer, buffer_operation);
-				}
-				else
-				{
-					selection -= 1;
-					delete_helper (buffer, buffer_operation);
-				}
-			}
-
-			op.type = .BATCH_END;
-			if buffer_operation  push (*undo_buffer, op);
+			select_backward (buffer);
+			gap += 1;
 		}
-		else
+
+
+		while selection > 0
 		{
-			delete_helper (buffer, buffer_operation);
+			selection -= 1;
+			gap += 1;
 		}
 
 		return true;
@@ -191,59 +212,36 @@ delete :: inline (using buffer : *Gap_Buffer, buffer_operation := true) -> bool
 
 backspace_word :: inline (using buffer : *Gap_Buffer) -> bool
 {
-	op : Gap_Buffer_Operation;
-	op.type = .BATCH_BEGIN;
-	push (*undo_buffer, op);
-
-	modified := backspace (buffer);
-	
-	while cursor > 0 && is_space ((<<buffer)[cursor - 1]) && (<<buffer)[cursor - 1] != #char "\n"
+	if select_word_backward (buffer)
 	{
-		if backspace (buffer)  modified = true;
+		delete_selection (buffer);
+		
+		return true;
 	}
 
-	while cursor > 0 && is_alpha_num ((<<buffer)[cursor - 1])
-	{
-		if backspace (buffer)  modified = true;
-	}
-	
-	op.type = .BATCH_END;
-	push (*undo_buffer, op);
-
-	return modified;
+	return false;
 }
 
 delete_word :: inline (using buffer : *Gap_Buffer) -> bool
 {
-	op : Gap_Buffer_Operation;
-	op.type = .BATCH_BEGIN;
-	push (*undo_buffer, op);
-
-	modified := delete (buffer);
-	
-	while cursor < gap_buffer_count (buffer) && is_space ((<<buffer)[cursor]) && (<<buffer)[cursor] != #char "\n"
+	if select_word_forward (buffer)
 	{
-		if delete (buffer)  modified = true;
+		delete_selection (buffer);
+		
+		return true;
 	}
 
-	while cursor < gap_buffer_count (buffer) && is_alpha_num ((<<buffer)[cursor])
-	{
-		if delete (buffer)  modified = true;
-	}
-
-	op.type = .BATCH_END;
-	push (*undo_buffer, op);
-
-	return modified;
+	return false;
 }
 
-move_cursor_forward :: inline (using buffer : *Gap_Buffer, clear_selection := true) -> bool
+move_cursor_forward :: (using buffer : *Gap_Buffer, clear_selection := true) -> bool
 {
 	modified := false;
 	if selection != 0 && clear_selection
 	{
 		selection = 0;
-		modified = true;
+		
+		return true;
 	}
 
 	if cursor < gap_buffer_count (buffer)
@@ -256,13 +254,14 @@ move_cursor_forward :: inline (using buffer : *Gap_Buffer, clear_selection := tr
 	return modified;
 }
 
-move_cursor_backward :: inline (using buffer : *Gap_Buffer, clear_selection := true) -> bool
+move_cursor_backward :: (using buffer : *Gap_Buffer, clear_selection := true) -> bool
 {
 	modified := false;
 	if selection != 0 && clear_selection
 	{
 		selection = 0;
-		modified = true;
+		
+		return true;
 	}
 
 	if cursor > 0
@@ -275,8 +274,7 @@ move_cursor_backward :: inline (using buffer : *Gap_Buffer, clear_selection := t
 	return modified;
 }
 
-
-set_cursor :: inline (using buffer : *Gap_Buffer, new_cursor : int) -> bool
+set_cursor :: (using buffer : *Gap_Buffer, new_cursor : int) -> bool
 {
 	assert (new_cursor >= 0 && new_cursor <= gap_buffer_count (buffer), "Cursor is %, should be in [0; %]", new_cursor, gap_buffer_count (buffer));
 	// @Cleanup (stefan): This is not the fastest implementation.
@@ -355,8 +353,8 @@ select_to :: inline (using buffer : *Gap_Buffer, new_cursor : int) -> bool
 	assert (new_cursor >= 0 && new_cursor <= gap_buffer_count (buffer), "Cursor is %, should be in [0; %]", new_cursor, gap_buffer_count (buffer));
 	// @Cleanup (stefan): This is not the fastest implementation.
 	modified : bool;
-	while cursor < new_cursor  { if select_forward  (buffer)  modified = true; }
-	while cursor > new_cursor  { if select_backward (buffer)  modified = true; }
+	while cursor < new_cursor { if select_forward  (buffer)  modified = true; }
+	while cursor > new_cursor { if select_backward (buffer)  modified = true; }
 
 	return modified;
 }
@@ -399,44 +397,28 @@ select_word_backward :: inline (using buffer : *Gap_Buffer) -> int
 
 undo_operation :: (using buffer : *Gap_Buffer) -> bool
 {
-	perform_undo_for_single_operation :: (buffer : *Gap_Buffer, op : Gap_Buffer_Operation)
+	if is_empty (undo_stack)  return false;
+	op := pop (*undo_stack);
+	push (*redo_stack, op);
+
+	if op.type ==
 	{
-		if op.type ==
-		{
-		case .INSERT;
-			set_cursor (buffer, op.cursor);
-			delete (buffer, false);
+	case .INSERT;
+		set_cursor (buffer, op.cursor);
+		select_to (buffer, op.cursor + op.buffer.count - 1);
+		delete_selection (buffer, false);
+		println ("Undid insert at %, length %", op.cursor, op.buffer.count);
 
-		case .BACKSPACE;
-			set_cursor (buffer, op.cursor);
-			insert (buffer, op.rune, false);
+	case .BACKSPACE;
+		set_cursor (buffer, op.cursor);
+		insert (buffer, op.buffer, false);
+		println ("Undid backspace at %, length %", op.cursor, op.buffer.count);
 
-		case .DELETE;
-			set_cursor (buffer, op.cursor);
-			insert (buffer, op.rune, false);
-			move_cursor_backward (buffer);
-		}
-	}
-
-	if is_empty (undo_buffer)  return false;
-	op := pop (*undo_buffer);
-	push (*redo_buffer, op);
-
-	if op.type == .BATCH_END
-	{
-		op = pop (*undo_buffer);
-		push (*redo_buffer, op);
-		
-		while op.type != .BATCH_BEGIN && !is_empty (undo_buffer)
-		{
-			perform_undo_for_single_operation (buffer, op);
-			op = pop (*undo_buffer);
-			push (*redo_buffer, op);
-		}
-	}
-	else
-	{
-		perform_undo_for_single_operation (buffer, op);
+	case .DELETE;
+		set_cursor (buffer, op.cursor);
+		insert (buffer, op.buffer, false);
+		move_cursor_backward (buffer);
+		println ("Undid delete at %, length %", op.cursor, op.buffer.count);
 	}
 
 	return true;
@@ -444,46 +426,41 @@ undo_operation :: (using buffer : *Gap_Buffer) -> bool
 
 redo_operation :: (using buffer : *Gap_Buffer) -> bool
 {
-	perform_redo_for_single_operation :: (buffer : *Gap_Buffer, op : Gap_Buffer_Operation)
+	if is_empty (redo_stack)  return false;
+	op := pop (*redo_stack);
+	push (*undo_stack, op);
+
+	if op.type ==
 	{
-		if op.type ==
-		{
-		case .INSERT;
-			set_cursor (buffer, op.cursor);
-			insert (buffer, op.rune, false);
+	case .INSERT;
+		set_cursor (buffer, op.cursor);
+		insert (buffer, op.buffer, false);
+		println ("Redid insert at %, length %", op.cursor, op.buffer.count);
+		
+	case .BACKSPACE;
+		set_cursor (buffer, op.cursor);
+		delete_selection (buffer, false);
+		println ("Redid backspace at %, length %", op.cursor, op.buffer.count);
 
-		case .BACKSPACE;
-			set_cursor (buffer, op.cursor);
-			delete (buffer, false);
-
-		case .DELETE;
-			set_cursor (buffer, op.cursor);
-			delete (buffer, false);
-		}
-	}
-
-	if is_empty (redo_buffer)  return false;
-	op := pop (*redo_buffer);
-	push (*undo_buffer, op);
-
-	if op.type == .BATCH_BEGIN
-	{
-		op = pop (*redo_buffer);
-		push (*undo_buffer, op);
-
-		while op.type != .BATCH_END && !is_empty (redo_buffer)
-		{
-			perform_redo_for_single_operation (buffer, op);
-			op = pop (*redo_buffer);
-			push (*undo_buffer, op);
-		}
-	}
-	else
-	{
-		perform_redo_for_single_operation (buffer, op);
+	case .DELETE;
+		set_cursor (buffer, op.cursor);
+		select_to (buffer, op.cursor + op.buffer.count);
+		delete_selection (buffer, false);
+		println ("Redid delete at %, length %", op.cursor, op.buffer.count);
+		//move_cursor_backward (buffer);
 	}
 
 	return true;
+}
+
+clear_undo_data :: inline (using buffer : *Gap_Buffer)
+{
+	reset (*undo_stack);
+}
+
+clear_redo_data :: inline (using buffer : *Gap_Buffer)
+{
+	reset (*redo_stack);
 }
 
 gap_buffer_count :: inline (using buffer : *Gap_Buffer) -> int
