@@ -1,10 +1,13 @@
 #import "File";
 #import "Windows";
-#import "Allocators";
 #import "Circular_Stack";
 
-DEFAULT_UNDO_REDO_CAPACITY         :: 4;
+DEFAULT_UNDO_REDO_CAPACITY         :: 8_000;
 DEFAULT_UNDO_REDO_STORAGE_CAPACITY :: 50_000;
+
+/*
+ * 
+ */
 
 Gap_Buffer :: struct
 {
@@ -470,7 +473,6 @@ redo_operation :: (using buffer : *Gap_Buffer) -> bool
 clear_undo_data :: inline (using buffer : *Gap_Buffer)
 {
 	reset (*undo_stack);
-	reset_arena_storage (*undo_storage);
 }
 
 clear_redo_data :: inline (using buffer : *Gap_Buffer)
