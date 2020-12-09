@@ -1,7 +1,10 @@
 #import "File";
 #import "Windows";
+#import "Allocators";
+#import "Circular_Stack";
 
-DEFAULT_UNDO_REDO_CAPACITY :: 25_000;
+DEFAULT_UNDO_REDO_CAPACITY         :: 4;
+DEFAULT_UNDO_REDO_STORAGE_CAPACITY :: 50_000;
 
 Gap_Buffer :: struct
 {
@@ -70,8 +73,8 @@ load_file :: inline (using buffer : *Gap_Buffer, filepath : string) -> bool
 
 destroy_gap_buffer :: inline (using buffer : *Gap_Buffer)
 {
-	destroy_circular_stack (*undo_stack);
-	destroy_circular_stack (*redo_stack);
+	reset_circular_stack (*undo_stack);
+	reset_circular_stack (*redo_stack);
 	free (data, allocator = allocator, allocator_data = allocator_data);
 	count = 0;
 	cursor     = 0;
@@ -97,7 +100,7 @@ insert :: (using buffer : *Gap_Buffer, codepoint : Rune, buffer_operation := tru
 		op.cursor = cursor;
 		op.buffer = NewArray (1, Rune);
 		op.buffer[0] = codepoint;
-		push (*undo_stack, op);
+		push_undo_operation (buffer, op);
 	}
 
 	data[cursor] = codepoint;
@@ -109,12 +112,13 @@ insert :: (using buffer : *Gap_Buffer, runes : []Rune, buffer_operation := true)
 {
 	if buffer_operation
 	{
+		clear_redo_data (buffer);
 		op : Gap_Buffer_Operation;
 		op.type = .INSERT;
 		op.cursor = cursor;
-		op.buffer = NewArray (runes.count, Rune);	// @Speed (stefan): Use stack allocator
+		op.buffer = NewArray (runes.count, Rune);
 		for runes  op.buffer[it_index] = it;
-		push (*undo_stack, op);
+		push_undo_operation (buffer, op);
 	}
 
 	for runes  insert (buffer, it, false);
@@ -134,7 +138,7 @@ backspace_selection :: (using buffer : *Gap_Buffer, buffer_operation := true) ->
 			op.cursor = cursor - 1;
 			op.buffer = NewArray (1, Rune);
 			op.buffer[0] = (<<buffer)[cursor - 1];
-			push (*undo_stack, op);
+			push_undo_operation (buffer, op);
 		}
 
 		cursor -= 1;
@@ -185,7 +189,7 @@ delete_selection :: (using buffer : *Gap_Buffer, buffer_operation := true) -> bo
 			else               count = abs (selection);
 			op.buffer = NewArray (count, Rune);
 			copy_selection_to_buffer (<<buffer, op.buffer);
-			push (*undo_stack, op);
+			push_undo_operation (buffer, op);
 		}
 
 		
@@ -395,6 +399,16 @@ select_word_backward :: inline (using buffer : *Gap_Buffer) -> int
 	return cursor - cached_cursor;
 }
 
+push_undo_operation :: (using buffer : *Gap_Buffer, op : Gap_Buffer.Operation)
+{
+	overwrote, overwritten := push (*undo_stack, op);
+	if overwrote
+	{
+		println ("Overwrote");
+		free (overwritten.buffer.data);
+	}
+}
+
 undo_operation :: (using buffer : *Gap_Buffer) -> bool
 {
 	if is_empty (undo_stack)  return false;
@@ -428,7 +442,7 @@ redo_operation :: (using buffer : *Gap_Buffer) -> bool
 {
 	if is_empty (redo_stack)  return false;
 	op := pop (*redo_stack);
-	push (*undo_stack, op);
+	push_undo_operation (buffer, op);
 
 	if op.type ==
 	{
@@ -456,6 +470,7 @@ redo_operation :: (using buffer : *Gap_Buffer) -> bool
 clear_undo_data :: inline (using buffer : *Gap_Buffer)
 {
 	reset (*undo_stack);
+	reset_arena_storage (*undo_storage);
 }
 
 clear_redo_data :: inline (using buffer : *Gap_Buffer)
