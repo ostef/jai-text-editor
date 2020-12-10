@@ -219,8 +219,9 @@ delete_selection :: (using buffer : *Gap_Buffer, buffer_operation := true) -> bo
 
 backspace_word :: inline (using buffer : *Gap_Buffer) -> bool
 {
-	if select_word_backward (buffer)
+	if skip_word_backward (buffer)
 	{
+		select_word_forward (buffer);
 		delete_selection (buffer);
 		
 		return true;
@@ -231,8 +232,9 @@ backspace_word :: inline (using buffer : *Gap_Buffer) -> bool
 
 delete_word :: inline (using buffer : *Gap_Buffer) -> bool
 {
-	if select_word_forward (buffer)
+	if skip_word_forward (buffer)
 	{
+		select_word_backward (buffer);
 		delete_selection (buffer);
 		
 		return true;
@@ -405,11 +407,7 @@ select_word_backward :: inline (using buffer : *Gap_Buffer) -> int
 push_undo_operation :: (using buffer : *Gap_Buffer, op : Gap_Buffer.Operation)
 {
 	overwrote, overwritten := push (*undo_stack, op);
-	if overwrote
-	{
-		println ("Overwrote");
-		free (overwritten.buffer.data);
-	}
+	if overwrote  free (overwritten.buffer.data);
 }
 
 undo_operation :: (using buffer : *Gap_Buffer) -> bool
