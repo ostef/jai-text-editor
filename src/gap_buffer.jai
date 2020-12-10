@@ -5,10 +5,6 @@
 DEFAULT_UNDO_REDO_CAPACITY         :: 8_000;
 DEFAULT_UNDO_REDO_STORAGE_CAPACITY :: 50_000;
 
-/*
- * 
- */
-
 Gap_Buffer :: struct
 {
 	data   : *Rune;
@@ -22,7 +18,6 @@ Gap_Buffer :: struct
 	allocator      : Allocator;
 	allocator_data : *void;
 
-	// @Todo (stefan): Allocate undo operations on a stack rather than on the heap.
 	Operation :: struct
 	{
 		Type :: enum
@@ -33,6 +28,7 @@ Gap_Buffer :: struct
 		}
 
 		type   : Type;
+		at     : int;
 		cursor : int;
 		buffer : []Rune;
 	}
@@ -101,6 +97,7 @@ insert :: (using buffer : *Gap_Buffer, codepoint : Rune, buffer_operation := tru
 		op : Gap_Buffer_Operation;
 		op.type   = .INSERT;
 		op.cursor = cursor;
+		op.at     = cursor;
 		op.buffer = NewArray (1, Rune);
 		op.buffer[0] = codepoint;
 		push_undo_operation (buffer, op);
@@ -119,6 +116,7 @@ insert :: (using buffer : *Gap_Buffer, runes : []Rune, buffer_operation := true)
 		op : Gap_Buffer_Operation;
 		op.type = .INSERT;
 		op.cursor = cursor;
+		op.at     = cursor;
 		op.buffer = NewArray (runes.count, Rune);
 		for runes  op.buffer[it_index] = it;
 		push_undo_operation (buffer, op);
@@ -138,7 +136,8 @@ backspace_selection :: (using buffer : *Gap_Buffer, buffer_operation := true) ->
 			clear_redo_data (buffer);
 			op : Gap_Buffer_Operation;
 			op.type   = .BACKSPACE;
-			op.cursor = cursor - 1;
+			op.cursor = cursor;
+			op.at     = cursor - 1;
 			op.buffer = NewArray (1, Rune);
 			op.buffer[0] = (<<buffer)[cursor - 1];
 			push_undo_operation (buffer, op);
@@ -185,8 +184,9 @@ delete_selection :: (using buffer : *Gap_Buffer, buffer_operation := true) -> bo
 			clear_redo_data (buffer);
 			op : Gap_Buffer_Operation;
 			op.type   = .DELETE;
-			if selection >= 0  op.cursor = cursor;
-			else               op.cursor = cursor + selection;
+			op.cursor = cursor;
+			if selection >= 0  op.at = cursor;
+			else               op.at = cursor + selection;
 			count := 0;
 			if selection == 0  count = 1;
 			else               count = abs (selection);
@@ -421,21 +421,20 @@ undo_operation :: (using buffer : *Gap_Buffer) -> bool
 	if op.type ==
 	{
 	case .INSERT;
-		set_cursor (buffer, op.cursor);
-		select_to (buffer, op.cursor + op.buffer.count - 1);
+		set_cursor (buffer, op.at);
+		select_to (buffer, op.at + op.buffer.count - 1);
 		delete_selection (buffer, false);
-		println ("Undid insert at %, length %", op.cursor, op.buffer.count);
+		set_cursor (buffer, op.cursor);
 
 	case .BACKSPACE;
-		set_cursor (buffer, op.cursor);
+		set_cursor (buffer, op.at);
 		insert (buffer, op.buffer, false);
-		println ("Undid backspace at %, length %", op.cursor, op.buffer.count);
+		set_cursor (buffer, op.cursor);
 
 	case .DELETE;
-		set_cursor (buffer, op.cursor);
+		set_cursor (buffer, op.at);
 		insert (buffer, op.buffer, false);
-		move_cursor_backward (buffer);
-		println ("Undid delete at %, length %", op.cursor, op.buffer.count);
+		set_cursor (buffer, op.cursor);
 	}
 
 	return true;
@@ -450,21 +449,17 @@ redo_operation :: (using buffer : *Gap_Buffer) -> bool
 	if op.type ==
 	{
 	case .INSERT;
-		set_cursor (buffer, op.cursor);
+		set_cursor (buffer, op.at);
 		insert (buffer, op.buffer, false);
-		println ("Redid insert at %, length %", op.cursor, op.buffer.count);
 		
 	case .BACKSPACE;
-		set_cursor (buffer, op.cursor);
+		set_cursor (buffer, op.at);
 		delete_selection (buffer, false);
-		println ("Redid backspace at %, length %", op.cursor, op.buffer.count);
 
 	case .DELETE;
-		set_cursor (buffer, op.cursor);
-		select_to (buffer, op.cursor + op.buffer.count);
+		set_cursor (buffer, op.at);
+		select_to (buffer, op.at + op.buffer.count);
 		delete_selection (buffer, false);
-		println ("Redid delete at %, length %", op.cursor, op.buffer.count);
-		//move_cursor_backward (buffer);
 	}
 
 	return true;
