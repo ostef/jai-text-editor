@@ -28,6 +28,8 @@ build :: ()
 		executable_path := join (build_dir, executable_name);
 	}
 
+	make_directory_if_it_does_not_exist (build_dir);
+
 	build_options.output_type = .EXECUTABLE;
 	build_options.output_executable_name = executable_name;
 	build_options.output_path = build_dir;
@@ -84,52 +86,7 @@ build :: ()
 	compiler_end_intercept (workspace);
 
 	set_working_directory (build_dir);
-	if build_success && run_on_success  os_run_command (output_filename);
+	if build_success && run_on_success  os_run_command (output_filename);	// @Cleanup (stefan): This does not work on linux !
 }
 
 #run build ();
-
-/* @beta32
-Build_Options :: struct {
-    output_type        := Build_Output_Type.EXECUTABLE;
-    optimization_level := Optimization_Level.DEBUG;
-
-    emit_line_directives := true;        // @Cleanup: Move to c_converter?
-    runtime_storageless_type_info := false;
-
-    shorten_filenames_in_error_messages := false;
-    use_visual_studio_message_format    := false;
-
-    use_custom_link_command := false;
-
-    lazy_foreign_function_lookups := false;
-
-    enable_bytecode_inliner := false;
-    stack_trace := true;
-    memory_debugger := false;
-    
-    array_bounds_check := Array_Bounds_Check_Mode.ON;
-    cast_bounds_check  := Cast_Bounds_Check_Mode.FATAL;
-    math_bounds_check  := Cast_Bounds_Check_Mode.NONFATAL;
-
-    output_executable_name : string;  // Unpathed
-    output_path : string;
-    intermediate_path : string;
-
-    entry_point_name: string;
-    temporary_storage_size : s32 = 32768;
-    
-    info_flags : Info_Flags;
-
-    os_target := OS;
-    backend := Backend.LLVM;
-    emit_debug_info := Debug_Info_Type.DEFAULT;
-
-    maximum_polymorph_depth := 100;
-
-    modules_search_path_array: [..] string;
-    
-    x64_options:  X64_Options;
-    llvm_options: Llvm_Options;
-}
- */
