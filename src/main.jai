@@ -1,8 +1,6 @@
 #import "Basic";
-#import "glfw";
+#import "Windowing";
 #import "GL";
-//#import "stb_image_write";
-//#import "freetype255";
 #import "File";
 #import "Utf8";
 Debug :: #import "Debug";
@@ -10,7 +8,6 @@ Debug :: #import "Debug";
 #load "common.jai";
 #load "font_atlas.jai";
 #load "render.jai";
-#load "event.jai";
 #load "screen.jai";
 #load "gap_buffer.jai";
 #load "text_view.jai";
@@ -23,150 +20,47 @@ SCREEN_ROW_COUNT    :: 42;
 
 Window_Data :: struct
 {
-	screen : *Screen;
+	closed   : bool;
+	screen   : *Screen;
 	renderer : *Screen_Renderer;
+}
+
+screen_coordinates_to_cell_coordinates :: (window : *Window, x : int, y : int) -> int, int
+{
+	using window_data := cast (*Window_Data) window.user_ptr;
+	
+	return x / renderer.atlas.cell_w, y / renderer.atlas.cell_h;
+}
+
+handle_window_event :: (event : Event)
+{
+	using window_data := cast (*Window_Data) event.window.user_ptr;
+	if event.type ==
+	{
+	case .WINDOW_RESIZE;
+		using event.window_resize_event;
+		if w == 0 || h == 0  return;
+		glViewport (0, 0, xx w, xx h);
+		if renderer  resize_screen_renderer (renderer, w, h);
+		if screen    resize_screen (screen, w / renderer.atlas.cell_w, h / renderer.atlas.cell_h);
+	
+	case .WINDOW_CLOSE; closed = true;
+
+	case; if screen  screen_handle_event (screen, event);
+	}
 }
 
 main :: ()
 {
 	//Debug.attach_to_debugger ();
-	glfwInit ();
-	defer glfwTerminate ();
-	window := glfwCreateWindow (SCREEN_COLUMN_COUNT * FONT_ATLAS_CELL_WIDTH, SCREEN_ROW_COUNT * FONT_ATLAS_CELL_HEIGHT, "Text", null, null);
-	defer glfwDestroyWindow (window);
-	glfwMakeContextCurrent (window);
+	window : Window;
 	window_data : Window_Data;
-	glfwSetWindowUserPointer (window, *window_data);
-	
-	glfwSetFramebufferSizeCallback (window,
-	(window : *GLFWwindow, width : s32, height : s32) #c_call
-	{
-		if width != 0 && height != 0
-		{
-			new_context : Context;
-			push_context new_context
-			{
-				using data := cast (*Window_Data) glfwGetWindowUserPointer (window);
-				
-				glViewport (0, 0, xx width, xx height);
-				resize_screen_renderer (renderer, width, height);
-				resize_screen (screen, width / renderer.atlas.cell_w, height / renderer.atlas.cell_h);
-			}
-		}
-	});
-
-	glfwSetKeyCallback (window,
-	(window : *GLFWwindow, key : s32, scancode : s32, action : s32, mods : s32) #c_call
-	{
-		new_context : Context;
-		push_context new_context
-		{
-			using data := cast (*Window_Data) glfwGetWindowUserPointer (window);
-			
-			event : Event;
-			event.window = window;
-			if action ==
-			{
-				case GLFW_PRESS; event.type = .KEY_PRESS;
-				case GLFW_REPEAT; event.type = .KEY_REPEAT;
-				case GLFW_RELEASE; event.type = .KEY_RELEASE;
-			}
-			event.key_event.key = key;
-			event.key_event.scancode = scancode;
-			event.key_event.mods = mods;
-			screen_handle_event (screen, event);
-		}
-	});
-
-	glfwSetCharCallback (window,
-	(window : *GLFWwindow, codepoint : u32) #c_call
-	{
-		new_context : Context;
-		push_context new_context
-		{
-			using data := cast (*Window_Data) glfwGetWindowUserPointer (window);
-			
-			event : Event;
-			event.window = window;
-			event.type = .CHAR_INPUT;
-			event.char_input_event.codepoint = xx codepoint;
-			event.char_input_event.mods = 0;
-			screen_handle_event (screen, event);
-		}
-	});
-
-	glfwSetMouseButtonCallback (window,
-	(window : *GLFWwindow, button : s32, action : s32, mods : s32) #c_call
-	{
-		new_context : Context;
-		push_context new_context
-		{
-			using data := cast (*Window_Data) glfwGetWindowUserPointer (window);
-
-			event : Event;
-			event.window = window;
-			if action ==
-			{
-				case GLFW_PRESS; event.type = .MOUSE_BUTTON_PRESS;
-				case GLFW_RELEASE; event.type = .MOUSE_BUTTON_RELEASE;
-			}
-			event.mouse_button_event.button = button;
-			event.mouse_button_event.mods = mods;
-			mouse_x, mouse_y : float64;
-			glfwGetCursorPos (window, *mouse_x, *mouse_y);
-			event.mouse_button_event.x = cast (int) mouse_x;
-			event.mouse_button_event.y = cast (int) mouse_y;
-			event.mouse_button_event.col = cast (int) mouse_x / renderer.atlas.cell_w;
-			event.mouse_button_event.row = cast (int) mouse_y / renderer.atlas.cell_h;
-
-			screen_handle_event (screen, event);
-		}
-	});
-
-	glfwSetCursorPosCallback (window,
-	(window : *GLFWwindow, mouse_x : float64, mouse_y : float64) #c_call
-	{
-		new_context : Context;
-		push_context new_context
-		{
-			using data := cast (*Window_Data) glfwGetWindowUserPointer (window);
-
-			event : Event;
-			event.window = window;
-			event.type = .MOUSE_MOVE;
-			event.mouse_move_event.x = cast (int) mouse_x;
-			event.mouse_move_event.y = cast (int) mouse_y;
-			event.mouse_move_event.col = cast (int) mouse_x / renderer.atlas.cell_w;
-			event.mouse_move_event.row = cast (int) mouse_y / renderer.atlas.cell_h;
-
-			screen_handle_event (screen, event);
-		}
-	});
-
-	glfwSetScrollCallback (window,
-	(window : *GLFWwindow, xoffset : float64, yoffset : float64) #c_call
-	{
-		new_context : Context;
-		push_context new_context
-		{
-			using data := cast (*Window_Data) glfwGetWindowUserPointer (window);
-		
-			event : Event;
-			event.type = .SCROLL;
-			event.window = window;
-			event.scroll_event.x = cast (int) xoffset;
-			event.scroll_event.y = cast (int) -yoffset;
-
-			screen_handle_event (screen, event);
-		}
-	});
-
-	gl_load (*gl, glfwGetProcAddress);
+	init_window (*window, "Text", 100, 100, SCREEN_COLUMN_COUNT * FONT_ATLAS_CELL_WIDTH, SCREEN_ROW_COUNT * FONT_ATLAS_CELL_HEIGHT, *window_data, handle_window_event);
+	defer destroy_window (*window);
+	make_window_context_current (*window);
+	gl_load (*gl, get_gl_proc_address);
 	using gl;
-
-	viewport_width, viewport_height : s32;
-	glfwGetFramebufferSize (window, *viewport_width, *viewport_height);
-	glViewport (0, 0, xx viewport_width, xx viewport_height);
+	show_window (*window);
 
 	ok := init_font_atlases ();
 	assert (ok, "Coult not initialize font atlas system");
@@ -185,18 +79,19 @@ main :: ()
 	renderer : Screen_Renderer;
 	renderer.atlas = atlas;
 	window_data.renderer = *renderer;
+	viewport_width, viewport_height := get_window_framebuffer_size (*window);
 	init_screen_renderer (*renderer, 10_000, viewport_width, viewport_height, Vec3.{ 0, 0, 0 });
 	defer destroy_screen_renderer (*renderer);
 
-	while !glfwWindowShouldClose (window)
+	while !window_data.closed
 	{
 		reset_temporary_storage ();
-		glfwWaitEvents ();
+		wait_for_window_events (*window);
 		
 		refresh_screen (*screen);
 		draw_screen (*renderer, *screen);
-		
-		glfwSwapBuffers (window);
+
+		swap_window_buffers (*window);
 	}
 }
 

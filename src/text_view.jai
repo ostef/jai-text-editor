@@ -26,7 +26,7 @@ Text_View :: struct
 	
 	text_area : struct
 	{
-		column, line       : int;
+		column,   line     : int;
 		cursor_x, cursor_y : int;
 		scroll_x, scroll_y : int;
 	};
@@ -56,7 +56,7 @@ init_text_view :: (view : *Text_View, screen : *Screen, x : int, y : int, w : in
 	#if INIT_WITH_FILE
 	{
 		ok := load_file (*view.buffer, view.filepath);
-		if !ok  println ("Could not load file % into buffer");
+		if !ok  println ("Could not load file % into buffer", view.filepath);
 	}
 
 	view.line_count = get_line_count (view);
@@ -415,6 +415,7 @@ get_text_area_cursor_position :: (using view : *Text_View) -> int, int #must
 
 move_text_area_cursor_to_target :: (using view : *Text_View, target_x : int, target_y : int, select := false)
 {
+	// @Speed (stefan): This is sloooooooooooow
 	i      := 0;
 	column := line_area_width;
 	row    := 0;
@@ -461,7 +462,7 @@ move_text_area_cursor_to_target :: (using view : *Text_View, target_x : int, tar
 	if select  select_to (*buffer, i);
 	else       set_cursor (*buffer, i);
 	text_area.cursor_x  = column - line_area_width;
-	text_area.cursor_y = row;
+	text_area.cursor_y  = row;
 	scroll_text_area_to_cursor (view);
 }
 
@@ -493,6 +494,13 @@ move_text_area_cursor_right :: inline (using view : *Text_View)
 		text_area.cursor_x, text_area.cursor_y = get_text_area_cursor_position (view);
 		scroll_text_area_to_cursor (view);
 	}
+}
+
+text_area_select_word_at_cursor :: inline (using view : *Text_View)
+{
+	select_word_at_cursor (*buffer);
+	text_area.cursor_x, text_area.cursor_y = get_text_area_cursor_position (view);
+	scroll_text_area_to_cursor (view);
 }
 
 skip_word_right :: inline (using view : *Text_View)
@@ -616,14 +624,14 @@ text_view_handle_event :: (using view : *Text_View, event : Event)
 	// @Cleanup
 	if event.type == .KEY_PRESS || event.type == .KEY_REPEAT
 	{
-		if event.key_event.key ==
+		if event.key_event.key_code ==
 		{
-		case GLFW_KEY_UP;
-			if event.key_event.mods == GLFW_MOD_CONTROL
+		case .UP;
+			if event.key_event.mods == .CONTROL
 			{
 				move_text_area_cursor_to_buffer_start (view);
 			}
-			else if event.key_event.mods == GLFW_MOD_SHIFT
+			else if event.key_event.mods == .SHIFT
 			{
 				text_area_select_up (view);
 			}
@@ -632,12 +640,12 @@ text_view_handle_event :: (using view : *Text_View, event : Event)
 				move_text_area_cursor_up (view);
 			}
 
-		case GLFW_KEY_DOWN;
-			if event.key_event.mods == GLFW_MOD_CONTROL
+		case .DOWN;
+			if event.key_event.mods == .CONTROL
 			{
 				move_text_area_cursor_to_buffer_end (view);
 			}
-			else if event.key_event.mods == GLFW_MOD_SHIFT
+			else if event.key_event.mods == .SHIFT
 			{
 				text_area_select_down (view);
 			}
@@ -646,16 +654,16 @@ text_view_handle_event :: (using view : *Text_View, event : Event)
 				move_text_area_cursor_down (view);
 			}
 
-		case GLFW_KEY_LEFT;
-			if event.key_event.mods == GLFW_MOD_CONTROL
+		case .LEFT;
+			if event.key_event.mods == .CONTROL
 			{
 				skip_word_left (view);
 			}
-			else if event.key_event.mods == GLFW_MOD_SHIFT
+			else if event.key_event.mods == .SHIFT
 			{
 				text_area_select_left (view);
 			}
-			else if (event.key_event.mods & GLFW_MOD_SHIFT) && (event.key_event.mods & GLFW_MOD_CONTROL)
+			else if (event.key_event.mods & .SHIFT) && (event.key_event.mods & .CONTROL)
 			{
 				text_area_select_word_left (view);
 			}
@@ -664,16 +672,16 @@ text_view_handle_event :: (using view : *Text_View, event : Event)
 				move_text_area_cursor_left (view);
 			}
 		
-		case GLFW_KEY_RIGHT;
-			if event.key_event.mods == GLFW_MOD_CONTROL
+		case .RIGHT;
+			if event.key_event.mods == .CONTROL
 			{
 				skip_word_right (view);
 			}
-			else if event.key_event.mods == GLFW_MOD_SHIFT
+			else if event.key_event.mods == .SHIFT
 			{
 				text_area_select_right (view);
 			}
-			else if (event.key_event.mods & GLFW_MOD_SHIFT) && (event.key_event.mods & GLFW_MOD_CONTROL)
+			else if (event.key_event.mods & .SHIFT) && (event.key_event.mods & .CONTROL)
 			{
 				text_area_select_word_right (view);
 			}
@@ -682,10 +690,8 @@ text_view_handle_event :: (using view : *Text_View, event : Event)
 				move_text_area_cursor_right (view);
 			}
 
-		case GLFW_KEY_ENTER; insert_rune_at_cursor (view, #char "\n");
-		case GLFW_KEY_TAB;   insert_rune_at_cursor (view, #char "\t");
-		case GLFW_KEY_BACKSPACE;
-			if event.key_event.mods == GLFW_MOD_CONTROL && buffer.selection == 0
+		case .BACKSPACE;
+			if event.key_event.mods == .CONTROL && buffer.selection == 0
 			{
 				backspace_remove_word_at_cursor (view);
 			}
@@ -694,8 +700,8 @@ text_view_handle_event :: (using view : *Text_View, event : Event)
 				backspace_remove_rune_at_cursor (view);
 			}
 
-		case GLFW_KEY_DELETE;
-			if event.key_event.mods == GLFW_MOD_CONTROL
+		case .DELETE;
+			if event.key_event.mods == .CONTROL
 			{
 				remove_word_at_cursor (view);
 			}
@@ -704,21 +710,21 @@ text_view_handle_event :: (using view : *Text_View, event : Event)
 				remove_rune_at_cursor (view);
 			}
 
-		case GLFW_KEY_PAGE_UP;    move_text_area_cursor_up (view, h - 1);
-		case GLFW_KEY_PAGE_DOWN;  move_text_area_cursor_down (view, h - 1);
+		case .PAGE_UP;    move_text_area_cursor_up (view, h - 1);
+		case .PAGE_DOWN;  move_text_area_cursor_down (view, h - 1);
 		}
 
-		if event.key_event.mods == GLFW_MOD_CONTROL
+		if event.key_event.mods == .CONTROL
 		{
-			if event.key_event.key ==
+			if event.key_event.key_code ==
 			{
-			case GLFW_KEY_A; text_area_select_all (view);
-			case GLFW_KEY_S;
+			case .A; text_area_select_all (view);
+			case .S;
 				written, ok := write_gap_buffer_to_file (*buffer, OUTPUT_FILE);
 				if ok  log_to_screen (screen, "Saved buffer to '%' (% bytes).", OUTPUT_FILE, written);
 				else   log_to_screen (screen, "Failed to save buffer to '%' (% bytes).", OUTPUT_FILE, written);
 			
-			case GLFW_KEY_Z;
+			case .Z;
 				if undo_operation (*buffer)
 				{
 					line_count = get_line_count (view);
@@ -727,7 +733,7 @@ text_view_handle_event :: (using view : *Text_View, event : Event)
 					scroll_text_area_to_cursor (view);
 				}
 
-			case GLFW_KEY_Y;
+			case .Y;
 				if redo_operation (*buffer)
 				{
 					line_count = get_line_count (view);
@@ -739,23 +745,25 @@ text_view_handle_event :: (using view : *Text_View, event : Event)
 			}
 		}
 	}
-	else if event.type == .CHAR_INPUT
+	else if event.type == .TEXT_INPUT
 	{
-		insert_rune_at_cursor (view, event.char_input_event.codepoint);
+		insert_rune_at_cursor (view, event.text_input_event.codepoint);
 	}
-	else if event.type == .MOUSE_BUTTON_PRESS
+	else if event.type == .MOUSE_BUTTON_PRESS || event.type == .MOUSE_BUTTON_REPEAT
 	{
-		if event.mouse_button_event.button == GLFW_MOUSE_BUTTON_LEFT
+		if event.mouse_button_event.button == .LEFT
 		{
 			mouse_selection = true;
-			target_x := event.mouse_button_event.col - x;
-			target_y := event.mouse_button_event.row - y;
+			target_x, target_y := screen_coordinates_to_cell_coordinates (event.window, event.mouse_button_event.mouse_x, event.mouse_button_event.mouse_y);
+			target_x -= x;
+			target_y -= y;
 			move_text_area_cursor_to_target (view, target_x, target_y + text_area.scroll_y);
+			if event.type == .MOUSE_BUTTON_REPEAT  text_area_select_word_at_cursor (view);
 		}
 	}
 	else if event.type == .MOUSE_BUTTON_RELEASE
 	{
-		if event.mouse_button_event.button == GLFW_MOUSE_BUTTON_LEFT
+		if event.mouse_button_event.button == .LEFT
 		{
 			mouse_selection = false;
 		}
@@ -764,14 +772,15 @@ text_view_handle_event :: (using view : *Text_View, event : Event)
 	{
 		if mouse_selection
 		{
-			target_x := event.mouse_move_event.col - x;
-			target_y := event.mouse_move_event.row - y;
+			target_x, target_y := screen_coordinates_to_cell_coordinates (event.window, event.mouse_move_event.x, event.mouse_move_event.y);
+			target_x -= x;
+			target_y -= y;
 			move_text_area_cursor_to_target (view, target_x, target_y + text_area.scroll_y, select = true);
 		}
 	}
-	else if event.type == .SCROLL
+	else if event.type == .MOUSE_WHEEL
 	{
-		if event.scroll_event.y > 0  scroll_text_area_down (view, TEXT_VIEW_SCROLL_INCREMENT);
-		else                         scroll_text_area_up   (view, TEXT_VIEW_SCROLL_INCREMENT);
+		     if event.mouse_wheel_event.y > 0  scroll_text_area_down (view, TEXT_VIEW_SCROLL_INCREMENT);
+		else if event.mouse_wheel_event.y < 0  scroll_text_area_up   (view, TEXT_VIEW_SCROLL_INCREMENT);
 	}
 }
