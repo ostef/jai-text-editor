@@ -128,7 +128,7 @@ generate_font_atlas :: (font : *Font, name : string, face : Face, width : int, h
 {
 	atlas, ok := generate_font_atlas_png (name, face, width, height);
 	
-	if !ok 
+	if !ok
 	{
 		destroy_font_atlas (*atlas);
 
@@ -207,7 +207,16 @@ generate_font_atlas_png :: (name : string, face : Face, cell_width : int, cell_h
 	filepath := temp_c_string (name);
 	width, height, channel_count : s32;
 	data := stbi_load (filepath, *width, *height, *channel_count, 4);
-	if data == null  return Font_Atlas.{}, false;
+
+	if data == null
+	{
+		println ("generate_font_atlas: Could not load data.");
+		//error := to_string (stbi_failure_reason ());
+		//println ("stbi_failure_reason returned: %", error);
+
+		return Font_Atlas.{}, false;
+	}
+
 	defer stbi_image_free (data);
 	if width != FONT_ATLAS_SIZE || height != FONT_ATLAS_SIZE  return Font_Atlas.{}, false;
 
