@@ -1,9 +1,8 @@
 #import "File";
-#import "Windows";
 #import "Circular_Stack";
 
 DEFAULT_UNDO_REDO_CAPACITY         :: 8_000;
-DEFAULT_UNDO_REDO_STORAGE_CAPACITY :: 50_000;
+DEFAULT_UNDO_REDO_STORAGE_CAPACITY :: 50_000;	// @Unused
 
 Gap_Buffer :: struct
 {
@@ -217,6 +216,7 @@ delete_selection :: (using buffer : *Gap_Buffer, buffer_operation := true) -> bo
 	return false;
 }
 
+// @Fix
 backspace_word :: inline (using buffer : *Gap_Buffer) -> bool
 {
 	if skip_word_backward (buffer)
@@ -230,6 +230,7 @@ backspace_word :: inline (using buffer : *Gap_Buffer) -> bool
 	return false;
 }
 
+// @Fix
 delete_word :: inline (using buffer : *Gap_Buffer) -> bool
 {
 	if skip_word_forward (buffer)
@@ -306,7 +307,7 @@ skip_word_forward :: inline (using buffer : *Gap_Buffer) -> int
 	cached_cursor := cursor;
 	move_cursor_forward (buffer);
 	
-	while cursor < gap_buffer_count (buffer) && is_space ((<<buffer)[cursor]) && (<<buffer)[cursor] != #char "\n"
+	while cursor < gap_buffer_count (buffer) && is_space ((<<buffer)[cursor])
 	{
 		move_cursor_forward (buffer);
 	}
@@ -324,12 +325,12 @@ skip_word_backward :: inline (using buffer : *Gap_Buffer) -> int
 	cached_cursor := cursor;
 	move_cursor_backward (buffer);
 	
-	while cursor > 0 && is_space ((<<buffer)[cursor - 1]) && (<<buffer)[cursor - 1] != #char "\n"
+	while cursor > 0 && is_space ((<<buffer)[cursor]) && (<<buffer)[cursor - 1] != #char "\n"
 	{
 		move_cursor_backward (buffer);
 	}
 
-	while cursor > 0 && is_alpha_num ((<<buffer)[cursor - 1])
+	while cursor > 0 && is_alpha_num ((<<buffer)[cursor]) && (<<buffer)[cursor - 1] != #char "\n"
 	{
 		move_cursor_backward (buffer);
 	}
@@ -359,7 +360,7 @@ select_backward :: inline (using buffer : *Gap_Buffer) -> bool
 
 select_to :: inline (using buffer : *Gap_Buffer, new_cursor : int) -> bool
 {
-	assert (new_cursor >= 0 && new_cursor <= gap_buffer_count (buffer), "Cursor is %, should be in [0; %]", new_cursor, gap_buffer_count (buffer));
+	assert (new_cursor >= 0 && new_cursor <= gap_buffer_count (buffer), "Cursor is %, should be in [0; %].", new_cursor, gap_buffer_count (buffer));
 	// @Cleanup (stefan): This is not the fastest implementation.
 	modified : bool;
 	while cursor < new_cursor { if select_forward  (buffer)  modified = true; }
@@ -373,7 +374,7 @@ select_word_forward :: inline (using buffer : *Gap_Buffer) -> int
 	cached_cursor := cursor;
 	select_forward (buffer);
 	
-	while cursor < gap_buffer_count (buffer) && is_space ((<<buffer)[cursor]) && (<<buffer)[cursor] != #char "\n"
+	while cursor < gap_buffer_count (buffer) && is_space ((<<buffer)[cursor])
 	{
 		select_forward (buffer);
 	}
@@ -390,18 +391,27 @@ select_word_backward :: inline (using buffer : *Gap_Buffer) -> int
 {
 	cached_cursor := cursor;
 	select_backward (buffer);
-
-	while cursor > 0 && is_space ((<<buffer)[cursor - 1]) && (<<buffer)[cursor - 1] != #char "\n"
+	
+	while cursor > 0 && is_space ((<<buffer)[cursor]) && (<<buffer)[cursor - 1] != #char "\n"
 	{
 		select_backward (buffer);
 	}
 
-	while cursor > 0 && is_alpha_num ((<<buffer)[cursor - 1])
+	while cursor > 0 && is_alpha_num ((<<buffer)[cursor]) && (<<buffer)[cursor - 1] != #char "\n"
 	{
 		select_backward (buffer);
 	}
 
 	return cursor - cached_cursor;
+}
+
+select_word_at_cursor :: inline (using buffer : *Gap_Buffer)
+{
+	// @Incomplete (stefan): This is not the correct behaviour but we'll keep it like this for now.
+	selection = 0;
+	move_cursor_forward (buffer);
+	skip_word_backward (buffer);
+	select_word_forward (buffer);
 }
 
 push_undo_operation :: (using buffer : *Gap_Buffer, op : Gap_Buffer.Operation)
@@ -522,8 +532,7 @@ write_gap_buffer_to_file :: (using buffer : *Gap_Buffer, filepath : string) -> u
 	file, ok := file_open (filepath, for_writing = true);
 	if !ok
 	{
-		err := GetLastError ();
-		println ("write_gap_buffer_to_file: Error: %", err);
+		println ("Could not write gap buffer to file.");
 
 		return 0, false;
 	}
