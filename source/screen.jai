@@ -21,13 +21,13 @@ Text_View :: struct
 	w, h : f32;
 }
 
-NOT_QUITE_BLACK :: Vec4.{ 0.065, 0.065, 0.065, 1 };
+NOT_QUITE_BLACK :: Vec4.{ 0.1, 0.1, 0.1, 1 };
 VERY_DARK_GRAY  :: Vec4.{ 0.25, 0.25, 0.25, 1 };
 DARK_GRAY       :: Vec4.{ 0.4, 0.4, 0.4, 1 };
 GRAY            :: Vec4.{ 0.5, 0.5, 0.5, 1 };
 LIGHT_GRAY      :: Vec4.{ 0.6, 0.6, 0.6, 1 };
 VERY_LIGHT_GRAY :: Vec4.{ 0.75, 0.75, 0.75, 1 };
-NOT_QUITE_WHITE :: Vec4.{ 0.925, 0.925, 0.925, 1 };
+NOT_QUITE_WHITE :: Vec4.{ 0.9, 0.9, 0.9, 1 };
 
 COMMAND_MESSAGE_TEXT_MARGIN :: 3;
 
@@ -236,14 +236,14 @@ close_active_view :: (using screen : *Screen)
 
 draw_screen :: (using screen : *Screen)
 {
-	// Draw lines crossing the screen if no text view is opened
 	if text_views.count == 0
 	{
+		// Draw lines crossing the screen if no text view is opened
 		LINE_THICKNESS :: 6.0;
 		i := 0.0;
 		while i < width * 2.0
 		{
-			immediate_line (vec2 (i, -LINE_THICKNESS), vec2 (-LINE_THICKNESS, i), vec4 (.8, .8, .8, .5), LINE_THICKNESS);
+			immediate_line (vec2 (i, -LINE_THICKNESS), vec2 (-LINE_THICKNESS, i), DARK_GRAY, LINE_THICKNESS);
 			i += 50;
 		}
 	}
@@ -259,10 +259,10 @@ draw_screen :: (using screen : *Screen)
 	for * text_views
 	{
 		if it.x + it.w < xx width
-			immediate_line (vec2 (it.x + it.w, it.y), vec2 (it.x + it.w, it.y + it.h), vec4 (.4, .4, .4, 1), 2);
+			immediate_line (vec2 (it.x + it.w, it.y), vec2 (it.x + it.w, it.y + it.h), LIGHT_GRAY, 1);
 		
 		if it.y + it.h < xx height
-			immediate_line (vec2 (it.x, it.y + it.h), vec2 (it.x + it.w, it.y + it.h), vec4 (.4, .4, .4, 1), 2);
+			immediate_line (vec2 (it.x, it.y + it.h), vec2 (it.x + it.w, it.y + it.h), LIGHT_GRAY, 1);
 	}
 
 	// Draw the bottom bar
@@ -290,49 +290,86 @@ draw_screen :: (using screen : *Screen)
 	}
 }
 
-draw_text_view :: (using view : *Text_View, is_active_view : bool)
+draw_text_view :: (using view : *Text_View, draw_cursor : bool)
 {
-	INFO_TEXT_MARGIN :: 2;
+	INFO_TEXT_PADDING :: 2;
+	LINE_TEXT_HORIZONTAL_PADDING :: 10;
 
-	immediate_clip (cast (s32) x, cast (s32) y, cast (s32) (x + w), cast (s32) (y + h));
+	text_offset          : Vec2;
+	view_area            : Clip_Rect;
+	line_bar             : Clip_Rect;
+	line_number_position : Vec2;
+	text_area            : Clip_Rect;
+	text_position        : Vec2;
+	info_bar             : Clip_Rect;
+	info_text_position   : Vec2;
 	defer immediate_noclip ();
 
-	immediate_quad (x, y, x + w, y + h, vec4 (0.1, 0.1, 0.1, 1));
-	// Offset the drawn text so the cursor is always visible
-	text_position := position + vec2 (2, 2);
-	cursor_position := get_cursor_position (*view.input, text_position);
+	line_number_builder := make_string_builder (1000, temp_allocator);
+	for line : 1..input.buffer.lines.count
+		print_line_to_builder (*line_number_builder, "%", line);
 	
-	xoffset := 0.0;
-	while cursor_position.x + xoffset + default_font.space_advance > x + w
-		xoffset -= default_font.space_advance;
-	text_position.x += xoffset;
+	text_line_height := default_font.ascender - default_font.descender;
 
-	yoffset := 0.0;
-	while cursor_position.y + yoffset + (default_font.ascender - default_font.descender) > y + h
-		yoffset -= (default_font.ascender - default_font.descender);
-	text_position.y += yoffset;
-
-	lines_columns_str := make_string_builder (1000, temp_allocator);
-	for columns, line : input.buffer.lines
 	{
-		print_line_to_builder (*lines_columns_str, "%:%", line, columns);
+		view_area.x1 = cast (s32) x;
+		view_area.x2 = view_area.x1 + cast (s32) w;
+		view_area.y1 = cast (s32) y;
+		view_area.y2 = view_area.y1 + cast (s32) h;
 	}
 
-	line_info_end := calculate_drawn_text_bounds (default_font, to_string (lines_columns_str));
-	line_info_end += text_position;
-	immediate_line (vec2 (x + line_info_end.x + 4, y), vec2 (x + line_info_end.x + 4, y + h), VERY_LIGHT_GRAY, 1);
-	draw_text (default_font, to_string (lines_columns_str), text_position, NOT_QUITE_WHITE);
-	text_position.x += line_info_end.x + 4;
-	draw_text_input (*input, text_position, NOT_QUITE_WHITE, is_active_view);
+	{
+		info_bar.x1 = view_area.x1;
+		info_bar.x2 = view_area.x2;
+		info_bar.y1 = view_area.y2 - cast (s32) (2 * INFO_TEXT_PADDING + text_line_height);
+		info_bar.y2 = view_area.y2;
+	}
 
-	// Draw infos such as filename, line number, column number, encoding, newline policy etc...
-	font_height := default_font.height;
-	set_font_height (default_font, 13);
-	immediate_quad (x, y + h - (default_font.ascender - default_font.descender) - 2.0 * INFO_TEXT_MARGIN, x + w, y + h, VERY_LIGHT_GRAY);
-	name := ifx filename then filename else "UNNAMED";
-	info_str := stringf (temp_allocator, "% - %/% - %/% - UTF8 - %", name,
-		input.buffer.line, input.buffer.lines.count,
-		input.buffer.column, input.buffer.lines[input.buffer.line], input.newline);
-	draw_text (default_font, info_str, vec2 (x + INFO_TEXT_MARGIN, y + h - (default_font.ascender - default_font.descender) - INFO_TEXT_MARGIN), VERY_DARK_GRAY);
-	set_font_height (default_font, font_height);
+	{
+		line_info_text_end := calculate_drawn_text_bounds (default_font, to_string (line_number_builder));
+		line_bar.x1 = view_area.x1;
+		line_bar.x2 = line_bar.x1 + cast (s32) (line_info_text_end.x + 2 * LINE_TEXT_HORIZONTAL_PADDING);
+		line_bar.y1 = view_area.y1;
+		line_bar.y2 = line_bar.y1 + cast (s32) h - (info_bar.y2 - info_bar.y1);
+	}
+
+	{
+		text_area.x1 = line_bar.x2;
+		text_area.x2 = view_area.x2;
+		text_area.y1 = view_area.y1;
+		text_area.y2 = info_bar.y1;
+	}
+
+	immediate_clip (view_area);
+	// View background
+	immediate_quad (cast (f32) view_area.x1, cast (f32) view_area.y1, cast (f32) view_area.x2, cast (f32) view_area.y2, NOT_QUITE_BLACK);
+	// Line number - text separation
+	immediate_line (vec2 (xx line_bar.x2, xx view_area.y1), vec2 (xx line_bar.x2, xx info_bar.y1), LIGHT_GRAY, 1);
+
+	// Draw line numbers
+	line_number_position.x = cast (f32) line_bar.x1 + LINE_TEXT_HORIZONTAL_PADDING;
+	line_number_position.y = cast (f32) line_bar.y1 + text_offset.y;
+	immediate_clip (line_bar);
+	draw_text (default_font, to_string (line_number_builder), line_number_position, VERY_LIGHT_GRAY);
+
+	// Draw text buffer
+	text_position.x = cast (f32) line_bar.x2 + text_offset.x;
+	text_position.y = cast (f32) view_area.y1 + text_offset.y;
+	immediate_clip (text_area);
+	draw_text_input (*input, text_position, NOT_QUITE_WHITE, draw_cursor);
+
+	// @Fix (stefan): For some reason the clipping does not work and nothing gets rendered
+	// if I use the info_bar as a clipping rect. Fix this!
+	//immediate_clip (info_bar);
+	immediate_clip (view_area);
+	// Info bar background
+	immediate_quad (cast (f32) info_bar.x1, cast (f32) info_bar.y1, cast (f32) info_bar.x2, cast (f32) info_bar.y2, LIGHT_GRAY);
+
+	// Draw info text
+	info_text_position.x = cast (f32) info_bar.x1 + INFO_TEXT_PADDING;
+	info_text_position.y = cast (f32) info_bar.y1 + INFO_TEXT_PADDING;
+	view_name := ifx filename then filename else "UNNAMED";
+	info_str := stringf (temp_allocator, "% - Ln %, Col % - % line(s) - UTF8 - % - % B",
+		view_name, input.buffer.line + 1, input.buffer.column + 1, input.buffer.lines.count, input.newline, gap_buffer_count (input.buffer));
+	draw_text (default_font, info_str, info_text_position, VERY_DARK_GRAY);
 }
