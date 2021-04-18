@@ -1,6 +1,7 @@
 split CTRL+H
 open CTRL+O
 save CTRL+S
+save_as CTRL+ALT+S
 save_all CTRL+SHIFT+S
 close CTRL+Q
 close_all CTRL+SHIFT+Q

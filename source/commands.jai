@@ -142,7 +142,7 @@ command_save :: (using screen : *Screen)
 	view := *text_views[active_view_index];
 	if !view.filename
 	{
-		print_to_screen (screen, "save: Active view is not bound to a file.");
+		print_to_screen (screen, "save: Active view is not bound to a file. Use 'save_as' instead.");
 
 		return;
 	}
@@ -152,6 +152,20 @@ command_save :: (using screen : *Screen)
 	else       print_to_screen (screen, "Could not save active view's buffer to file '%'.", view.filename);
 }
 @Command @Shortcut(CTRL+S)
+
+command_save_as :: (using screen : *Screen, filename : string)
+{
+	if text_views.count == 0 then return;
+
+	view := *text_views[active_view_index];
+	if view.filename then free (view.filename, heap_allocator);
+	view.filename = clone_string (filename, heap_allocator);
+
+	ok := write_buffer_to_file (*view.input, view.filename);
+	if ok then print_to_screen (screen, "Save active view's buffer to file '%'.", view.filename);
+	else       print_to_screen (screen, "Could not save active view's buffer to file '%'.", view.filename);
+}
+@Command @Shortcut(CTRL+ALT+S)
 
 command_save_all :: (using screen : *Screen)
 {
