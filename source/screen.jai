@@ -67,7 +67,7 @@ screen_handle_event :: (using screen : *Screen, event : Event)
 				event.key_event.key_code == cmd.shortcut.key
 				{
 					// Execute the command if it does not expected any arguments
-					if cmd.arg_count == 0
+					if cmd.arg_count == 0 || cmd.first_optional_argument == 0
 					{
 						args : []string;
 						cmd.proc (screen, args);

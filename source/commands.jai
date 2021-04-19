@@ -71,18 +71,20 @@ Command_Info :: struct
 	name : string;
 	proc : Command_Proc;
 	arg_count : s64;
+	first_optional_argument : s64;	// -1 if no argument is optional
 	has_shortcut : bool;
 	shortcut     : Shortcut;
 }
 
 registered_commands : [..]Command_Info;
 
-register_command :: (name : string, proc : Command_Proc, arg_count : s64, shortcut_string := "")
+register_command :: (name : string, proc : Command_Proc, arg_count : s64, first_optional_argument : s64, shortcut_string := "")
 {
 	info : Command_Info;
 	info.name = name;
 	info.proc = proc;
 	info.arg_count = arg_count;
+	info.first_optional_argument = first_optional_argument;
 	info.shortcut, info.has_shortcut = parse_shortcut (shortcut_string);
 	push_to_array (*registered_commands, info);
 }
@@ -109,10 +111,30 @@ execute_command :: (using screen : *Screen, str : string)
 }
 
 // Split the active view horizontally
-command_split :: (using screen : *Screen)//, filename := "")
+command_split :: (using screen : *Screen, filename : string @Optional )
 {
 	split_active_view (screen);
-	print_to_screen (screen, "Split active text view.");
+	println (filename);
+
+	if filename
+	{
+		view := *text_views[active_view_index];
+		ok := load_file_into_buffer (*view.input, filename);
+
+		if ok
+		{
+			print_to_screen (screen, "Split active text view with file '%'.", filename);
+			view.filename = clone_string (filename, heap_allocator);
+		}
+		else
+		{
+			print_to_screen (screen, "Split active text view, but could not open file '%'.", filename);
+		}
+	}
+	else
+	{
+		print_to_screen (screen, "Split active text view.");
+	}
 }
 @Command @Shortcut(CTRL+H)
 

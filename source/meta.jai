@@ -12,23 +12,58 @@ IS_IN_METAPROGRAM :: true;
 generate_command_wrapper :: (name : string, decl : *Compiler.Code_Declaration, info : *Type_Info_Procedure, workspace : Workspace) -> string #must
 {
 	args_count := info.argument_types.count - 1;
+	// Find the first optional argument
+	header := cast (*Compiler.Code_Procedure_Header) decl.root_expression;
+	first_optional_argument := -1;
+	for arg, i : header.arguments
+	{
+		for arg.notes
+		{
+			if it.text == "Optional"
+			{
+				first_optional_argument = i - 1;
+
+				break arg;
+			}
+		}
+	}
 
 	builder := make_string_builder (1000, temp_allocator);
 	pr :: print_to_builder;
 	ln :: print_line_to_builder;
+	nl :: print_newline_to_builder;
+
 	// Wrapper procedure header
 	ln (*builder, "%_wrapper :: (using screen : *Screen, args : []string)\n{", name);
 	// Check argument count
-	ln (*builder, "\tif args.count != %\n\t{", args_count);
-	ln (*builder, "\t\tprint_to_screen (screen, \"Command '%' expects % argument(s) but got %.\", args.count);\n", advance (name, "command_".count), args_count);
-	ln (*builder, "\t\treturn;");
-	ln (*builder, "\t}");
+	if first_optional_argument != -1
+	{
+		ln (*builder, "\tif args.count < %\n\t{", first_optional_argument);
+		ln (*builder, "\t\tprint_to_screen (screen, \"Command '%' expects at least % argument(s) but got %.\", args.count);\n", advance (name, "command_".count), first_optional_argument);
+		ln (*builder, "\t\treturn;");
+		ln (*builder, "\t}");
+	
+		ln (*builder, "\tif args.count > %\n\t{", args_count);
+		ln (*builder, "\t\tprint_to_screen (screen, \"Command '%' expects at most % argument(s) but got %.\", args.count);\n", advance (name, "command_".count), args_count);
+		ln (*builder, "\t\treturn;");
+		ln (*builder, "\t}");
+	}
+	else
+	{
+		ln (*builder, "\tif args.count != %\n\t{", args_count);
+		ln (*builder, "\t\tprint_to_screen (screen, \"Command '%' expects % argument(s) but got %.\", args.count);\n", advance (name, "command_".count), args_count);
+		ln (*builder, "\t\treturn;");
+		ln (*builder, "\t}");
+	}
+
+	nl (*builder);
 
 	// Convert arguments to appropriate types. Handled types are integer types, bool, float and string.
 	for arg : info.argument_types
 	{
 		if it_index == 0 then continue;
 		i := it_index - 1;
+		is_optional := first_optional_argument != -1 && i >= first_optional_argument;
 
 		if arg.type ==
 		{
@@ -37,42 +72,89 @@ generate_command_wrapper :: (name : string, decl : *Compiler.Code_Declaration, i
 			typename : string;
 			if info_integer.signed
 			{
-				ln (*builder, "\targ%, arg%_ok := string_to_s64 (args[%]);", i, i, i);
+				if is_optional
+				{
+					ln (*builder, "\targ% : s64;", i);
+					ln (*builder, "\targ%_ok := true;", i);
+					ln (*builder, "\tif args.count > % then arg%, arg%_ok = string_to_s64 (args[%]);", i, i, i, i);
+				}
+				else
+				{
+					ln (*builder, "\targ%, arg%_ok := string_to_s64 (args[%]);", i, i, i);
+				}
 				typename = "s64";
 			}
 			else
 			{
-				ln (*builder, "\targ%, arg%_ok := string_to_u64 (args[%]);", i, i, i);
+				if is_optional
+				{
+					ln (*builder, "\targ% : u64;", i);
+					ln (*builder, "\targ%_ok := true;", i);
+					ln (*builder, "\tif args.count > % then arg%, arg%_ok = string_to_u64 (args[%]);", i, i, i, i);
+				}
+				else
+				{
+					ln (*builder, "\targ%, arg%_ok := string_to_u64 (args[%]);", i, i, i);
+				}
 				typename = "u64";
-				
 			}
 
-			ln (*builder, "\tif !arg%_ok\n\t{");
+			ln (*builder, "\tif !arg%_ok\n\t{", i);
 			ln (*builder, "\t\tprint_to_screen (screen, \"Could not convert argument % to a %.\");", i, typename);
 			ln (*builder, "\t\treturn;");
 			ln (*builder, "\t}");
 
 		case .BOOL;
-			ln (*builder, "\targ%, arg%_ok := string_to_bool (args[%]);", i, i, i);
-			ln (*builder, "\tif !arg%_ok\n\t{");
+			if is_optional
+			{
+				ln (*builder, "\targ% : bool;", i);
+				ln (*builder, "\targ%_ok := true;", i);
+				ln (*builder, "\tif args.count > % then arg%, arg%_ok = string_to_bool (args[%]);", i, i, i, i);
+			}
+			else
+			{
+				ln (*builder, "\targ%, arg%_ok := string_to_bool (args[%]);", i, i, i);
+			}
+				
+			ln (*builder, "\tif !arg%_ok\n\t{", i);
 			ln (*builder, "\t\tprint_to_screen (screen, \"Could not convert argument % to a bool.\");", i);
 			ln (*builder, "\t\treturn;");
 			ln (*builder, "\t}");
 
 		case .FLOAT;
-			ln (*builder, "\targ%, arg%_ok := string_to_f64 (args[%]);", i, i, i);
-			ln (*builder, "\tif !arg%_ok\n\t{");
+			if is_optional
+			{
+				ln (*builder, "\targ% : f64;", i);
+				ln (*builder, "\targ%_ok := true;", i);
+				ln (*builder, "\tif args.count > % then arg%, arg%_ok = string_to_f64 (args[%]);", i, i, i, i);
+			}
+			else
+			{
+				ln (*builder, "\targ%, arg%_ok := string_to_f64 (args[%]);", i, i, i);
+			}
+
+			ln (*builder, "\tif !arg%_ok\n\t{", i);
 			ln (*builder, "\t\tprint_to_screen (screen, \"Could not convert argument % to a f64.\");", i);
 			ln (*builder, "\t\treturn;");
 			ln (*builder, "\t}");
 
 		case .STRING;
-			ln (*builder, "\targ% := args[%];", i, i);
-		
+			if is_optional
+			{
+				ln (*builder, "\targ% : string;", i);
+				ln (*builder, "\tif args.count > % then arg% = args[%];", i, i, i);
+			}
+			else
+			{
+				ln (*builder, "\targ% := args[%];", i, i);
+			}
+
 		case;
 			Compiler.compiler_report (decl.filename, decl.l0, decl.c0,
-				stringf (temp_allocator, "Command procedure has arguments with type that we don't yet handle. Argument type was %. Handled argument types are: INTEGER, BOOL, FLOAT and STRING.", arg.type));
+				stringf (temp_allocator, "Command procedure has arguments with type that we don't handle. Argument type was %. Handled argument types are: INTEGER, BOOL, FLOAT and STRING.", arg.type));
 		}
+
+		nl (*builder);
 	}
 
 	pr (*builder, "\t% (screen", name);
@@ -100,6 +182,22 @@ generate_init_commands_proc :: () -> string #must
 	{
 		info := command_infos[i];
 		arg_count := info.argument_types.count - 1;
+		// Find the first optional argument
+		header := cast (*Compiler.Code_Procedure_Header) command_decls[i].root_expression;
+		first_optional_argument := -1;
+		for arg, i : header.arguments
+		{
+			for arg.notes
+			{
+				if it.text == "Optional"
+				{
+					first_optional_argument = i - 1;
+
+					break arg;
+				}
+			}
+		}
+
 		// @Note (stefan): Ignore shortcuts notes because we read shortcuts from a file.
 		// I don't know why I added this in the first place...
 		/*
@@ -116,9 +214,8 @@ generate_init_commands_proc :: () -> string #must
 		}
 
 		if shortcut_str then ln (*builder, "\tregister_command (\"%\", %, \"%\");", advance (name, "command_".count), join (temp_allocator, name, "_wrapper"), shortcut_str);
-		else                 
 		*/
-		ln (*builder, "\tregister_command (\"%\", %, %);", advance (name, "command_".count), join (temp_allocator, name, "_wrapper"), arg_count);
+		ln (*builder, "\tregister_command (\"%\", %, %, %);", advance (name, "command_".count), join (temp_allocator, name, "_wrapper"), arg_count, first_optional_argument);
 	}
 	ln (*builder, "\tread_shortcuts_from_file (\"shortcuts.edit\");");
 	ln (*builder, "}");
@@ -161,6 +258,22 @@ handle_compiler_message :: (message : *Compiler.Message)
 						push_to_array (*commands_to_register, decl.name);
 						push_to_array (*command_decls, decl);
 						push_to_array (*command_infos, cast (*Type_Info_Procedure) decl.type);
+
+						found_optional_argument := false;
+						for arg, i : header.arguments
+						{
+							arg_is_optional := false;
+							for arg.notes
+							{
+								if it.text == "Optional"
+								{
+									arg_is_optional = true;
+									found_optional_argument = true;
+								}
+							}
+							if found_optional_argument && !arg_is_optional
+								Compiler.compiler_report (arg.filename, arg.l0, arg.c0, "Command argument is not marked as @Optional, but follows an optional argument. This is forbidden.");
+						}
 					}
 				}
 			}
