@@ -17,8 +17,9 @@ Text_Input :: struct
 	buffer  : Gap_Buffer;
 }
 
-text_input_handle_event :: (using input : *Text_Input, event : Event)
+text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 {
+	modified := false;
 	if event.type ==
 	{
 	case .KEY_PRESS; #through;
@@ -27,25 +28,37 @@ text_input_handle_event :: (using input : *Text_Input, event : Event)
 		{
 		case .UP;
 			// @Todo (stefan): Handle selection
-			move_cursor_to_previous_line (*buffer);
+			if move_cursor_to_previous_line (*buffer) then modified = true;
 
 		case .DOWN;
 			// @Todo (stefan): Handle selection
-			move_cursor_to_next_line (*buffer);
+			if move_cursor_to_next_line (*buffer) then modified = true;
 
 		case .LEFT;
-			if (event.key_event.mods & .SHIFT) then select_backward (*buffer);
-			else move_cursor_backward (*buffer);
-			
+			if (event.key_event.mods & .SHIFT)
+			{
+				if select_backward (*buffer) then modified = true;
+			}
+			else
+			{
+				if move_cursor_backward (*buffer) then modified = true;
+			}
+
 		case .RIGHT;
-			if (event.key_event.mods & .SHIFT) then select_forward (*buffer);
-			else move_cursor_forward (*buffer);
+			if (event.key_event.mods & .SHIFT)
+			{
+				if select_forward (*buffer) then modified = true;
+			}
+			else
+			{
+				if move_cursor_forward (*buffer) then modified = true;
+			}
 
 		case .BACKSPACE;
-			backspace_selection (*buffer);
+			if backspace_selection (*buffer) then modified = true;
 
 		case .DELETE;
-			delete_selection (*buffer);
+			if delete_selection (*buffer) then modified = true;
 
 		case .RETURN;
 			if (flags & .SINGLE_LINE) != .SINGLE_LINE
@@ -55,16 +68,27 @@ text_input_handle_event :: (using input : *Text_Input, event : Event)
 				case .LF;   insert_at_cursor (*buffer, "\n");
 				case .CRLF; insert_at_cursor (*buffer, "\r\n");
 				}
+
+				modified = true;
 			}
 
 		case .TAB;
 			if (flags & .DISALLOW_TABS) != .DISALLOW_TABS
+			{
 				insert_at_cursor (*buffer, "\t");
+				modified = true;
+			}
 		}
 
 	case .TEXT_INPUT;
-		if !is_control (event.text_input_event.codepoint) then insert_at_cursor (*buffer, event.text_input_event.codepoint);
+		if !is_control (event.text_input_event.codepoint)
+		{
+			insert_at_cursor (*buffer, event.text_input_event.codepoint);
+			modified = true;
+		}
 	}
+
+	return modified;
 }
 
 init_text_input :: (input : *Text_Input, flags : Text_Input.Flags)
@@ -114,7 +138,7 @@ write_buffer_to_file :: (using input : *Text_Input, filename : string) -> writte
 	return written, ok;
 }
 
-get_cursor_position :: (using input : *Text_Input, position : Vec2) -> Vec2 #must
+calculate_drawn_cursor_position :: (using input : *Text_Input, position : Vec2) -> Vec2 #must
 {
 	cursor_position : Vec2;
 	cursor_advance  := default_font.space_advance;
@@ -164,6 +188,49 @@ get_cursor_position :: (using input : *Text_Input, position : Vec2) -> Vec2 #mus
 	if buffer.cursor == gap_buffer_count (buffer) then cursor_position = pen;
 
 	return cursor_position;
+}
+
+calculate_drawn_text_bounds :: (using input : *Text_Input) -> Vec2 #must
+{
+	pen := vec2 (0, xx (default_font.ascender - default_font.descender));
+	max := pen;
+	for :utf32 codepoint, i : buffer
+	{
+		glyph := load_glyph (default_font, codepoint);
+		if !glyph then continue;
+
+		if codepoint == #char "\n"
+		{
+			pen.x = 0;
+			pen.y += (default_font.ascender - default_font.descender);
+			if pen.x > max.x then max.x = pen.x;
+			if pen.y > max.y then max.y = pen.y;
+
+			continue;
+		}
+		else if codepoint == #char "\t"
+		{
+			pen.x += default_font.space_advance;
+
+			while cast (int) pen.x % (default_font.space_advance * 4) != 0
+			{
+				pen.x += default_font.space_advance;
+			}
+
+			if pen.x > max.x then max.x = pen.x;
+			if pen.y > max.y then max.y = pen.y;
+
+			continue;
+		}
+		
+		glyph_position := vec2 (pen.x + glyph.bitmap_bearing_x, pen.y - glyph.bitmap_bearing_y);
+		pen.x += glyph.advance >> 6;
+
+		if pen.x > max.x then max.x = pen.x;
+		if pen.y > max.y then max.y = pen.y;
+	}
+	
+	return max;
 }
 
 draw_text_input :: (using input : *Text_Input, position : Vec2, color : Vec4, draw_cursor := true)

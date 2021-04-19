@@ -15,6 +15,7 @@ Text_View :: struct
 	input    : Text_Input;
 	filename : string;
 	scrolling : Vec2;	// In font units, 1 on x is the font's space advance, 1 on y is the font ascender-descender
+	scroll_to_cursor : bool;
 
 	#place position;
 	x, y : f32;
@@ -113,8 +114,23 @@ screen_handle_event :: (using screen : *Screen, event : Event)
 			else if event.key_event.key_code == .W
 				active_view_index = wrap (active_view_index - 1, 0, text_views.count);
 		}
-	}
 
+	case .MOUSE_WHEEL;
+		if !is_inputting_command && text_views.count > 0
+		{
+			view := *text_views[active_view_index];
+			// Horizontal scroll
+			if event.mouse_wheel_event.x > 0 then view.scrolling.x -= 1;
+			else if event.mouse_wheel_event.x < 0 then view.scrolling.x += 1;
+			// Vertical scroll
+			if event.mouse_wheel_event.y > 0 then view.scrolling.y -= 1;
+			else if event.mouse_wheel_event.y < 0 then view.scrolling.y += 1;
+
+			view.scrolling.x = max (view.scrolling.x, 0);
+			view.scrolling.y = max (view.scrolling.y, 0);
+		}
+	}
+	
 	if is_inputting_command
 		text_input_handle_event (*command_input, event);
 	else if text_views.count != 0
@@ -123,7 +139,7 @@ screen_handle_event :: (using screen : *Screen, event : Event)
 
 text_view_handle_event :: (using view : *Text_View, event : Event)
 {
-	text_input_handle_event (*input, event);
+	scroll_to_cursor = text_input_handle_event (*input, event);
 }
 
 init_screen :: (screen : *Screen, width : u32, height : u32)
@@ -277,7 +293,7 @@ draw_screen :: (using screen : *Screen)
 		draw_text (default_font, ">", position, NOT_QUITE_WHITE);
 		bounds := calculate_drawn_text_bounds (default_font, ">");
 		position.x += bounds.x;
-		cursor_position := get_cursor_position (*command_input, position);
+		cursor_position := calculate_drawn_cursor_position (*command_input, position);
 		xoffset := 0.0;
 		while cursor_position.x + xoffset + default_font.space_advance > xx width
 			xoffset -= default_font.space_advance;
@@ -293,12 +309,11 @@ draw_screen :: (using screen : *Screen)
 
 draw_text_view :: (using view : *Text_View, draw_cursor : bool)
 {
-	// @Todo (stefan): Handle text offset (scrolling)
 	INFO_TEXT_PADDING :: 2;
 	LINE_TEXT_HORIZONTAL_PADDING :: 10;
 
 	text_line_height := default_font.ascender - default_font.descender;
-	text_offset          := vec2 (scrolling.x * default_font.space_advance, scrolling.y * text_line_height);
+	text_offset          : Vec2;
 	view_area            : Clip_Rect;
 	line_bar             : Clip_Rect;
 	line_number_position : Vec2;
@@ -340,6 +355,54 @@ draw_text_view :: (using view : *Text_View, draw_cursor : bool)
 		text_area.y1 = view_area.y1;
 		text_area.y2 = info_bar.y1;
 	}
+	
+	// Limit the scrolling to the text bounds
+	text_max := calculate_drawn_text_bounds (*input);
+	max_scrolling := vec2 (ceil (text_max.x / default_font.space_advance), ceil (text_max.y / text_line_height));
+	max_scrolling.x = max (max_scrolling.x - 2, 0);	// Add padding
+	max_scrolling.y = max (max_scrolling.y - 2, 0);	// Add padding
+	if scrolling.x > max_scrolling.x then scrolling.x = max_scrolling.x;
+	if scrolling.y > max_scrolling.y then scrolling.y = max_scrolling.y;
+
+	text_offset = vec2 (-scrolling.x * default_font.space_advance, -scrolling.y * text_line_height);
+	// Calculate the text position
+	text_position.x = cast (f32) text_area.x1 + text_offset.x;
+	text_position.y = cast (f32) text_area.y1 + text_offset.y;
+	// Make sure the cursor is inside the text area if the user modified the buffer
+	if scroll_to_cursor
+	{
+		cursor_position := calculate_drawn_cursor_position (*input, VEC2_ZERO);
+		// @Cleanup @Speed (stefan): Make this use math instead of loops.
+		while text_position.x + cursor_position.x < xx text_area.x1
+		{
+			scrolling.x    -= 1;
+			text_offset.x   = -scrolling.x * default_font.space_advance;
+			text_position.x = cast (f32) text_area.x1 + text_offset.x;
+		}
+
+		while text_position.x + cursor_position.x + default_font.space_advance > xx text_area.x2
+		{
+			scrolling.x    += 1;
+			text_offset.x   = -scrolling.x * default_font.space_advance;
+			text_position.x = cast (f32) text_area.x1 + text_offset.x;
+		}
+
+		while text_position.y + cursor_position.y < xx text_area.y1
+		{
+			scrolling.y    -= 1;
+			text_offset.y   = -scrolling.y * text_line_height;
+			text_position.y = cast (f32) text_area.y1 + text_offset.y;
+		}
+		
+		while text_position.y + cursor_position.y + text_line_height > xx text_area.y2
+		{
+			scrolling.y    += 1;
+			text_offset.y   = -scrolling.y * text_line_height;
+			text_position.y = cast (f32) text_area.y1 + text_offset.y;
+		}
+	}
+	// Reset the flag
+	scroll_to_cursor = false;
 
 	immediate_clip (view_area);
 	// View background
@@ -354,8 +417,6 @@ draw_text_view :: (using view : *Text_View, draw_cursor : bool)
 	draw_text (default_font, to_string (line_number_builder), line_number_position, VERY_LIGHT_GRAY);
 
 	// Draw text buffer
-	text_position.x = cast (f32) line_bar.x2 + text_offset.x;
-	text_position.y = cast (f32) view_area.y1 + text_offset.y;
 	immediate_clip (text_area);
 	draw_text_input (*input, text_position, NOT_QUITE_WHITE, draw_cursor);
 
@@ -370,7 +431,7 @@ draw_text_view :: (using view : *Text_View, draw_cursor : bool)
 	info_text_position.x = cast (f32) info_bar.x1 + INFO_TEXT_PADDING;
 	info_text_position.y = cast (f32) info_bar.y1 + INFO_TEXT_PADDING;
 	view_name := ifx filename then filename else "UNNAMED";
-	info_str := stringf (temp_allocator, "% - Ln %, Col % - % line(s) - UTF8 - % - % B",
-		view_name, input.buffer.line + 1, input.buffer.column + 1, input.buffer.lines.count, input.newline, gap_buffer_count (input.buffer));
+	info_str := stringf (temp_allocator, "% - Ln %, Col % - % line(s) - UTF8 - % - % B - %*.2* - %*.2*",
+		view_name, input.buffer.line + 1, input.buffer.column + 1, input.buffer.lines.count, input.newline, gap_buffer_count (input.buffer), text_offset, text_max);
 	draw_text (default_font, info_str, info_text_position, VERY_DARK_GRAY);
 }
