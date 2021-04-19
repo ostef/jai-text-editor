@@ -114,7 +114,6 @@ execute_command :: (using screen : *Screen, str : string)
 command_split :: (using screen : *Screen, filename : string @Optional )
 {
 	split_active_view (screen);
-	println (filename);
 
 	if filename
 	{
@@ -147,12 +146,12 @@ command_open :: (using screen : *Screen, filename : string)
 
 	if ok
 	{
-		print_to_screen (screen, "Open file '%' into active view's buffer.", filename);
+		print_to_screen (screen, "Opened file '%' into buffer.", filename);
 		view.filename = clone_string (filename, heap_allocator);
 	}
 	else
 	{
-		print_to_screen (screen, "Could not open file '%' into active view's buffer.", filename);
+		print_to_screen (screen, "Could not open file '%' into buffer.", filename);
 	}
 }
 @Command @Shortcut(CTRL+O)
@@ -164,19 +163,20 @@ command_save :: (using screen : *Screen)
 	view := *text_views[active_view_index];
 	if !view.filename
 	{
-		print_to_screen (screen, "save: Active view is not bound to a file. Use 'save_as' instead.");
+		print_to_screen (screen, "Active buffer is not bound to a file. Use 'save_as' instead.");
 
 		return;
 	}
 
 	ok := write_buffer_to_file (*view.input, view.filename);
-	if ok then print_to_screen (screen, "Save active view's buffer to file '%'.", view.filename);
-	else       print_to_screen (screen, "Could not save active view's buffer to file '%'.", view.filename);
+	if ok then print_to_screen (screen, "Saved buffer to file '%'.", view.filename);
+	else       print_to_screen (screen, "Could not save buffer to file '%'.", view.filename);
 }
 @Command @Shortcut(CTRL+S)
 
 command_save_as :: (using screen : *Screen, filename : string)
 {
+	// @Todo (stefan): Create a file if it does not exist.
 	if text_views.count == 0 then return;
 
 	view := *text_views[active_view_index];
@@ -184,14 +184,14 @@ command_save_as :: (using screen : *Screen, filename : string)
 	view.filename = clone_string (filename, heap_allocator);
 
 	ok := write_buffer_to_file (*view.input, view.filename);
-	if ok then print_to_screen (screen, "Save active view's buffer to file '%'.", view.filename);
-	else       print_to_screen (screen, "Could not save active view's buffer to file '%'.", view.filename);
+	if ok then print_to_screen (screen, "Saved buffer to file '%'.", view.filename);
+	else       print_to_screen (screen, "Could not save buffer to file '%'.", view.filename);
 }
 @Command @Shortcut(CTRL+ALT+S)
 
 command_save_all :: (using screen : *Screen)
 {
-	print_to_screen (screen, "Save all buffers.");
+	print_to_screen (screen, "Saved all buffers.");
 }
 @Command @Shortcut(CTRL+SHIFT+S)
 
@@ -199,7 +199,7 @@ command_save_all :: (using screen : *Screen)
 command_close :: (using screen : *Screen)
 {
 	close_active_view (screen);
-	print_to_screen (screen, "Close active buffer.");
+	print_to_screen (screen, "Closed active buffer.");
 }
 @Command @Shortcut(CTRL+Q)
 
@@ -208,7 +208,7 @@ command_close_all :: (using screen : *Screen)
 {
 	while text_views.count != 0
 		close_active_view (screen);
-	print_to_screen (screen, "Close all buffers.");
+	print_to_screen (screen, "Closed all buffers.");
 }
 @Command @Shortcut(CTRL+SHIFT+Q)
 
@@ -242,5 +242,90 @@ command_reload_shortcuts :: (using screen : *Screen)
 	ok := read_shortcuts_from_file ("shortcuts.edit");
 	if ok then print_to_screen (screen, "Reloaded shortcuts.");
 	else       print_to_screen (screen, "Could not reload shortcuts.");
+}
+@Command
+
+command_line :: (using screen : *Screen, line : s64)
+{
+	if text_views.count == 0 then return;
+
+	view := *text_views[active_view_index];
+	buffer := *view.input.buffer;
+	if line < 0 then line = 1;
+	else if line > buffer.lines.count then line = buffer.lines.count;
+
+	while buffer.line < line - 1
+	{
+		move_cursor_forward (buffer);
+	}
+
+	while buffer.line > line - 1
+	{
+		move_cursor_backward (buffer);
+	}
+
+	move_cursor_to_bol (buffer);
+
+	print_to_screen (screen, "Moved cursor to line %", line);
+}
+@Command
+
+command_to_crlf :: (using screen : *Screen)
+{
+	if text_views.count == 0 then return;
+
+	view := *text_views[active_view_index];
+	buffer := *view.input.buffer;
+	if view.input.newline == .CRLF
+	{
+		print_to_screen (screen, "Buffer is already CRLF.");
+
+		return;
+	}
+
+	set_cursor (buffer, 0);
+	// @Untested (stefan): It SEEMS to work, but I haven't made sure that the CRs are inserted at the right place
+	while buffer.cursor < gap_buffer_count (buffer)
+	{
+		if buffer.data[buffer.cursor + buffer.gap] == #char "\n"
+		{
+			insert_at_cursor (buffer, #char "\r");
+		}
+		move_cursor_forward (buffer);
+	}
+	view.input.newline = .CRLF;
+
+	print_to_screen (screen, "Converted buffer line endings to CRLF.");
+}
+@Command
+
+command_to_lf :: (using screen : *Screen)
+{
+	if text_views.count == 0 then return;
+
+	view := *text_views[active_view_index];
+	buffer := *view.input.buffer;
+	if view.input.newline == .LF
+	{
+		print_to_screen (screen, "Buffer is already LF.");
+
+		return;
+	}
+
+	set_cursor (buffer, 0);
+	while buffer.cursor < gap_buffer_count (buffer)
+	{
+		if buffer.data[buffer.cursor + buffer.gap] == #char "\r"
+		{
+			println ("Deleted a CR character");
+			delete_selection (buffer, delete_crlf = false);
+
+			continue;
+		}
+		move_cursor_forward (buffer);
+	}
+	view.input.newline = .LF;
+
+	print_to_screen (screen, "Converted buffer line endings to LF.");
 }
 @Command

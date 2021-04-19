@@ -7,3 +7,4 @@ close CTRL+Q
 close_all CTRL+SHIFT+Q
 grow ALT+RIGHT
 shrink ALT+LEFT
+line CTRL+L
