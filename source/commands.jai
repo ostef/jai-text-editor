@@ -237,11 +237,13 @@ command_shrink :: (using screen : *Screen)
 }
 @Command
 
-command_reload_shortcuts :: (using screen : *Screen)
+command_reload_shortcuts :: (using screen : *Screen, filename : string @Optional )
 {
-	ok := read_shortcuts_from_file ("shortcuts.edit");
-	if ok then print_to_screen (screen, "Reloaded shortcuts.");
-	else       print_to_screen (screen, "Could not reload shortcuts.");
+	name := filename;
+	if !name then name = "shortcuts.edit";
+	ok := read_shortcuts_from_file (name);
+	if ok then print_to_screen (screen, "Reloaded shortcuts from file '%'.", name);
+	else       print_to_screen (screen, "Could not reload shortcuts from file '%'.", name);
 }
 @Command
 
@@ -266,7 +268,7 @@ command_line :: (using screen : *Screen, line : s64)
 
 	move_cursor_to_bol (buffer);
 
-	print_to_screen (screen, "Moved cursor to line %", line);
+	print_to_screen (screen, "Moved cursor to line %.", line);
 }
 @Command
 
@@ -317,7 +319,6 @@ command_to_lf :: (using screen : *Screen)
 	{
 		if buffer.data[buffer.cursor + buffer.gap] == #char "\r"
 		{
-			println ("Deleted a CR character");
 			delete_selection (buffer, delete_crlf = false);
 
 			continue;
