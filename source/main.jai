@@ -51,6 +51,7 @@ main :: ()
 	init_fonts ();
 	viewport_w, viewport_h := get_window_framebuffer_size (*window);
 	init_screen (*screen, xx viewport_w, xx viewport_h);
+	split_active_view (*screen, "shortcuts.edit");
 
 	args := get_command_line_arguments ();
 	args = advance (args);
