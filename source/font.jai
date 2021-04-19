@@ -128,6 +128,9 @@ draw_text :: (using font : *Font, text : string, position : Vec2, color : Vec4)
 	inline draw_text (font, codepoints, position, color);
 }
 
+// @Note (stefan): Find a way to pass anything that can be iterated on as a sequence of u32s, such as a Utf8_String,
+// or even a special text buffer like a Gap_Buffer.
+// @Note (stefan): We have calculate_drawn_text_bounds that does almost the same thing as this, maybe make a for_expansion ? 
 draw_text :: (using font : *Font, text : []u32, position : Vec2, color : Vec4)
 {
 	assert (font != null, "Font was null.");
