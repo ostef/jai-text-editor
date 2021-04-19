@@ -115,6 +115,24 @@ screen_handle_event :: (using screen : *Screen, event : Event)
 				active_view_index = wrap (active_view_index - 1, 0, text_views.count);
 		}
 
+	case .MOUSE_BUTTON_PRESS;
+		// Select text view with mouse
+		if !is_inputting_command && text_views.count != 0 && event.mouse_button_event.button == .LEFT
+		{
+			mx := cast (f32) event.mouse_button_event.mouse_x;
+			my := cast (f32) event.mouse_button_event.mouse_y;
+			// Find the view we clicked on and select it
+			for view, i : text_views
+			{
+				if mx > view.x && mx < view.x + view.w && my > view.y && my < view.y + view.w
+				{
+					active_view_index = i;
+
+					break;
+				}
+			}
+		}
+
 	case .MOUSE_WHEEL;
 		if !is_inputting_command && text_views.count > 0
 		{
