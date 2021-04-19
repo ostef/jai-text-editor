@@ -136,35 +136,44 @@ backspace_selection :: (using buffer : *Gap_Buffer) -> bool
 		lines[line] -= 1;
 		column -= 1;
 		// Handle newline
-		char := data[cursor];
-		if char == #char "\n"
+		backspaced_char := data[cursor];
+		if backspaced_char == #char "\n"
 		{
 			line -= 1;
 			column = lines[line] - 1;
 			merge_current_line_with_next_one (buffer);
+			if cursor > 0 && data[cursor - 1] == #char "\r" then backspace_selection (buffer);
 		}
 	}
 
 	return false;
 }
 
-delete_selection :: (using buffer : *Gap_Buffer) -> bool
+delete_selection :: (using buffer : *Gap_Buffer, $delete_crlf := true) -> bool
 {
 	// @Todo (stefan): Handle multibyte characters
 	if cursor < gap_buffer_count (buffer) || selection != 0
 	{
 		if selection == 0
 		{
-			char := data[cursor + gap];
+			deleted_char := data[cursor + gap];
 			gap += 1;
 			// Update line cache
 			lines[line] -= 1;
-			if char == #char "\n"
+			if deleted_char == #char "\n"
 			{
 				merge_current_line_with_next_one (buffer);
 			}
+#if delete_crlf
+{
+			if deleted_char == #char "\r"	// Handle CRLF
+			{
+				delete_selection (buffer);
+			}
+}
 		}
 
+		/* @Todo
 		while selection < 0
 		{
 			select_backward (buffer);
@@ -176,6 +185,7 @@ delete_selection :: (using buffer : *Gap_Buffer) -> bool
 			selection -= 1;
 			gap += 1;
 		}
+		*/
 
 		return true;
 	}
@@ -199,11 +209,15 @@ move_cursor_forward :: (using buffer : *Gap_Buffer, clear_selection := true) -> 
 		cursor += 1;
 		// Update line and column number
 		column += 1;
-		char := data[cursor - 1];
-		if char == #char "\n"
+		previous_char := data[cursor - 1];
+		if previous_char == #char "\n"
 		{
 			line  += 1;
 			column = 0;
+		}
+		else if previous_char == #char "\r"	// Handle CRLF
+		{
+			move_cursor_forward (buffer, clear_selection);
 		}
 
 		return true;
@@ -228,11 +242,13 @@ move_cursor_backward :: (using buffer : *Gap_Buffer, clear_selection := true) ->
 		data[cursor + gap] = data[cursor];
 		// Update line and column numbers
 		column -= 1;
-		char := data[cursor];
-		if char == #char "\n"
+		current_char := data[cursor];
+		if current_char == #char "\n"
 		{
 			line -= 1;
 			column = lines[line] - 1;
+			// Handle CRLF
+			if cursor > 0 && data[cursor - 1] == #char "\r" then move_cursor_backward (buffer, clear_selection);
 		}
 
 		return true;
@@ -264,7 +280,7 @@ move_cursor_to_next_line :: (using buffer : *Gap_Buffer) -> bool
 	if line == lines.count - 1 then return false;
 
 	start_column := column;
-	while column != lines[line] - 1
+	while !is_at_eol (buffer)
 		move_cursor_forward (buffer);
 
 	// At this point, we are at the end of the current line,
@@ -275,6 +291,28 @@ move_cursor_to_next_line :: (using buffer : *Gap_Buffer) -> bool
 		move_cursor_forward (buffer);
 
 	return true;
+}
+
+move_cursor_to_bol :: (using buffer : *Gap_Buffer) -> bool
+{
+	moved := false;
+	while column > 0
+	{
+		if move_cursor_backward (buffer) then moved = true;
+	}
+
+	return moved;
+}
+
+move_cursor_to_eol :: (using buffer : *Gap_Buffer) -> bool
+{
+	moved := false;
+	while !is_at_eol (buffer)
+	{
+		if move_cursor_forward (buffer) then moved = true;
+	}
+
+	return moved;
 }
 
 select_forward :: (using buffer : *Gap_Buffer) -> bool
@@ -326,7 +364,8 @@ set_cursor :: (using buffer : *Gap_Buffer, position : s64) -> bool
 is_at_eol :: inline (using buffer : *Gap_Buffer) -> bool #must
 {
 	if line == lines.count - 1 then return column == lines[line];
-	
+	if column == lines[line] - 2 then return data[cursor] == #char "\r";
+
 	return column == lines[line] - 1;
 }
 
