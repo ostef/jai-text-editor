@@ -14,6 +14,7 @@ Text_View :: struct
 	size     : Vec2;
 	input    : Text_Input;
 	filename : string;
+	scrolling : Vec2;	// In font units, 1 on x is the font's space advance, 1 on y is the font ascender-descender
 
 	#place position;
 	x, y : f32;
@@ -66,7 +67,7 @@ screen_handle_event :: (using screen : *Screen, event : Event)
 				if event.key_event.mods == cmd.shortcut.mods &&
 				event.key_event.key_code == cmd.shortcut.key
 				{
-					// Execute the command if it does not expected any arguments
+					// Execute the command if it can be called with no arguments
 					if cmd.arg_count == 0 || cmd.first_optional_argument == 0
 					{
 						args : []string;
@@ -292,10 +293,12 @@ draw_screen :: (using screen : *Screen)
 
 draw_text_view :: (using view : *Text_View, draw_cursor : bool)
 {
+	// @Todo (stefan): Handle text offset (scrolling)
 	INFO_TEXT_PADDING :: 2;
 	LINE_TEXT_HORIZONTAL_PADDING :: 10;
 
-	text_offset          : Vec2;
+	text_line_height := default_font.ascender - default_font.descender;
+	text_offset          := vec2 (scrolling.x * default_font.space_advance, scrolling.y * text_line_height);
 	view_area            : Clip_Rect;
 	line_bar             : Clip_Rect;
 	line_number_position : Vec2;
@@ -308,8 +311,6 @@ draw_text_view :: (using view : *Text_View, draw_cursor : bool)
 	line_number_builder := make_string_builder (1000, temp_allocator);
 	for line : 1..input.buffer.lines.count
 		print_line_to_builder (*line_number_builder, "%", line);
-	
-	text_line_height := default_font.ascender - default_font.descender;
 
 	{
 		view_area.x1 = cast (s32) x;
