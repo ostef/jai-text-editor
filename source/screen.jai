@@ -273,6 +273,26 @@ close_active_view :: (using screen : *Screen)
 
 draw_screen :: (using screen : *Screen)
 {
+	bottom_bar : Clip_Rect;
+	views_area : Clip_Rect;
+
+	{
+		bottom_bar.x1 = 0;
+		bottom_bar.x2 = xx width;
+		bottom_bar.y1 = xx (height - 2 * COMMAND_MESSAGE_TEXT_MARGIN - xx (default_font.ascender - default_font.descender));
+		bottom_bar.y2 = xx height;
+	}
+
+	{
+		views_area.x1 = 0;
+		views_area.x2 = xx width;
+		views_area.y1 = 0;
+		views_area.y2 = bottom_bar.y1;
+	}
+
+	defer immediate_noclip ();
+	immediate_clip (views_area);
+
 	if text_views.count == 0
 	{
 		// Draw lines crossing the screen if no text view is opened
@@ -305,6 +325,10 @@ draw_screen :: (using screen : *Screen)
 			immediate_line (vec2 (it.x, it.y + it.h), vec2 (it.x + it.w, it.y + it.h), LIGHT_GRAY, 1);
 	}
 
+	// @Fix (stefan): Clipping does not work!
+	//immediate_clip (bottom_bar);
+	immediate_noclip ();
+
 	// Draw the bottom bar
 	immediate_quad (0, cast (f32) height - (default_font.ascender - default_font.descender) - 2.0 * COMMAND_MESSAGE_TEXT_MARGIN,
 		cast (f32) width, cast (f32) height, NOT_QUITE_BLACK);
@@ -313,25 +337,31 @@ draw_screen :: (using screen : *Screen)
 	if is_inputting_command
 	{
 		position := vec2 (xx COMMAND_MESSAGE_TEXT_MARGIN, cast (f32) height - COMMAND_MESSAGE_TEXT_MARGIN - (default_font.ascender - default_font.descender));
-		draw_text (default_font, ">", position, NOT_QUITE_WHITE);
+		draw_text (default_font, ">", position, NOT_QUITE_WHITE, bottom_bar);
 		bounds := calculate_drawn_text_bounds (default_font, ">");
 		position.x += bounds.x;
+		
+		// @Fix (stefan): The clipping rect's height is the entire screen because clipping is buggy right now.
+		command_text_clip := bottom_bar;
+		command_text_clip.x1 = xx position.x;
+		command_text_clip.y1 = 0;
+		command_text_clip.y2 = xx height;
+
 		cursor_position := calculate_drawn_cursor_position (*command_input, position);
 		xoffset := 0.0;
 		while cursor_position.x + xoffset + default_font.space_advance > xx width
 			xoffset -= default_font.space_advance;
 		position.x += xoffset;
-		clip_rect : Clip_Rect = ---;
-		clip_rect.x1 = 0;
-		clip_rect.y1 = 0;
-		clip_rect.x2 = xx width;
-		clip_rect.y2 = xx height;
-		draw_text_input (*command_input, position, NOT_QUITE_WHITE, clip_rect);
+		
+		// Clip so we don't draw over the '>'
+		immediate_clip (command_text_clip);
+		draw_text_input (*command_input, position, NOT_QUITE_WHITE, bottom_bar);
+		immediate_noclip ();
 	}
 	else
 	{
 		draw_text (default_font, to_string (message_buffer),
-			vec2 (xx COMMAND_MESSAGE_TEXT_MARGIN, cast (f32) height - COMMAND_MESSAGE_TEXT_MARGIN - (default_font.ascender - default_font.descender)), NOT_QUITE_WHITE);
+			vec2 (xx COMMAND_MESSAGE_TEXT_MARGIN, cast (f32) bottom_bar.y1 + COMMAND_MESSAGE_TEXT_MARGIN), NOT_QUITE_WHITE, bottom_bar);
 	}
 }
 
@@ -459,7 +489,7 @@ draw_text_view :: (using view : *Text_View, draw_cursor : bool)
 	immediate_clip (line_bar);
 	{
 		profile ("draw line numbers");
-		draw_text (default_font, to_string (line_number_builder), line_number_position, VERY_LIGHT_GRAY);
+		draw_text (default_font, to_string (line_number_builder), line_number_position, VERY_LIGHT_GRAY, line_bar);
 	}
 
 	// Draw text buffer
@@ -482,5 +512,5 @@ draw_text_view :: (using view : *Text_View, draw_cursor : bool)
 	view_name := ifx filename then filename else "UNNAMED";
 	info_str := stringf (temp_allocator, "% - Ln %, Col % - % line(s) - UTF8 - % - % B",
 		view_name, input.buffer.line_index + 1, input.buffer.column_index + 1, input.buffer.lines.count, input.newline, gap_buffer_count (input.buffer));
-	draw_text (default_font, info_str, info_text_position, VERY_DARK_GRAY);
+	draw_text (default_font, info_str, info_text_position, VERY_DARK_GRAY, view_area);
 }

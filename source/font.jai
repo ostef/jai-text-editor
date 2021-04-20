@@ -121,17 +121,17 @@ set_font_height :: (using font : *Font, height_in_px : u32)
 	}
 }
 
-draw_text :: (using font : *Font, text : string, position : Vec2, color : Vec4)
+draw_text :: (using font : *Font, text : string, position : Vec2, color : Vec4, clip_rect : Clip_Rect)
 {
 	codepoints := utf8_string_to_runes  (text, temp_allocator);
 
-	inline draw_text (font, codepoints, position, color);
+	inline draw_text (font, codepoints, position, color, clip_rect);
 }
 
 // @Note (stefan): Find a way to pass anything that can be iterated on as a sequence of u32s, such as a Utf8_String,
 // or even a special text buffer like a Gap_Buffer.
 // @Note (stefan): We have calculate_drawn_text_bounds that does almost the same thing as this, maybe make a for_expansion ? 
-draw_text :: (using font : *Font, text : []u32, position : Vec2, color : Vec4)
+draw_text :: (using font : *Font, text : []u32, position : Vec2, color : Vec4, clip_rect : Clip_Rect)
 {
 	assert (font != null, "Font was null.");
 
@@ -142,6 +142,9 @@ draw_text :: (using font : *Font, text : []u32, position : Vec2, color : Vec4)
 	for i : 0..text.count - 1
 	{
 		codepoint := text[i];
+		if pen.y < xx clip_rect.y1 && codepoint != #char "\n" then continue;
+		if pen.y > xx clip_rect.y2 then break;
+
 		if codepoint == #char "\n"
 		{
 			pen.x = position.x;
