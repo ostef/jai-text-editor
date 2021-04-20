@@ -108,23 +108,34 @@ load_file_into_buffer :: (using input : *Text_Input, filename : string) -> bool
 	if !ok then return false;
 	
 	clear_gap_buffer (*buffer);
-	for i : 0..file_contents.count - 1
-		insert_at_cursor (*buffer, file_contents[i]);
+	insert_at_cursor (*buffer, file_contents);
 	
 	// Detect newline policy
 	newline = .LF;
 	str := utf8 (file_contents);
 
 	// @Speed (stefan): Do this above when populating the gap buffer maybe ?
-	// @Todo (stefan): Check for inconsistent line endings.
+	line := 1;
+	previous_char_was_cr := false;
 	for char, i : str
 	{
 		if char == #char "\r"
 		{
+			if line != 1 && newline != .CRLF then println ("Inconsistent line endings in file '%' (line %).", filename, line);
 			newline = .CRLF;
-	
-			break;
+			previous_char_was_cr = true;
 		}
+		else if char == #char "\n"
+		{
+			if newline == .CRLF && !previous_char_was_cr then println ("Inconsistent line endings in file '%' (line %).", filename, line);
+			line += 1;
+		}
+		else if previous_char_was_cr
+		{
+			println ("Lonely CR character in file '%' (line %).", filename, line);
+		}
+
+		if char != #char "\r" then previous_char_was_cr = false;
 	}
 
 	return true;
