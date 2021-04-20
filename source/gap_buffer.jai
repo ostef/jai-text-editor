@@ -229,17 +229,17 @@ move_cursor_forward :: (using buffer : *Gap_Buffer, clear_selection := true) -> 
 		{
 			data[cursor] = data[cursor + gap];
 			cursor += 1;
-			// Update line and column_index number
-			previous_char := data[cursor - 1];
-			if previous_char == #char "\n"
-			{
-				line_index  += 1;
-				column_index = 0;
-			}
-			else if previous_char == #char "\r"	// Handle CRLF
-			{
-				move_cursor_forward (buffer, clear_selection);
-			}
+		}
+
+		// Update line and column_index number
+		if char == #char "\n"
+		{
+			line_index  += 1;
+			column_index = 0;
+		}
+		else if char == #char "\r"	// Handle CRLF
+		{
+			move_cursor_forward (buffer, clear_selection);
 		}
 
 		return true;
@@ -269,15 +269,16 @@ move_cursor_backward :: (using buffer : *Gap_Buffer, clear_selection := true) ->
 		{
 			cursor -= 1;
 			data[cursor + gap] = data[cursor];
-			// Update line and column_index numbers
-			current_char := data[cursor];
-			if current_char == #char "\n"
-			{
-				line_index -= 1;
-				column_index = lines[line_index] - 1;
-				// Handle CRLF
-				if cursor > 0 && data[cursor - 1] == #char "\r" then move_cursor_backward (buffer, clear_selection);
-			}
+		}
+
+		// Update line and column_index numbers
+		current_char := data[cursor];
+		if current_char == #char "\n"
+		{
+			line_index -= 1;
+			column_index = lines[line_index] - 1;
+			// Handle CRLF
+			if cursor > 0 && data[cursor - 1] == #char "\r" then move_cursor_backward (buffer, clear_selection);
 		}
 
 		return true;
@@ -288,7 +289,7 @@ move_cursor_backward :: (using buffer : *Gap_Buffer, clear_selection := true) ->
 
 move_cursor_to_previous_line :: (using buffer : *Gap_Buffer) -> bool
 {
-	if line_index == 0 then return false;
+	if line_index == 0 then return move_cursor_to_bol (buffer);
 
 	start_column_index := column_index;
 	while column_index != 0
@@ -306,7 +307,7 @@ move_cursor_to_previous_line :: (using buffer : *Gap_Buffer) -> bool
 
 move_cursor_to_next_line :: (using buffer : *Gap_Buffer) -> bool
 {
-	if line_index == lines.count - 1 then return false;
+	if line_index == lines.count - 1 then return move_cursor_to_eol (buffer);
 
 	start_column_index := column_index;
 	while !is_at_eol (buffer)
@@ -410,9 +411,10 @@ gap_buffer_count :: inline (using buffer : Gap_Buffer) -> s64 #must
 
 grow_gap_buffer :: (using buffer : *Gap_Buffer, factor : s64)
 {
-	back := count - cursor + gap;
-	new_gap := gap + count;
+	char_count := gap_buffer_count (buffer);
+	back := gap_buffer_count (buffer) - cursor;
 	new_count := count * factor + 8;
+	new_gap := new_count - char_count;
 	new_data := alloc (new_count, allocator, allocator_data);
 	memcpy (new_data, data, cursor);
 	memcpy (new_data + cursor + new_gap, data + cursor + gap, back);
