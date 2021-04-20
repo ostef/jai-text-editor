@@ -68,6 +68,7 @@ main :: ()
 		reset_temporary_storage ();
 		poll_window_events (*window);
 
+		frame_start := get_time ();
 		viewport_w, viewport_h := get_window_framebuffer_size (*window);
 		glViewport (0, 0, xx viewport_w, xx viewport_h);
 		glClear (GL_COLOR_BUFFER_BIT);
@@ -77,6 +78,8 @@ main :: ()
 		immediate_end ();
 
 		swap_window_buffers (*window);
+		frame_end := get_time ();
+		println ("\n\tEvent response took % s.\n", frame_end - frame_start);
 	}
 }
 

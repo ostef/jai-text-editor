@@ -233,7 +233,7 @@ calculate_drawn_text_bounds :: (using input : *Text_Input) -> Vec2 #must
 	return max;
 }
 
-draw_text_input :: (using input : *Text_Input, position : Vec2, color : Vec4, draw_cursor := true)
+draw_text_input :: (using input : *Text_Input, position : Vec2, color : Vec4, clip_rect : Clip_Rect, draw_cursor := true)
 {
 	cursor_position : Vec2;
 	cursor_advance  := default_font.space_advance;
@@ -244,6 +244,9 @@ draw_text_input :: (using input : *Text_Input, position : Vec2, color : Vec4, dr
 
 	for :utf32 codepoint, i : buffer
 	{
+		if pen.y < xx clip_rect.y1 && codepoint != #char "\n" then continue;
+		if pen.y > xx clip_rect.y2 then break;
+		
 		glyph := load_glyph (default_font, codepoint);
 		if !glyph then continue;
 		
