@@ -308,11 +308,9 @@ draw_screen :: (using screen : *Screen)
 	// Draw text views
 	for * text_views
 	{
+		profile ("draw text view");
 		draw_cursor := !is_inputting_command && it_index == active_view_index;
-		start := get_time ();
 		draw_text_view (it, draw_cursor);
-		end := get_time ();
-		println ("draw_text_view % took % seconds.\n", it_index, end - start);
 	}
 
 	// Draw text view separations
@@ -367,8 +365,8 @@ draw_screen :: (using screen : *Screen)
 
 profile :: (name : string) #expand
 {
-	`profile_start := get_time ();
-	`defer { profile_end := get_time (); println ("% took % s.", name, profile_end - profile_start); }
+	//`profile_start := get_time ();
+	//`defer { profile_end := get_time (); println ("% took % s.", name, profile_end - profile_start); }
 }
 
 draw_text_view :: (using view : *Text_View, draw_cursor : bool)
