@@ -224,7 +224,7 @@ move_cursor_forward :: (using buffer : *Gap_Buffer, clear_selection := true) -> 
 		size := utf8_sequence_size (char);
 		assert (cursor + size <= gap_buffer_count (buffer), "move_cursor_forward: UTF8 character is % bytes, but there is not enough space between the cursor and the end.", size);
 		column_index += 1;
-
+	
 		for i : 0..size - 1
 		{
 			data[cursor] = data[cursor + gap];
@@ -308,7 +308,7 @@ move_cursor_to_previous_line :: (using buffer : *Gap_Buffer) -> bool
 move_cursor_to_next_line :: (using buffer : *Gap_Buffer) -> bool
 {
 	if line_index == lines.count - 1 then return move_cursor_to_eol (buffer);
-
+	
 	start_column_index := column_index;
 	while !is_at_eol (buffer)
 		move_cursor_forward (buffer);
@@ -394,7 +394,7 @@ set_cursor :: (using buffer : *Gap_Buffer, position : s64) -> bool
 is_at_eol :: inline (using buffer : *Gap_Buffer) -> bool #must
 {
 	if line_index == lines.count - 1 then return column_index == lines[line_index];
-	if column_index == lines[line_index] - 2 then return data[cursor] == #char "\r";
+	if column_index == lines[line_index] - 2 then return data[cursor + gap] == #char "\r";
 
 	return column_index == lines[line_index] - 1;
 }
