@@ -119,6 +119,8 @@ command_split :: (using screen : *Screen, filename : string @Optional )
 	{
 		view := *text_views[active_view_index];
 		ok := load_file_into_buffer (*view.input, filename);
+		set_cursor (*view.input.buffer, 0);
+		view.scroll_to_cursor = true;
 
 		if ok
 		{
@@ -143,6 +145,8 @@ command_open :: (using screen : *Screen, filename : string)
 	if text_views.count == 0 then split_active_view (screen);
 	view := *text_views[active_view_index];
 	ok := load_file_into_buffer (*view.input, filename);
+	set_cursor (*view.input.buffer, 0);
+	view.scroll_to_cursor = true;
 
 	if ok
 	{
@@ -256,17 +260,18 @@ command_line :: (using screen : *Screen, line : s64)
 	if line < 0 then line = 1;
 	else if line > buffer.lines.count then line = buffer.lines.count;
 
-	while buffer.line < line - 1
+	while buffer.line_index < line - 1
 	{
 		move_cursor_forward (buffer);
 	}
 
-	while buffer.line > line - 1
+	while buffer.line_index > line - 1
 	{
 		move_cursor_backward (buffer);
 	}
 
 	move_cursor_to_bol (buffer);
+	view.scroll_to_cursor = true;
 
 	print_to_screen (screen, "Moved cursor to line %.", line);
 }
@@ -296,6 +301,7 @@ command_to_crlf :: (using screen : *Screen)
 		move_cursor_forward (buffer);
 	}
 	view.input.newline = .CRLF;
+	view.scroll_to_cursor = true;
 
 	print_to_screen (screen, "Converted buffer line endings to CRLF.");
 }
@@ -326,6 +332,7 @@ command_to_lf :: (using screen : *Screen)
 		move_cursor_forward (buffer);
 	}
 	view.input.newline = .LF;
+	view.scroll_to_cursor = true;
 
 	print_to_screen (screen, "Converted buffer line endings to LF.");
 }

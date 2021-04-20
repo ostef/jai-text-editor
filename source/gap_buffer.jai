@@ -4,8 +4,8 @@ Gap_Buffer :: struct
 	count  : s64;
 	cursor : s64;
 	gap    : s64;
-	lines  : [..]u32;
-	line, column : s64;
+	lines  : [..]u32;	// Number of utf32 codepoints for each line
+	line_index, column_index : s64;	// Starts at 0
 	selection : s64;
 
 	allocator : Allocator;
@@ -21,8 +21,8 @@ init_gap_buffer :: (buffer : *Gap_Buffer, capacity : s64, allocator : Allocator,
 	buffer.selection = 0;
 	buffer.lines = make_array (u32, 5000, heap_allocator);
 	push_to_array (*buffer.lines, 0);
-	buffer.line   = 0;
-	buffer.column = 0;
+	buffer.line_index   = 0;
+	buffer.column_index = 0;
 	buffer.allocator = allocator;
 	buffer.allocator_data = allocator_data;
 }
@@ -35,8 +35,8 @@ reset_gap_buffer :: (using buffer : *Gap_Buffer)
 	cursor = 0;
 	gap    = 0;
 	reset_array (*lines);
-	line   = 0;
-	column = 0;
+	line_index   = 0;
+	column_index = 0;
 }
 
 clear_gap_buffer :: (using buffer : *Gap_Buffer)
@@ -45,8 +45,8 @@ clear_gap_buffer :: (using buffer : *Gap_Buffer)
 	gap    = count;
 	clear_array (*lines);
 	push_to_array (*buffer.lines, 0);
-	line   = 0;
-	column = 0;
+	line_index   = 0;
+	column_index = 0;
 }
 
 clone_to_string :: (buffer : Gap_Buffer, allocator : Allocator, allocator_data := null) -> string #must
@@ -67,20 +67,20 @@ clone_to_string :: (buffer : Gap_Buffer, allocator : Allocator, allocator_data :
 
 split_current_line :: (using buffer : *Gap_Buffer)
 {
-	current     := lines[line];
-	first_half  := column;
+	current     := lines[line_index];
+	first_half  := column_index;
 	second_half := current - first_half;
 	// Split
-	lines[line] = xx first_half;
-	sorted_insert_to_array (*lines, line + 1, xx second_half);
+	lines[line_index] = xx first_half;
+	sorted_insert_to_array (*lines, line_index + 1, xx second_half);
 }
 
 merge_current_line_with_next_one :: (using buffer : *Gap_Buffer)
 {
-	if line == lines.count - 1 then return;
+	if line_index == lines.count - 1 then return;
 
-	lines[line] += lines[line + 1];
-	sorted_remove_from_array (*lines, line + 1);
+	lines[line_index] += lines[line_index + 1];
+	sorted_remove_from_array (*lines, line_index + 1);
 }
 
 #scope_export
@@ -95,15 +95,18 @@ insert_at_cursor :: (using buffer : *Gap_Buffer, char : u8)
 	gap    -= 1;
 	
 	// Update line cache
-	lines[line] += 1;
-	column += 1;
+	if utf8_is_first_of_sequence (char)
+	{
+		lines[line_index] += 1;
+		column_index += 1;
+	}
 
 	// Handle newline
 	if char == #char "\n"
 	{
 		split_current_line (buffer);
-		line += 1;
-		column = 0;
+		line_index += 1;
+		column_index = 0;
 	}
 }
 
@@ -125,24 +128,32 @@ backspace_selection :: (using buffer : *Gap_Buffer) -> bool
 {
 	if selection != 0 then return delete_selection (buffer);
 
-	// @Todo (stefan): Handle multibyte characters
 	if cursor > 0
 	{
-		cursor -= 1;
-		gap    += 1;
-		selection = 0;
+		// Handle multibyte characters
+		char := data[cursor];
+		size := 1;
+		while cursor - size > 0 && !utf8_is_first_of_sequence (data[cursor - size])  size += 1;
 		
 		// Update line cache
-		lines[line] -= 1;
-		column -= 1;
-		// Handle newline
-		backspaced_char := data[cursor];
-		if backspaced_char == #char "\n"
+		lines[line_index] -= 1;
+		column_index -= 1;
+
+		for i : 0..size - 1
 		{
-			line -= 1;
-			column = lines[line] - 1;
-			merge_current_line_with_next_one (buffer);
-			if cursor > 0 && data[cursor - 1] == #char "\r" then backspace_selection (buffer);
+			cursor -= 1;
+			gap    += 1;
+			selection = 0;
+			
+			// Handle newline
+			backspaced_char := data[cursor];
+			if backspaced_char == #char "\n"
+			{
+				line_index -= 1;
+				column_index = lines[line_index] - 1;
+				merge_current_line_with_next_one (buffer);
+				if cursor > 0 && data[cursor - 1] == #char "\r" then backspace_selection (buffer);
+			}
 		}
 	}
 
@@ -151,15 +162,19 @@ backspace_selection :: (using buffer : *Gap_Buffer) -> bool
 
 delete_selection :: (using buffer : *Gap_Buffer, $delete_crlf := true) -> bool
 {
-	// @Todo (stefan): Handle multibyte characters
 	if cursor < gap_buffer_count (buffer) || selection != 0
 	{
 		if selection == 0
 		{
+			// Handle multibyte characters
 			deleted_char := data[cursor + gap];
-			gap += 1;
+			size := utf8_sequence_size (deleted_char);
+			assert (cursor + size <= gap_buffer_count (buffer), "move_cursor_forward: UTF8 character is % bytes, but there is not enough space between the cursor and the end.", size);
+			
+			gap += size;
+
 			// Update line cache
-			lines[line] -= 1;
+			lines[line_index] -= 1;
 			if deleted_char == #char "\n"
 			{
 				merge_current_line_with_next_one (buffer);
@@ -195,7 +210,6 @@ delete_selection :: (using buffer : *Gap_Buffer, $delete_crlf := true) -> bool
 
 move_cursor_forward :: (using buffer : *Gap_Buffer, clear_selection := true) -> bool
 {
-	// @Todo (stefan): Handle multibyte characters
 	if selection != 0 && clear_selection
 	{
 		selection = 0;
@@ -205,19 +219,27 @@ move_cursor_forward :: (using buffer : *Gap_Buffer, clear_selection := true) -> 
 
 	if cursor < gap_buffer_count (buffer)
 	{
-		data[cursor] = data[cursor + gap];
-		cursor += 1;
-		// Update line and column number
-		column += 1;
-		previous_char := data[cursor - 1];
-		if previous_char == #char "\n"
+		// Handle multibyte characters
+		char := data[cursor + gap];
+		size := utf8_sequence_size (char);
+		assert (cursor + size <= gap_buffer_count (buffer), "move_cursor_forward: UTF8 character is % bytes, but there is not enough space between the cursor and the end.", size);
+		column_index += 1;
+
+		for i : 0..size - 1
 		{
-			line  += 1;
-			column = 0;
-		}
-		else if previous_char == #char "\r"	// Handle CRLF
-		{
-			move_cursor_forward (buffer, clear_selection);
+			data[cursor] = data[cursor + gap];
+			cursor += 1;
+			// Update line and column_index number
+			previous_char := data[cursor - 1];
+			if previous_char == #char "\n"
+			{
+				line_index  += 1;
+				column_index = 0;
+			}
+			else if previous_char == #char "\r"	// Handle CRLF
+			{
+				move_cursor_forward (buffer, clear_selection);
+			}
 		}
 
 		return true;
@@ -228,7 +250,6 @@ move_cursor_forward :: (using buffer : *Gap_Buffer, clear_selection := true) -> 
 
 move_cursor_backward :: (using buffer : *Gap_Buffer, clear_selection := true) -> bool
 {
-	// @Todo (stefan): Handle multibyte characters
 	if selection != 0 && clear_selection
 	{
 		selection = 0;
@@ -238,17 +259,25 @@ move_cursor_backward :: (using buffer : *Gap_Buffer, clear_selection := true) ->
 
 	if cursor > 0
 	{
-		cursor -= 1;
-		data[cursor + gap] = data[cursor];
-		// Update line and column numbers
-		column -= 1;
-		current_char := data[cursor];
-		if current_char == #char "\n"
+		// Handle multibyte characters
+		char := data[cursor];
+		size := 1;
+		while cursor - size > 0 && !utf8_is_first_of_sequence (data[cursor - size])  size += 1;
+		column_index -= 1;
+
+		for i : 0..size - 1
 		{
-			line -= 1;
-			column = lines[line] - 1;
-			// Handle CRLF
-			if cursor > 0 && data[cursor - 1] == #char "\r" then move_cursor_backward (buffer, clear_selection);
+			cursor -= 1;
+			data[cursor + gap] = data[cursor];
+			// Update line and column_index numbers
+			current_char := data[cursor];
+			if current_char == #char "\n"
+			{
+				line_index -= 1;
+				column_index = lines[line_index] - 1;
+				// Handle CRLF
+				if cursor > 0 && data[cursor - 1] == #char "\r" then move_cursor_backward (buffer, clear_selection);
+			}
 		}
 
 		return true;
@@ -259,17 +288,17 @@ move_cursor_backward :: (using buffer : *Gap_Buffer, clear_selection := true) ->
 
 move_cursor_to_previous_line :: (using buffer : *Gap_Buffer) -> bool
 {
-	if line == 0 then return false;
+	if line_index == 0 then return false;
 
-	start_column := column;
-	while column != 0
+	start_column_index := column_index;
+	while column_index != 0
 		move_cursor_backward (buffer);
 
 	// At this point, we are at the start of the current line,
 	// move to the end of the previous line
 	move_cursor_backward (buffer);
 	
-	while column > start_column
+	while column_index > start_column_index
 		move_cursor_backward (buffer);
 
 	return true;
@@ -277,9 +306,9 @@ move_cursor_to_previous_line :: (using buffer : *Gap_Buffer) -> bool
 
 move_cursor_to_next_line :: (using buffer : *Gap_Buffer) -> bool
 {
-	if line == lines.count - 1 then return false;
+	if line_index == lines.count - 1 then return false;
 
-	start_column := column;
+	start_column_index := column_index;
 	while !is_at_eol (buffer)
 		move_cursor_forward (buffer);
 
@@ -287,7 +316,7 @@ move_cursor_to_next_line :: (using buffer : *Gap_Buffer) -> bool
 	// move to the start of the next line
 	move_cursor_forward (buffer);
 	
-	while column < start_column && !is_at_eol (buffer)
+	while column_index < start_column_index && !is_at_eol (buffer)
 		move_cursor_forward (buffer);
 
 	return true;
@@ -296,7 +325,7 @@ move_cursor_to_next_line :: (using buffer : *Gap_Buffer) -> bool
 move_cursor_to_bol :: (using buffer : *Gap_Buffer) -> bool
 {
 	moved := false;
-	while column > 0
+	while column_index > 0
 	{
 		if move_cursor_backward (buffer) then moved = true;
 	}
@@ -363,10 +392,10 @@ set_cursor :: (using buffer : *Gap_Buffer, position : s64) -> bool
 
 is_at_eol :: inline (using buffer : *Gap_Buffer) -> bool #must
 {
-	if line == lines.count - 1 then return column == lines[line];
-	if column == lines[line] - 2 then return data[cursor] == #char "\r";
+	if line_index == lines.count - 1 then return column_index == lines[line_index];
+	if column_index == lines[line_index] - 2 then return data[cursor] == #char "\r";
 
-	return column == lines[line] - 1;
+	return column_index == lines[line_index] - 1;
 }
 
 gap_buffer_count :: inline (using buffer : *Gap_Buffer) -> s64 #must
