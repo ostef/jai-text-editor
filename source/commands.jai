@@ -233,11 +233,13 @@ command_scratch :: (using screen : *Screen)
 
 command_grow :: (using screen : *Screen)
 {
+	print_to_screen (screen, "Grow.");
 }
 @Command
 
 command_shrink :: (using screen : *Screen)
 {
+	print_to_screen (screen, "Shrink.");
 }
 @Command
 
