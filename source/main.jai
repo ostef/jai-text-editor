@@ -29,10 +29,7 @@ handle_window_event :: (using event : Event)
 		running = false;
 	}
 
-	if running
-	{
-		screen_handle_event (*screen, event);
-	}
+	if running then screen_handle_event (*screen, event);
 }
 
 main :: ()
