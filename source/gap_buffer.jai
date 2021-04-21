@@ -287,6 +287,48 @@ move_cursor_backward :: (using buffer : *Gap_Buffer, clear_selection := true) ->
 	return false;
 }
 
+skip_word_forward :: (using buffer : *Gap_Buffer) -> bool
+{
+	if cursor < gap_buffer_count (buffer)
+	{
+		char := data[cursor + gap];
+		move_cursor_forward (buffer);
+		if is_space (char)
+		{
+			while cursor < gap_buffer_count (buffer) && is_space (data[cursor + gap])
+				move_cursor_forward (buffer);
+		}
+
+		while cursor < gap_buffer_count (buffer) && !is_space (data[cursor + gap])
+			move_cursor_forward (buffer);
+
+		return true;
+	}
+
+	return false;
+}
+
+skip_word_backward :: (using buffer : *Gap_Buffer) -> bool
+{
+	if cursor > 0
+	{
+		char := data[cursor];
+		move_cursor_backward (buffer);
+		if is_space (char)
+		{
+			while cursor > 0 && is_space (data[cursor])
+				move_cursor_backward (buffer);
+		}
+
+		while cursor > 0 && !is_space (data[cursor])
+			move_cursor_backward (buffer);
+		
+		return true;
+	}
+
+	return false;
+}
+
 move_cursor_to_previous_line :: (using buffer : *Gap_Buffer) -> bool
 {
 	if line_index == 0 then return move_cursor_to_bol (buffer);

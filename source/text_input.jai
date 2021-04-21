@@ -39,6 +39,10 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 			{
 				if select_backward (*buffer) then modified = true;
 			}
+			else if (event.key_event.mods & .CONTROL)
+			{
+				if skip_word_backward (*buffer) then modified = true;
+			}
 			else
 			{
 				if move_cursor_backward (*buffer) then modified = true;
@@ -48,6 +52,10 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 			if (event.key_event.mods & .SHIFT)
 			{
 				if select_forward (*buffer) then modified = true;
+			}
+			else if (event.key_event.mods & .CONTROL)
+			{
+				if skip_word_forward (*buffer) then modified = true;
 			}
 			else
 			{
