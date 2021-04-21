@@ -124,7 +124,7 @@ insert_at_cursor :: inline (using buffer : *Gap_Buffer, str : string)
 		insert_at_cursor (buffer, str[i]);
 }
 
-backspace_selection :: (using buffer : *Gap_Buffer) -> bool
+backspace_selection :: (using buffer : *Gap_Buffer, $backspace_crlf := true) -> bool
 {
 	if selection != 0 then return delete_selection (buffer);
 
@@ -152,7 +152,10 @@ backspace_selection :: (using buffer : *Gap_Buffer) -> bool
 				line_index -= 1;
 				column_index = lines[line_index] - 1;
 				merge_current_line_with_next_one (buffer);
+#if backspace_crlf
+{
 				if cursor > 0 && data[cursor - 1] == #char "\r" then backspace_selection (buffer);
+}
 			}
 		}
 	}
@@ -329,6 +332,117 @@ skip_word_backward :: (using buffer : *Gap_Buffer) -> bool
 	return false;
 }
 
+// @Cleanup (stefan): Ideally we don't want to have to pass eol_sequence. To prevent that,
+// we could move the EOL sequence info from text input to here.
+move_line_up :: (using buffer : *Gap_Buffer, eol_sequence : string) -> bool
+{
+	if line_index == 0 then return false;
+	// @Todo (stefan)
+	//if line_index == lines.count - 1 then return false;
+
+	// Strategy:
+	// * Save the current line into a buffer while deleting all the characters,
+	// * Move the cursor up,
+	// * Insert all characters back,
+	// * Move the cursor up again
+	line_buffer := make_array (u8, lines[line_index] + 10, temp_allocator);
+	start_column_index := column_index;
+	is_last_line := line_index == lines.count - 1;
+	move_cursor_to_bol (buffer);
+	
+	if lines[line_index] != 0
+	{
+		eol := false;
+		while !eol
+		{
+			eol = is_at_eol (buffer, ignore_cr = true);
+			if is_last_line && eol then break;
+			push_to_array (*line_buffer, data[cursor + gap]);
+			delete_selection (buffer, delete_crlf = false);
+		}
+	}
+	
+	if is_last_line
+	{
+		for i : 0..eol_sequence.count - 1
+			push_to_array (*line_buffer, eol_sequence[i]);
+		// Remove the EOL of the previous line, so it becomes the last line
+		backspace_selection (buffer);
+		// Start inserting the characters back from the beginning of the line
+		move_cursor_to_bol (buffer);
+	}
+	else
+	{
+		move_cursor_to_previous_line (buffer);
+	}
+
+	for char, i : line_buffer
+		insert_at_cursor (buffer, char);
+	// We inserted a EOL sequence, and so we need to go back to the previous line
+	move_cursor_to_previous_line (buffer);
+	move_cursor_to_column (buffer, start_column_index);
+
+	return true;
+}
+
+move_line_down :: (using buffer : *Gap_Buffer, eol_sequence : string) -> bool
+{
+	if line_index == lines.count - 1 then return false;
+
+	// Strategy:
+	// * Save the current line into a buffer while deleting all the characters,
+	// * Move the cursor down,
+	// * Insert all characters back,
+	// * Move the cursor up
+	line_buffer := make_array (u8, lines[line_index] + 10, temp_allocator);
+	start_column_index := column_index;
+	move_to_last_line := line_index == lines.count - 2;
+	move_cursor_to_bol (buffer);
+	
+	eol := false;
+	while !eol
+	{
+		eol = is_at_eol (buffer, ignore_cr = true);
+		push_to_array (*line_buffer, data[cursor + gap]);
+		delete_selection (buffer, delete_crlf = false);
+	}
+
+	if move_to_last_line
+	{
+		move_cursor_to_eol (buffer);
+		for i : 0..eol_sequence.count - 1
+			insert_at_cursor (buffer, eol_sequence[i]);
+		
+		for i : 0..eol_sequence.count - 1
+			pop_from_array (*line_buffer);
+	}
+	else
+	{
+		move_cursor_to_next_line (buffer);
+	}
+
+	for char, i : line_buffer
+		insert_at_cursor (buffer, char);
+
+	if !move_to_last_line then move_cursor_to_previous_line (buffer);
+	move_cursor_to_column (buffer, start_column_index);
+
+	return true;
+}
+
+move_cursor_to_column :: (using buffer : *Gap_Buffer, column : s64) -> bool
+{
+	if column_index == column then return false;
+
+	while column_index < column
+		move_cursor_forward (buffer);
+
+	while column_index > column
+		move_cursor_backward (buffer);
+
+	return true;
+}
+
 move_cursor_to_previous_line :: (using buffer : *Gap_Buffer) -> bool
 {
 	if line_index == 0 then return move_cursor_to_bol (buffer);
@@ -340,9 +454,7 @@ move_cursor_to_previous_line :: (using buffer : *Gap_Buffer) -> bool
 	// At this point, we are at the start of the current line,
 	// move to the end of the previous line
 	move_cursor_backward (buffer);
-	
-	while column_index > start_column_index
-		move_cursor_backward (buffer);
+	move_cursor_to_column (buffer, start_column_index);
 
 	return true;
 }
@@ -358,9 +470,7 @@ move_cursor_to_next_line :: (using buffer : *Gap_Buffer) -> bool
 	// At this point, we are at the end of the current line,
 	// move to the start of the next line
 	move_cursor_forward (buffer);
-	
-	while column_index < start_column_index && !is_at_eol (buffer)
-		move_cursor_forward (buffer);
+	move_cursor_to_column (buffer, start_column_index);
 
 	return true;
 }
@@ -433,10 +543,13 @@ set_cursor :: (using buffer : *Gap_Buffer, position : s64) -> bool
 	return modified;
 }
 
-is_at_eol :: inline (using buffer : *Gap_Buffer) -> bool #must
+is_at_eol :: inline (using buffer : *Gap_Buffer, $ignore_cr := false) -> bool #must
 {
 	if line_index == lines.count - 1 then return column_index == lines[line_index];
+#if !ignore_cr
+{
 	if column_index == lines[line_index] - 2 then return data[cursor + gap] == #char "\r";
+}
 
 	return column_index == lines[line_index] - 1;
 }

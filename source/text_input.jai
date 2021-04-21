@@ -28,11 +28,27 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 		{
 		case .UP;
 			// @Todo (stefan): Handle selection
-			if move_cursor_to_previous_line (*buffer) then modified = true;
+			if (event.key_event.mods & .ALT)	// @Fix (stefan): ALT alone does not work... Why ?
+			{
+				eol_sequence := ifx newline == .CRLF then "\r\n" else "\n";
+				if move_line_up (*buffer, eol_sequence) then modified = true;
+			}
+			else
+			{
+				if move_cursor_to_previous_line (*buffer) then modified = true;
+			}
 
 		case .DOWN;
 			// @Todo (stefan): Handle selection
-			if move_cursor_to_next_line (*buffer) then modified = true;
+			if (event.key_event.mods & .ALT)
+			{
+				eol_sequence := ifx newline == .CRLF then "\r\n" else "\n";
+				if move_line_down (*buffer, eol_sequence) then modified = true;
+			}
+			else
+			{
+				if move_cursor_to_next_line (*buffer) then modified = true;
+			}
 
 		case .LEFT;
 			if (event.key_event.mods & .SHIFT)
