@@ -159,7 +159,7 @@ screen_handle_event :: (using screen : *Screen, event : Event)
 
 text_view_handle_event :: (using view : *Text_View, event : Event)
 {
-	scroll_to_cursor = text_input_handle_event (*input, event);
+	if text_input_handle_event (*input, event) then scroll_to_cursor = true;
 }
 
 init_screen :: (screen : *Screen, width : u32, height : u32)
