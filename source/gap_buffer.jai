@@ -434,10 +434,10 @@ move_cursor_to_column :: (using buffer : *Gap_Buffer, column : s64) -> bool
 {
 	if column_index == column then return false;
 
-	while column_index < column
+	while column_index < column && !is_at_eol (buffer)
 		move_cursor_forward (buffer);
 
-	while column_index > column
+	while column_index > column && column_index > 0
 		move_cursor_backward (buffer);
 
 	return true;
@@ -448,11 +448,7 @@ move_cursor_to_previous_line :: (using buffer : *Gap_Buffer) -> bool
 	if line_index == 0 then return move_cursor_to_bol (buffer);
 
 	start_column_index := column_index;
-	while column_index != 0
-		move_cursor_backward (buffer);
-
-	// At this point, we are at the start of the current line,
-	// move to the end of the previous line
+	move_cursor_to_bol (buffer);
 	move_cursor_backward (buffer);
 	move_cursor_to_column (buffer, start_column_index);
 
@@ -464,11 +460,7 @@ move_cursor_to_next_line :: (using buffer : *Gap_Buffer) -> bool
 	if line_index == lines.count - 1 then return move_cursor_to_eol (buffer);
 	
 	start_column_index := column_index;
-	while !is_at_eol (buffer)
-		move_cursor_forward (buffer);
-
-	// At this point, we are at the end of the current line,
-	// move to the start of the next line
+	move_cursor_to_eol (buffer);
 	move_cursor_forward (buffer);
 	move_cursor_to_column (buffer, start_column_index);
 
