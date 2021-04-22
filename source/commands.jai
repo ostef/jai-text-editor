@@ -108,7 +108,7 @@ execute_command :: (using screen : *Screen, str : string)
 }
 
 // Split the active view horizontally
-command_split :: (using screen : *Screen, filename : string @Optional )
+command_split :: (using screen : *Screen, filename := "")
 {
 	split_active_view (screen);
 
@@ -249,28 +249,28 @@ resize_helper :: (using screen : *Screen, amount : s64, left : bool) -> bool
 
 #scope_export
 
-command_lgrow :: (using screen : *Screen, amount : u64 @Optional )
+command_lgrow :: (using screen : *Screen, amount : u64 = 1)
 {
 	if amount == 0 then amount = 1;
 	if resize_helper (screen, xx amount, true) then print_to_screen (screen, "Grew active text view.");
 }
 @Command
 
-command_rgrow :: (using screen : *Screen, amount : u64 @Optional )
+command_rgrow :: (using screen : *Screen, amount : u64 = 1)
 {
 	if amount == 0 then amount = 1;
 	if resize_helper (screen, xx amount, false) then print_to_screen (screen, "Grew active text view.");
 }
 @Command
 
-command_lshrink :: (using screen : *Screen, amount : u64 @Optional )
+command_lshrink :: (using screen : *Screen, amount : u64 = 1)
 {
 	if amount == 0 then amount = 1;
 	if resize_helper (screen, -cast (s64) amount, true) then print_to_screen (screen, "Shrank active text view.");
 }
 @Command
 
-command_rshrink :: (using screen : *Screen, amount : u64 @Optional )
+command_rshrink :: (using screen : *Screen, amount : u64 = 1 )
 {
 	if amount == 0 then amount = 1;
 	if resize_helper (screen, -cast (s64) amount, false) then print_to_screen (screen, "Shrank active text view.");
@@ -293,7 +293,7 @@ command_equalize :: (using screen : *Screen)
 }
 @Command
 
-command_reload_shortcuts :: (using screen : *Screen, filename : string @Optional )
+command_reload_shortcuts :: (using screen : *Screen, filename := "")
 {
 	name := filename;
 	if !name then name = "shortcuts.edit";

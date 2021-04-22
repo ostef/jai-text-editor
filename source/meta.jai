@@ -17,14 +17,11 @@ generate_command_wrapper :: (name : string, decl : *Compiler.Code_Declaration, i
 	first_optional_argument := -1;
 	for arg, i : header.arguments
 	{
-		for arg.notes
+		if arg.root_expression
 		{
-			if it.text == "Optional"
-			{
-				first_optional_argument = i - 1;
+			first_optional_argument = i - 1;
 
-				break arg;
-			}
+			break arg;
 		}
 	}
 
@@ -185,38 +182,18 @@ generate_init_commands_proc :: () -> string #must
 		// Find the first optional argument
 		header := cast (*Compiler.Code_Procedure_Header) command_decls[i].root_expression;
 		first_optional_argument := -1;
+		// @Robustness (stefan): Make sure the first argument is a *Screen
 		for arg, i : header.arguments
 		{
-			// @Todo (stefan): Remove the @Optional thing and check if the argument is optional
-			// by looking if the expressions array has things in it.
-			for arg.notes
+			// @Note (stefan): Can the root expression not be null without it meaning there is a default argument ?
+			if arg.root_expression
 			{
-				if it.text == "Optional"
-				{
-					first_optional_argument = i - 1;
-
-					break arg;
-				}
+				first_optional_argument = i - 1;
+				
+				break arg;
 			}
 		}
 
-		// @Note (stefan): Ignore shortcuts notes because we read shortcuts from a file.
-		// I don't know why I added this in the first place...
-		/*
-		shortcut_str := "";
-		// Find shortcut if there is one
-		decl := command_decls[i];
-		for note : decl.notes
-		{
-			if starts_with (note.text, "Shortcut(")
-			{
-				if shortcut_str != "" then Compiler.compiler_report (decl.filename, decl.l0, decl.c0, "Found two @Shortcut notes on this command procedure.", mode = .WARNING);
-				shortcut_str = trim (advance (note.text, "Shortcut(".count), 1);
-			}
-		}
-
-		if shortcut_str then ln (*builder, "\tregister_command (\"%\", %, \"%\");", advance (name, "command_".count), join (temp_allocator, name, "_wrapper"), shortcut_str);
-		*/
 		ln (*builder, "\tregister_command (\"%\", %, %, %);", advance (name, "command_".count), join (temp_allocator, name, "_wrapper"), arg_count, first_optional_argument);
 	}
 	ln (*builder, "\tread_shortcuts_from_file (\"shortcuts.edit\");");
@@ -260,22 +237,6 @@ handle_compiler_message :: (message : *Compiler.Message)
 						push_to_array (*commands_to_register, decl.name);
 						push_to_array (*command_decls, decl);
 						push_to_array (*command_infos, cast (*Type_Info_Procedure) decl.type);
-
-						found_optional_argument := false;
-						for arg, i : header.arguments
-						{
-							arg_is_optional := false;
-							for arg.notes
-							{
-								if it.text == "Optional"
-								{
-									arg_is_optional = true;
-									found_optional_argument = true;
-								}
-							}
-							if found_optional_argument && !arg_is_optional
-								Compiler.compiler_report (arg.filename, arg.l0, arg.c0, "Command argument is not marked as @Optional, but follows an optional argument. This is forbidden.");
-						}
 					}
 				}
 			}
