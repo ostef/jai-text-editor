@@ -200,15 +200,63 @@ command_scratch :: (using screen : *Screen)
 }
 @Command
 
-command_grow :: (using screen : *Screen)
+#scope_file
+
+grow_shrink_helper :: (using screen : *Screen, amount : s64) -> bool
 {
-	print_to_screen (screen, "Grow.");
+	if text_views.count <= 1 then return false;
+	// @Todo (stefan): Handle too small or too big 'amount'.
+
+	previous_view, next_view : *Text_View;
+	view := *text_views[active_view_index];
+
+	if active_view_index > 0 then previous_view = *text_views[active_view_index - 1];
+	if active_view_index < text_views.count - 1 then next_view = *text_views[active_view_index + 1];
+
+	if previous_view
+	{
+		previous_view.w -= default_font.space_advance * 0.5 * amount;
+	}
+	view.x -= default_font.space_advance * 0.5 * amount;
+	view.w += default_font.space_advance * amount;
+	if next_view
+	{
+		next_view.x += default_font.space_advance * 0.5 * amount;
+		next_view.w -= default_font.space_advance * 0.5 * amount;
+	}
+
+	return true;
+}
+
+#scope_export
+
+command_grow :: (using screen : *Screen, amount : u64 @Optional )
+{
+	if amount == 0 then amount = 1;
+	if grow_shrink_helper (screen, xx amount) then print_to_screen (screen, "Grew active text view.");
 }
 @Command
 
-command_shrink :: (using screen : *Screen)
+command_shrink :: (using screen : *Screen, amount : u64 @Optional )
 {
-	print_to_screen (screen, "Shrink.");
+	if amount == 0 then amount = 1;
+	if grow_shrink_helper (screen, -cast (s64) amount) then print_to_screen (screen, "Shrank active text view.");
+}
+@Command
+
+// Make all text views have the same width
+command_equalize :: (using screen : *Screen)
+{
+	if text_views.count <= 1 then return;
+
+	view_width := width / cast (f32) text_views.count;
+	for * view, i : text_views
+	{
+		view.x = i * view_width;
+		view.w = view_width;
+	}
+
+	print_to_screen (screen, "Equalized text view widths.");
 }
 @Command
 
