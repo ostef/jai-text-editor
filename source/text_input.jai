@@ -84,6 +84,16 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 				if move_cursor_forward (*buffer) then modified = true;
 			}
 
+		case .Z;
+			if event.key_event.mods == .CONTROL
+			{
+				if undo_operation (*buffer) then modified = true;
+			}
+			else if event.key_event.mods == (Mods.CONTROL | .SHIFT)
+			{
+				if redo_operation (*buffer) then modified = true;
+			}
+
 		case .BACKSPACE;
 			if backspace_selection (*buffer) then modified = true;
 

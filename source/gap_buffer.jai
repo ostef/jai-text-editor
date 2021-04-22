@@ -1,3 +1,5 @@
+#import "Circular_Stack";
+
 Gap_Buffer :: struct
 {
 	data   : *u8;
@@ -8,8 +10,30 @@ Gap_Buffer :: struct
 	line_index, column_index : s64;	// Starts at 0
 	selection : s64;
 
+	undo_stack : Circular_Stack (Text_Operation);
+	redo_stack : Circular_Stack (Text_Operation);
+
 	allocator : Allocator;
 	allocator_data : *void;
+}
+
+MAX_UNDO :: 5000;
+
+Text_Operation :: struct
+{
+	Kind :: enum
+	{
+		INSERT;
+		BACKSPACE;
+		DELETE;
+		MOVE_LINE_UP;
+		MOVE_LINE_DOWN;
+	}
+
+	kind : Kind;
+	buffer : []u8;
+	cursor : s64;
+	line_index : s64;
 }
 
 init_gap_buffer :: (buffer : *Gap_Buffer, capacity : s64, allocator : Allocator, allocator_data := null)
@@ -23,6 +47,8 @@ init_gap_buffer :: (buffer : *Gap_Buffer, capacity : s64, allocator : Allocator,
 	push_to_array (*buffer.lines, 0);
 	buffer.line_index   = 0;
 	buffer.column_index = 0;
+	init_circular_stack (*buffer.undo_stack, MAX_UNDO, allocator, allocator_data);
+	init_circular_stack (*buffer.redo_stack, MAX_UNDO, allocator, allocator_data);
 	buffer.allocator = allocator;
 	buffer.allocator_data = allocator_data;
 }
@@ -37,6 +63,8 @@ reset_gap_buffer :: (using buffer : *Gap_Buffer)
 	reset_array (*lines);
 	line_index   = 0;
 	column_index = 0;
+	reset_circular_stack (*undo_stack);
+	reset_circular_stack (*redo_stack);
 }
 
 clear_gap_buffer :: (using buffer : *Gap_Buffer)
@@ -392,10 +420,20 @@ skip_word_backward :: (using buffer : *Gap_Buffer, select := false) -> bool
 
 // @Cleanup (stefan): Ideally we don't want to have to pass eol_sequence. To prevent that,
 // we could move the EOL sequence info from text input to here.
-move_line_up :: (using buffer : *Gap_Buffer, eol_sequence : string) -> bool
+move_line_up :: (using buffer : *Gap_Buffer, eol_sequence : string, buffer_operation := true) -> bool
 {
 	if line_index == 0 then return false;
-	
+
+	if buffer_operation
+	{
+		clear_redo_stack (buffer);
+		op : Text_Operation;
+		op.kind       = .MOVE_LINE_UP;
+		op.cursor     = cursor;
+		op.line_index = line_index;
+		push_undo_operation (buffer, op);
+	}
+
 	// Strategy:
 	// * Save the current line into a buffer while deleting all the characters,
 	// * Move the cursor up,
@@ -441,9 +479,19 @@ move_line_up :: (using buffer : *Gap_Buffer, eol_sequence : string) -> bool
 	return true;
 }
 
-move_line_down :: (using buffer : *Gap_Buffer, eol_sequence : string) -> bool
+move_line_down :: (using buffer : *Gap_Buffer, eol_sequence : string, buffer_operation := true) -> bool
 {
 	if line_index == lines.count - 1 then return false;
+
+	if buffer_operation
+	{
+		clear_redo_stack (buffer);
+		op : Text_Operation;
+		op.kind       = .MOVE_LINE_DOWN;
+		op.cursor     = cursor;
+		op.line_index = line_index;
+		push_undo_operation (buffer, op);
+	}
 
 	// Strategy:
 	// * Save the current line into a buffer while deleting all the characters,
@@ -531,6 +579,19 @@ move_cursor_to_next_line :: (using buffer : *Gap_Buffer, select := false) -> boo
 	return true;
 }
 
+move_cursor_to_line :: (using buffer : *Gap_Buffer, line : s64, select := false) -> bool
+{
+	line = clamp (line, 0, lines.count - 1);
+	if line_index == line then return false;
+
+	while line_index < line
+		move_cursor_to_next_line (buffer, select);
+	while line_index > line
+		move_cursor_to_previous_line (buffer, select);
+
+	return true;
+}
+
 move_cursor_to_bol :: (using buffer : *Gap_Buffer, select := false) -> bool
 {
 	moved := false;
@@ -587,6 +648,67 @@ select_backward :: (using buffer : *Gap_Buffer) -> bool
 	selection = cached_selection;
 
 	return modified;
+}
+
+push_undo_operation :: (using buffer : *Gap_Buffer, op : Text_Operation)
+{
+	overwrote, overwritten := push_to_stack (*undo_stack, op);
+	if overwrote then free (overwritten.buffer, heap_allocator);
+}
+
+clear_redo_stack :: inline (using buffer : *Gap_Buffer)
+{
+	clear_circular_stack (*redo_stack);
+}
+
+undo_operation :: (using buffer : *Gap_Buffer) -> bool
+{
+	if is_empty (undo_stack) then return false;
+	op := pop_from_stack (*undo_stack);
+	push_to_stack (*redo_stack, op);
+
+	if #complete op.kind ==
+	{
+	case .INSERT;
+	case .BACKSPACE;
+	case .DELETE;
+	case .MOVE_LINE_UP;
+		move_cursor_to_line (buffer, op.line_index - 1);
+		// @Todo (stefan): Move EOL info to Gap_Buffer.
+		move_line_down (buffer, "\r\n", buffer_operation = false);
+
+	case .MOVE_LINE_DOWN;
+		move_cursor_to_line (buffer, op.line_index + 1);
+		// @Todo (stefan): Move EOL info to Gap_Buffer.
+		move_line_up (buffer, "\r\n", buffer_operation = false);
+	}
+
+	return true;
+}
+
+redo_operation :: (using buffer : *Gap_Buffer) -> bool
+{
+	if is_empty (redo_stack) then return false;
+	op := pop_from_stack (*redo_stack);
+	push_undo_operation (buffer, op);
+
+	if #complete op.kind ==
+	{
+	case .INSERT;
+	case .BACKSPACE;
+	case .DELETE;
+	case .MOVE_LINE_UP;
+		move_cursor_to_line (buffer, op.line_index);
+		// @Todo (stefan): Move EOL info to Gap_Buffer.
+		move_line_up (buffer, "\r\n", buffer_operation = false);
+
+	case .MOVE_LINE_DOWN;
+		move_cursor_to_line (buffer, op.line_index);
+		// @Todo (stefan): Move EOL info to Gap_Buffer.
+		move_line_down (buffer, "\r\n", buffer_operation = false);
+	}
+
+	return true;
 }
 
 set_cursor :: (using buffer : *Gap_Buffer, position : s64) -> bool
