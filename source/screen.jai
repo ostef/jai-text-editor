@@ -110,7 +110,7 @@ screen_handle_event :: (using screen : *Screen, event : Event)
 				return;
 			}
 		}
-		else if !(event.key_event.mods & .ALT) && (event.key_event.mods & .CONTROL)
+		else if event.key_event.mods == .CONTROL
 		{
 			if event.key_event.key_code == .E
 				active_view_index = wrap (active_view_index + 1, 0, text_views.count);

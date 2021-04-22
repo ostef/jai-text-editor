@@ -28,7 +28,7 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 		{
 		case .UP;
 			// @Todo (stefan): Handle selection
-			if (event.key_event.mods & .ALT)	// @Fix (stefan): ALT alone does not work... Why ?
+			if event.key_event.mods == .ALT
 			{
 				eol_sequence := ifx newline == .CRLF then "\r\n" else "\n";
 				if move_line_up (*buffer, eol_sequence) then modified = true;
@@ -40,7 +40,7 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 
 		case .DOWN;
 			// @Todo (stefan): Handle selection
-			if (event.key_event.mods & .ALT)
+			if event.key_event.mods == .ALT
 			{
 				eol_sequence := ifx newline == .CRLF then "\r\n" else "\n";
 				if move_line_down (*buffer, eol_sequence) then modified = true;
@@ -51,11 +51,11 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 			}
 
 		case .LEFT;
-			if (event.key_event.mods & .SHIFT)
+			if event.key_event.mods == .SHIFT
 			{
 				if select_backward (*buffer) then modified = true;
 			}
-			else if (event.key_event.mods & .CONTROL)
+			else if event.key_event.mods == .CONTROL
 			{
 				if skip_word_backward (*buffer) then modified = true;
 			}
@@ -65,11 +65,11 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 			}
 
 		case .RIGHT;
-			if (event.key_event.mods & .SHIFT)
+			if event.key_event.mods == .SHIFT
 			{
 				if select_forward (*buffer) then modified = true;
 			}
-			else if (event.key_event.mods & .CONTROL)
+			else if event.key_event.mods == .CONTROL
 			{
 				if skip_word_forward (*buffer) then modified = true;
 			}
@@ -87,11 +87,16 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 		case .RETURN;
 			if (flags & .SINGLE_LINE) != .SINGLE_LINE
 			{
+				ctrl_shift := (event.key_event.mods & .CONTROL) && (event.key_event.mods & .SHIFT) && !(event.key_event.mods & .ALT);
+				if ctrl_shift then move_cursor_to_bol (*buffer);
+
 				if #complete newline ==
 				{
 				case .LF;   insert_at_cursor (*buffer, "\n", auto_tab = true);
 				case .CRLF; insert_at_cursor (*buffer, "\r\n", auto_tab = true);
 				}
+
+				if ctrl_shift then move_cursor_to_previous_line (*buffer);
 
 				modified = true;
 			}
