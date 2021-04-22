@@ -117,14 +117,14 @@ command_split :: (using screen : *Screen, filename : string @Optional )
 	else
 		print_to_screen (screen, "Split active text view.");
 }
-@Command @Shortcut(CTRL+H)
+@Command
 
 // Open the specified file into the active text view. If the file does not exist, create a new file on disk when it is saved for the first time.
 command_open :: (using screen : *Screen, filename : string)
 {
 	load_file_into_active_text_view (screen, filename);
 }
-@Command @Shortcut(CTRL+O)
+@Command
 
 command_save :: (using screen : *Screen)
 {
@@ -142,11 +142,10 @@ command_save :: (using screen : *Screen)
 	if ok then print_to_screen (screen, "Saved buffer to file '%'.", view.filename);
 	else       print_to_screen (screen, "Could not save buffer to file '%'.", view.filename);
 }
-@Command @Shortcut(CTRL+S)
+@Command
 
 command_save_as :: (using screen : *Screen, filename : string)
 {
-	// @Todo (stefan): Create a file if it does not exist.
 	if text_views.count == 0 then return;
 
 	view := *text_views[active_view_index];
@@ -157,13 +156,13 @@ command_save_as :: (using screen : *Screen, filename : string)
 	if ok then print_to_screen (screen, "Saved buffer to file '%'.", view.filename);
 	else       print_to_screen (screen, "Could not save buffer to file '%'.", view.filename);
 }
-@Command @Shortcut(CTRL+ALT+S)
+@Command
 
 command_save_all :: (using screen : *Screen)
 {
 	print_to_screen (screen, "Saved all buffers.");
 }
-@Command @Shortcut(CTRL+SHIFT+S)
+@Command
 
 // Close the active text view
 command_close :: (using screen : *Screen)
@@ -171,7 +170,7 @@ command_close :: (using screen : *Screen)
 	close_active_view (screen);
 	print_to_screen (screen, "Closed active buffer.");
 }
-@Command @Shortcut(CTRL+Q)
+@Command
 
 // Close all text views
 command_close_all :: (using screen : *Screen)
@@ -180,7 +179,7 @@ command_close_all :: (using screen : *Screen)
 		close_active_view (screen);
 	print_to_screen (screen, "Closed all buffers.");
 }
-@Command @Shortcut(CTRL+SHIFT+Q)
+@Command
 
 // Quit the program
 command_quit :: (using screen : *Screen)
