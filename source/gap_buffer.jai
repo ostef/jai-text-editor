@@ -179,47 +179,42 @@ backspace_selection :: (using buffer : *Gap_Buffer, $backspace_crlf := true) -> 
 	return false;
 }
 
-delete_selection :: (using buffer : *Gap_Buffer, $delete_crlf := true) -> bool
+delete_at_cursor :: (using buffer : *Gap_Buffer, $delete_crlf := true) -> bool
 {
-	if cursor < gap_buffer_count (buffer) || selection != 0
+		delete_helper :: inline (using buffer : *Gap_Buffer, $delete_crlf : bool)
 	{
-		if selection == 0
-		{
-			// Handle multibyte characters
-			deleted_char := data[cursor + gap];
-			size := utf8_sequence_size (deleted_char);
-			assert (cursor + size <= gap_buffer_count (buffer), "move_cursor_forward: UTF8 character is % bytes, but there is not enough space between the cursor and the end.", size);
-			
-			gap += size;
+		// Handle multibyte characters
+		deleted_char := data[cursor + gap];
+		size := utf8_sequence_size (deleted_char);
+		assert (cursor + size <= gap_buffer_count (buffer), "move_cursor_forward: UTF8 character is % bytes, but there is not enough space between the cursor and the end.", size);
+		gap += size;
 
-			// Update line cache
-			lines[line_index] -= 1;
-			if deleted_char == #char "\n"
-			{
-				merge_current_line_with_next_one (buffer);
-			}
+		// Update line cache
+		lines[line_index] -= 1;
+		if deleted_char == #char "\n"
+		{
+			merge_current_line_with_next_one (buffer);
+		}
 #if delete_crlf
 {
-			if deleted_char == #char "\r"	// Handle CRLF
-			{
-				delete_selection (buffer);
-			}
-}
-		}
-
-		/* @Todo
-		while selection < 0
+		if deleted_char == #char "\r"	// Handle CRLF
 		{
-			select_backward (buffer);
-			gap += 1;
+			delete_at_cursor (buffer);
 		}
+}
+	}
 
-		while selection > 0
+	if cursor < gap_buffer_count (buffer) || selection != 0
+	{
+		if selection <= 0
+		{
+			delete_helper (buffer, delete_crlf);
+		}
+		else if selection > 0
 		{
 			selection -= 1;
-			gap += 1;
+			delete_helper (buffer, delete_crlf);
 		}
-		*/
 
 		return true;
 	}
@@ -227,13 +222,39 @@ delete_selection :: (using buffer : *Gap_Buffer, $delete_crlf := true) -> bool
 	return false;
 }
 
-move_cursor_forward :: (using buffer : *Gap_Buffer, clear_selection := true) -> bool
+delete_selection :: (using buffer : *Gap_Buffer, $delete_crlf := true) -> bool
+{
+	if cursor < gap_buffer_count (buffer) || selection != 0
+	{
+		if selection == 0
+		{
+			delete_at_cursor (buffer, delete_crlf);
+		}
+
+		while selection < 0
+		{
+			select_backward (buffer);
+			delete_at_cursor (buffer, delete_crlf);
+		}
+
+		while selection > 0
+		{
+			delete_at_cursor (buffer, delete_crlf);
+		}
+
+		return true;
+	}
+
+	return false;
+}
+
+move_cursor_forward :: (using buffer : *Gap_Buffer, clear_selection := true) -> bool, bytes_skipped : s64
 {
 	if selection != 0 && clear_selection
 	{
 		selection = 0;
 
-		return true;
+		return true, 0;
 	}
 
 	if cursor < gap_buffer_count (buffer)
@@ -259,21 +280,22 @@ move_cursor_forward :: (using buffer : *Gap_Buffer, clear_selection := true) -> 
 		else if char == #char "\r"	// Handle CRLF
 		{
 			move_cursor_forward (buffer, clear_selection);
+			size += 1;
 		}
 
-		return true;
+		return true, size;
 	}
 
-	return false;
+	return false, 0;
 }
 
-move_cursor_backward :: (using buffer : *Gap_Buffer, clear_selection := true) -> bool
+move_cursor_backward :: (using buffer : *Gap_Buffer, clear_selection := true) -> bool, bytes_skipped : s64
 {
 	if selection != 0 && clear_selection
 	{
 		selection = 0;
 
-		return true;
+		return true, 0;
 	}
 
 	if cursor > 0
@@ -297,29 +319,41 @@ move_cursor_backward :: (using buffer : *Gap_Buffer, clear_selection := true) ->
 			line_index -= 1;
 			column_index = lines[line_index] - 1;
 			// Handle CRLF
-			if cursor > 0 && data[cursor - 1] == #char "\r" then move_cursor_backward (buffer, clear_selection);
+			if cursor > 0 && data[cursor - 1] == #char "\r"
+			{
+				move_cursor_backward (buffer, clear_selection);
+				size += 1;
+			}
 		}
 
-		return true;
+		return true, size;
 	}
 
-	return false;
+	return false, 0;
 }
 
-skip_word_forward :: (using buffer : *Gap_Buffer) -> bool
+skip_word_forward :: (using buffer : *Gap_Buffer, select := false) -> bool
 {
 	if cursor < gap_buffer_count (buffer)
 	{
 		char := data[cursor + gap];
-		move_cursor_forward (buffer);
+		if select then select_forward (buffer);
+		else move_cursor_forward (buffer);
+
 		if is_space (char)
 		{
 			while cursor < gap_buffer_count (buffer) && is_space (data[cursor + gap])
-				move_cursor_forward (buffer);
+			{
+				if select then select_forward (buffer);
+				else move_cursor_forward (buffer);
+			}
 		}
 
 		while cursor < gap_buffer_count (buffer) && !is_space (data[cursor + gap])
-			move_cursor_forward (buffer);
+		{
+			if select then select_forward (buffer);
+			else move_cursor_forward (buffer);
+		}
 
 		return true;
 	}
@@ -327,21 +361,29 @@ skip_word_forward :: (using buffer : *Gap_Buffer) -> bool
 	return false;
 }
 
-skip_word_backward :: (using buffer : *Gap_Buffer) -> bool
+skip_word_backward :: (using buffer : *Gap_Buffer, select := false) -> bool
 {
 	if cursor > 0
 	{
 		char := data[cursor];
-		move_cursor_backward (buffer);
+		if select then select_backward (buffer);
+		else move_cursor_backward (buffer);
+		
 		if is_space (char)
 		{
 			while cursor > 0 && is_space (data[cursor])
-				move_cursor_backward (buffer);
+			{
+				if select then select_backward (buffer);
+				else move_cursor_backward (buffer);
+			}
 		}
 
 		while cursor > 0 && !is_space (data[cursor])
-			move_cursor_backward (buffer);
-		
+		{
+			if select then select_backward (buffer);
+			else move_cursor_backward (buffer);
+		}
+
 		return true;
 	}
 
@@ -353,9 +395,7 @@ skip_word_backward :: (using buffer : *Gap_Buffer) -> bool
 move_line_up :: (using buffer : *Gap_Buffer, eol_sequence : string) -> bool
 {
 	if line_index == 0 then return false;
-	// @Todo (stefan)
-	//if line_index == lines.count - 1 then return false;
-
+	
 	// Strategy:
 	// * Save the current line into a buffer while deleting all the characters,
 	// * Move the cursor up,
@@ -446,82 +486,104 @@ move_line_down :: (using buffer : *Gap_Buffer, eol_sequence : string) -> bool
 	return true;
 }
 
-move_cursor_to_column :: (using buffer : *Gap_Buffer, column : s64) -> bool
+move_cursor_to_column :: (using buffer : *Gap_Buffer, column : s64, select := false) -> bool
 {
 	if column_index == column then return false;
 
 	while column_index < column && !is_at_eol (buffer)
-		move_cursor_forward (buffer);
+	{
+		if select then select_forward (buffer);
+		else move_cursor_forward (buffer);
+	}
 
 	while column_index > column && column_index > 0
-		move_cursor_backward (buffer);
+	{
+		if select then select_backward (buffer);
+		else move_cursor_backward (buffer);
+	}
 
 	return true;
 }
 
-move_cursor_to_previous_line :: (using buffer : *Gap_Buffer) -> bool
+move_cursor_to_previous_line :: (using buffer : *Gap_Buffer, select := false) -> bool
 {
 	if line_index == 0 then return move_cursor_to_bol (buffer);
 
 	start_column_index := column_index;
-	move_cursor_to_bol (buffer);
-	move_cursor_backward (buffer);
-	move_cursor_to_column (buffer, start_column_index);
+	move_cursor_to_bol (buffer, select);
+	if select then select_backward (buffer);
+	else move_cursor_backward (buffer);
+	move_cursor_to_column (buffer, start_column_index, select);
 
 	return true;
 }
 
-move_cursor_to_next_line :: (using buffer : *Gap_Buffer) -> bool
+move_cursor_to_next_line :: (using buffer : *Gap_Buffer, select := false) -> bool
 {
 	if line_index == lines.count - 1 then return move_cursor_to_eol (buffer);
 	
 	start_column_index := column_index;
-	move_cursor_to_eol (buffer);
-	move_cursor_forward (buffer);
-	move_cursor_to_column (buffer, start_column_index);
+	move_cursor_to_eol (buffer, select);
+	if select then select_forward (buffer);
+	else move_cursor_forward (buffer);
+	move_cursor_to_column (buffer, start_column_index, select);
 
 	return true;
 }
 
-move_cursor_to_bol :: (using buffer : *Gap_Buffer) -> bool
+move_cursor_to_bol :: (using buffer : *Gap_Buffer, select := false) -> bool
 {
 	moved := false;
 	while column_index > 0
 	{
-		if move_cursor_backward (buffer) then moved = true;
+		if select
+		{
+			if select_backward (buffer) then moved = true;
+		}
+		else
+		{
+			if move_cursor_backward (buffer) then moved = true;
+		}
 	}
 
 	return moved;
 }
 
-move_cursor_to_eol :: (using buffer : *Gap_Buffer) -> bool
+move_cursor_to_eol :: (using buffer : *Gap_Buffer, select := false) -> bool
 {
 	moved := false;
 	while !is_at_eol (buffer)
 	{
-		if move_cursor_forward (buffer) then moved = true;
+		if select
+		{
+			if select_forward (buffer) then moved = true;
+		}
+		else
+		{
+			if move_cursor_forward (buffer) then moved = true;
+		}
 	}
 
 	return moved;
 }
 
+// @Todo (stefan): Unify move_cursor_forward and select_forward.
 select_forward :: (using buffer : *Gap_Buffer) -> bool
 {
-	// @Todo (stefan): Handle multibyte characters
 	cached_selection := selection;
-	modified := move_cursor_forward (buffer, false);
-	if modified then cached_selection -= 1;
+	modified, bytes_skipped := move_cursor_forward (buffer, false);
+	if modified then cached_selection -= bytes_skipped;
 	selection = cached_selection;
 
 	return modified;
 }
 
+// @Todo (stefan): Unify move_cursor_backward and select_backward.
 select_backward :: (using buffer : *Gap_Buffer) -> bool
 {
-	// @Todo (stefan): Handle multibyte characters
 	cached_selection := selection;
-	modified := move_cursor_backward (buffer, false);
-	if modified then cached_selection += 1;
+	modified, bytes_skipped := move_cursor_backward (buffer, false);
+	if modified then cached_selection += bytes_skipped;
 	selection = cached_selection;
 
 	return modified;

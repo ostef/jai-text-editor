@@ -27,11 +27,14 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 		if event.key_event.key_code ==
 		{
 		case .UP;
-			// @Todo (stefan): Handle selection
 			if event.key_event.mods == .ALT
 			{
 				eol_sequence := ifx newline == .CRLF then "\r\n" else "\n";
 				if move_line_up (*buffer, eol_sequence) then modified = true;
+			}
+			else if event.key_event.mods == .SHIFT
+			{
+				if move_cursor_to_previous_line (*buffer, select = true) then modified = true;
 			}
 			else if event.key_event.mods == .NONE
 			{
@@ -39,11 +42,14 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 			}
 
 		case .DOWN;
-			// @Todo (stefan): Handle selection
 			if event.key_event.mods == .ALT
 			{
 				eol_sequence := ifx newline == .CRLF then "\r\n" else "\n";
 				if move_line_down (*buffer, eol_sequence) then modified = true;
+			}
+			else if event.key_event.mods == .SHIFT
+			{
+				if move_cursor_to_next_line (*buffer, select = true) then modified = true;
 			}
 			else if event.key_event.mods == .NONE
 			{
@@ -55,9 +61,9 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 			{
 				if select_backward (*buffer) then modified = true;
 			}
-			else if event.key_event.mods == .CONTROL
+			else if (event.key_event.mods & .CONTROL)
 			{
-				if skip_word_backward (*buffer) then modified = true;
+				if skip_word_backward (*buffer, (event.key_event.mods & .SHIFT) == .SHIFT) then modified = true;
 			}
 			else if event.key_event.mods == .NONE
 			{
@@ -69,9 +75,9 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 			{
 				if select_forward (*buffer) then modified = true;
 			}
-			else if event.key_event.mods == .CONTROL
+			else if (event.key_event.mods & .CONTROL)
 			{
-				if skip_word_forward (*buffer) then modified = true;
+				if skip_word_forward (*buffer, (event.key_event.mods & .SHIFT) == .SHIFT) then modified = true;
 			}
 			else if event.key_event.mods == .NONE
 			{
@@ -275,6 +281,8 @@ calculate_drawn_text_bounds :: (using input : *Text_Input) -> Vec2 #must
 
 draw_text_input :: (using input : *Text_Input, position : Vec2, color : Vec4, clip_rect : Clip_Rect, draw_cursor := true)
 {
+	SELECTION_COLOR :: Vec4.{ 0.3, 0.5, 0.9, 0.7 };
+	
 	cursor_position : Vec2;
 	cursor_advance  := default_font.space_advance;
 
@@ -290,6 +298,15 @@ draw_text_input :: (using input : *Text_Input, position : Vec2, color : Vec4, cl
 		glyph := load_glyph (default_font, codepoint);
 		if !glyph then continue;
 		
+		// @Speed
+		if buffer.selection != 0 &&
+			(buffer.selection > 0 && i >= buffer.cursor && i < buffer.cursor + buffer.selection ||
+			buffer.selection  < 0 && i >= buffer.cursor + buffer.selection && i < buffer.cursor)
+		{
+			immediate_texture (0);
+			immediate_quad (pen.x, pen.y - default_font.ascender, pen.x + glyph.advance >> 6, pen.y - default_font.descender, SELECTION_COLOR);
+		}
+
 		if i == buffer.cursor
 		{
 			cursor_position = pen;
