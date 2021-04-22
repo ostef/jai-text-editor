@@ -33,7 +33,7 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 				eol_sequence := ifx newline == .CRLF then "\r\n" else "\n";
 				if move_line_up (*buffer, eol_sequence) then modified = true;
 			}
-			else
+			else if event.key_event.mods == .NONE
 			{
 				if move_cursor_to_previous_line (*buffer) then modified = true;
 			}
@@ -45,7 +45,7 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 				eol_sequence := ifx newline == .CRLF then "\r\n" else "\n";
 				if move_line_down (*buffer, eol_sequence) then modified = true;
 			}
-			else
+			else if event.key_event.mods == .NONE
 			{
 				if move_cursor_to_next_line (*buffer) then modified = true;
 			}
@@ -59,7 +59,7 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 			{
 				if skip_word_backward (*buffer) then modified = true;
 			}
-			else
+			else if event.key_event.mods == .NONE
 			{
 				if move_cursor_backward (*buffer) then modified = true;
 			}
@@ -73,7 +73,7 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 			{
 				if skip_word_forward (*buffer) then modified = true;
 			}
-			else
+			else if event.key_event.mods == .NONE
 			{
 				if move_cursor_forward (*buffer) then modified = true;
 			}

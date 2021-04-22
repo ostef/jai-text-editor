@@ -10,6 +10,7 @@ Screen :: struct
 
 SCROLL_SPEED :: 3;
 
+// @Todo (stefan): Handle multiple views of the same buffer
 Text_View :: struct
 {
 	position : Vec2;
@@ -134,21 +135,6 @@ screen_handle_event :: (using screen : *Screen, event : Event)
 				}
 			}
 		}
-
-	case .MOUSE_WHEEL;
-		if !is_inputting_command && text_views.count > 0
-		{
-			view := *text_views[active_view_index];
-			// Horizontal scroll
-			if event.mouse_wheel_event.x > 0 then view.scrolling.x -= SCROLL_SPEED;
-			else if event.mouse_wheel_event.x < 0 then view.scrolling.x += SCROLL_SPEED;
-			// Vertical scroll
-			if event.mouse_wheel_event.y > 0 then view.scrolling.y -= SCROLL_SPEED;
-			else if event.mouse_wheel_event.y < 0 then view.scrolling.y += SCROLL_SPEED;
-
-			view.scrolling.x = max (view.scrolling.x, 0);
-			view.scrolling.y = max (view.scrolling.y, 0);
-		}
 	}
 	
 	if is_inputting_command
@@ -159,6 +145,31 @@ screen_handle_event :: (using screen : *Screen, event : Event)
 
 text_view_handle_event :: (using view : *Text_View, event : Event)
 {
+	// Horizontal scroll
+	if event.type ==
+	{
+	case .KEY_PRESS; #through;
+	case .KEY_REPEAT;
+		if event.key_event.key_code ==
+		{
+		case .UP;
+			if event.key_event.mods == .CONTROL then scrolling.y -= 1;
+
+		case .DOWN;
+			if event.key_event.mods == .CONTROL then scrolling.y += 1;
+		}
+
+	case .MOUSE_WHEEL;
+		if event.mouse_wheel_event.x > 0 then scrolling.x -= SCROLL_SPEED;
+		else if event.mouse_wheel_event.x < 0 then scrolling.x += SCROLL_SPEED;
+		// Vertical scroll
+		if event.mouse_wheel_event.y > 0 then scrolling.y -= SCROLL_SPEED;
+		else if event.mouse_wheel_event.y < 0 then scrolling.y += SCROLL_SPEED;
+	}
+
+	scrolling.x = max (scrolling.x, 0);
+	scrolling.y = max (scrolling.y, 0);
+
 	if text_input_handle_event (*input, event) then scroll_to_cursor = true;
 }
 
@@ -230,11 +241,35 @@ split_active_view :: (using screen : *Screen, filename := "")
 	active_view_index += 1;
 
 	if filename
-	{
-		ok := load_file_into_buffer (*view.input, filename);
+		load_file_into_active_text_view (screen, filename);
+}
 
-		if ok then view.filename = clone_string (filename, heap_allocator);
+load_file_into_active_text_view :: (using screen : *Screen, filename : string) -> bool
+{
+	if text_views.count == 0 then return false;
+	if !filename then return false;
+
+	for * view, i : text_views
+	{
+		if view.filename == filename
+		{
+			print_to_screen (screen, "Could not open file '%' because it is already opened in another buffer.", filename);
+
+			return false;
+		}
 	}
+
+	view := *text_views[active_view_index];
+	ok := load_file_into_buffer (*view.input, filename);
+	if ok
+	{
+		set_cursor (*view.input.buffer, 0);
+		view.scroll_to_cursor = true;
+	}
+
+	if ok then view.filename = clone_string (filename, heap_allocator);
+
+	return ok;
 }
 
 close_active_view :: (using screen : *Screen)

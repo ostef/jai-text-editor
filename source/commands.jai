@@ -116,47 +116,16 @@ command_split :: (using screen : *Screen, filename : string @Optional )
 	split_active_view (screen);
 
 	if filename
-	{
-		view := *text_views[active_view_index];
-		ok := load_file_into_buffer (*view.input, filename);
-		set_cursor (*view.input.buffer, 0);
-		view.scroll_to_cursor = true;
-
-		if ok
-		{
-			print_to_screen (screen, "Split active text view with file '%'.", filename);
-			view.filename = clone_string (filename, heap_allocator);
-		}
-		else
-		{
-			print_to_screen (screen, "Split active text view, but could not open file '%'.", filename);
-		}
-	}
+		load_file_into_active_text_view (screen, filename);
 	else
-	{
 		print_to_screen (screen, "Split active text view.");
-	}
 }
 @Command @Shortcut(CTRL+H)
 
 // Open the specified file into the active text view. If the file does not exist, create a new file on disk when it is saved for the first time.
 command_open :: (using screen : *Screen, filename : string)
 {
-	if text_views.count == 0 then split_active_view (screen);
-	view := *text_views[active_view_index];
-	ok := load_file_into_buffer (*view.input, filename);
-	set_cursor (*view.input.buffer, 0);
-	view.scroll_to_cursor = true;
-
-	if ok
-	{
-		print_to_screen (screen, "Opened file '%' into buffer.", filename);
-		view.filename = clone_string (filename, heap_allocator);
-	}
-	else
-	{
-		print_to_screen (screen, "Could not open file '%' into buffer.", filename);
-	}
+	load_file_into_active_text_view (screen, filename);
 }
 @Command @Shortcut(CTRL+O)
 
