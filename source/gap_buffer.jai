@@ -85,7 +85,7 @@ merge_current_line_with_next_one :: (using buffer : *Gap_Buffer)
 
 #scope_export
 
-insert_at_cursor :: (using buffer : *Gap_Buffer, char : u8)
+insert_at_cursor :: (using buffer : *Gap_Buffer, char : u8, $auto_tab := false)
 {
 	if gap == 0 then grow_gap_buffer (buffer, 2);
 	if selection != 0 then delete_selection (buffer);
@@ -107,21 +107,37 @@ insert_at_cursor :: (using buffer : *Gap_Buffer, char : u8)
 		split_current_line (buffer);
 		line_index += 1;
 		column_index = 0;
+
+#if auto_tab
+{
+		// Scan current line for leading tabs and insert the same number of tabs at the beginning of the new line
+		move_cursor_to_previous_line (buffer);
+		leading_tabs := 0;
+		for :bol_to_eol codepoint, i : buffer
+		{
+			if codepoint == #char "\t" then leading_tabs += 1;
+			else break;
+		}
+
+		move_cursor_to_next_line (buffer);
+		for i : 0..leading_tabs - 1
+			insert_at_cursor (buffer, #char "\t");
+}
 	}
 }
 
-insert_at_cursor :: inline (using buffer : *Gap_Buffer, codepoint : u32)
+insert_at_cursor :: inline (using buffer : *Gap_Buffer, codepoint : u32, $auto_tab := false)
 {
 	utf8 : [4]u8;
 	size := utf8_encode (utf8, codepoint);
 	for i : 0..size - 1
-		insert_at_cursor (buffer, utf8[i]);
+		insert_at_cursor (buffer, utf8[i], auto_tab);
 }
 
-insert_at_cursor :: inline (using buffer : *Gap_Buffer, str : string)
+insert_at_cursor :: inline (using buffer : *Gap_Buffer, str : string, $auto_tab := false)
 {
 	for i : 0..str.count - 1
-		insert_at_cursor (buffer, str[i]);
+		insert_at_cursor (buffer, str[i], auto_tab);
 }
 
 backspace_selection :: (using buffer : *Gap_Buffer, $backspace_crlf := true) -> bool
@@ -662,4 +678,28 @@ utf32_for_expansion_helper :: (using buffer : *Gap_Buffer, body : Code, flags : 
 		#insert (remove=#assert false "Gap buffer remove while iterating as utf32 is not yet implemented.", continue={ it_index += xx size; continue; }) body;
 		it_index += xx size;
 	}
+}
+
+#scope_export
+
+bol_to_eol :: (using buffer : *Gap_Buffer, body : Code, flags : For_Flags) #expand
+{
+	by_pointer :: (flags & .POINTER) == .POINTER;
+	reverse    :: (flags & .REVERSE) == .REVERSE;
+	#assert !by_pointer "Gap buffer line iteration cannot be by pointer, because the data does not map 1:1 since it is converted to utf32.";
+	#assert !reverse "Gap buffer line reverse iteration is not yet implemented.";
+
+	str : string = ---;
+	str.data  = data;
+	str.count = count;
+	start_column_index := column_index;
+	move_cursor_to_bol (buffer);
+	while !is_at_eol (buffer)
+	{
+		`it := utf8_rune_at_byte (str, cursor + gap);
+		`it_index := column_index;
+		#insert (remove=#assert false "Gap buffer remove while iterating line is not yet implemented.") body;
+		move_cursor_forward (buffer);
+	}
+	move_cursor_to_column (buffer, start_column_index);
 }

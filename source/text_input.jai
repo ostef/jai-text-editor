@@ -89,8 +89,8 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 			{
 				if #complete newline ==
 				{
-				case .LF;   insert_at_cursor (*buffer, "\n");
-				case .CRLF; insert_at_cursor (*buffer, "\r\n");
+				case .LF;   insert_at_cursor (*buffer, "\n", auto_tab = true);
+				case .CRLF; insert_at_cursor (*buffer, "\r\n", auto_tab = true);
 				}
 
 				modified = true;
