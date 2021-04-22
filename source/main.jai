@@ -32,6 +32,8 @@ handle_window_event :: (using event : Event)
 	if running then screen_handle_event (*screen, event);
 }
 
+// @Todo (stefan): Global config that reads from a file.
+
 main :: ()
 {
 	context.allocator = heap_allocator;
