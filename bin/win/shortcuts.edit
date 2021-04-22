@@ -5,6 +5,7 @@ save_as CTRL+ALT+S
 save_all CTRL+SHIFT+S
 close CTRL+Q
 close_all CTRL+SHIFT+Q
+line CTRL+L
 grow ALT+RIGHT
 shrink ALT+LEFT
-line CTRL+L
+equalize CTRL+SPACE

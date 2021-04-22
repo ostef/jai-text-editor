@@ -21,10 +21,7 @@ parse_shortcut :: (str : string) -> Shortcut #must, ok : bool
 		case "CTRL";  result.mods |= .CONTROL;
 		case "SHIFT"; result.mods |= .SHIFT;
 		case "ALT";   result.mods |= .ALT;
-		case;
-			if it.count != 1 then return result, false;
-			if it[0] < #char "A" || it[0] > #char "Z" then return result, false;
-			result.key = xx it[0];
+		case;         result.key = enum_value (Key_Code, it);
 		}
 	}
 
