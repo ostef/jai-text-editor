@@ -187,6 +187,8 @@ generate_init_commands_proc :: () -> string #must
 		first_optional_argument := -1;
 		for arg, i : header.arguments
 		{
+			// @Todo (stefan): Remove the @Optional thing and check if the argument is optional
+			// by looking if the expressions array has things in it.
 			for arg.notes
 			{
 				if it.text == "Optional"
