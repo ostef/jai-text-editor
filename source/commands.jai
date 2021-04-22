@@ -199,27 +199,31 @@ command_scratch :: (using screen : *Screen)
 
 #scope_file
 
-grow_shrink_helper :: (using screen : *Screen, amount : s64) -> bool
+resize_helper :: (using screen : *Screen, amount : s64, left : bool) -> bool
 {
 	if text_views.count <= 1 then return false;
 	// @Todo (stefan): Handle too small or too big 'amount'.
 
-	previous_view, next_view : *Text_View;
 	view := *text_views[active_view_index];
-
-	if active_view_index > 0 then previous_view = *text_views[active_view_index - 1];
-	if active_view_index < text_views.count - 1 then next_view = *text_views[active_view_index + 1];
-
-	if previous_view
+	if left
 	{
-		previous_view.w -= default_font.space_advance * 0.5 * amount;
+		if active_view_index != 0
+		{
+			previous_view := *text_views[active_view_index - 1];
+			previous_view.w -= default_font.space_advance * amount;
+			view.x -= default_font.space_advance * amount;
+			view.w += default_font.space_advance * amount;
+		}
 	}
-	view.x -= default_font.space_advance * 0.5 * amount;
-	view.w += default_font.space_advance * amount;
-	if next_view
+	else
 	{
-		next_view.x += default_font.space_advance * 0.5 * amount;
-		next_view.w -= default_font.space_advance * 0.5 * amount;
+		if active_view_index != text_views.count - 1
+		{
+			next_view := *text_views[active_view_index + 1];
+			view.w += default_font.space_advance * amount;
+			next_view.x += default_font.space_advance * amount;
+			next_view.w -= default_font.space_advance * amount;
+		}
 	}
 
 	return true;
@@ -227,17 +231,31 @@ grow_shrink_helper :: (using screen : *Screen, amount : s64) -> bool
 
 #scope_export
 
-command_grow :: (using screen : *Screen, amount : u64 @Optional )
+command_lgrow :: (using screen : *Screen, amount : u64 @Optional )
 {
 	if amount == 0 then amount = 1;
-	if grow_shrink_helper (screen, xx amount) then print_to_screen (screen, "Grew active text view.");
+	if resize_helper (screen, xx amount, true) then print_to_screen (screen, "Grew active text view.");
 }
 @Command
 
-command_shrink :: (using screen : *Screen, amount : u64 @Optional )
+command_rgrow :: (using screen : *Screen, amount : u64 @Optional )
 {
 	if amount == 0 then amount = 1;
-	if grow_shrink_helper (screen, -cast (s64) amount) then print_to_screen (screen, "Shrank active text view.");
+	if resize_helper (screen, xx amount, false) then print_to_screen (screen, "Grew active text view.");
+}
+@Command
+
+command_lshrink :: (using screen : *Screen, amount : u64 @Optional )
+{
+	if amount == 0 then amount = 1;
+	if resize_helper (screen, -cast (s64) amount, true) then print_to_screen (screen, "Shrank active text view.");
+}
+@Command
+
+command_rshrink :: (using screen : *Screen, amount : u64 @Optional )
+{
+	if amount == 0 then amount = 1;
+	if resize_helper (screen, -cast (s64) amount, false) then print_to_screen (screen, "Shrank active text view.");
 }
 @Command
 
