@@ -1,5 +1,11 @@
 #import "Circular_Stack";
 
+EOL_Sequence :: enum
+{
+	LF;
+	CRLF;
+}
+
 Gap_Buffer :: struct
 {
 	data   : *u8;
@@ -9,6 +15,7 @@ Gap_Buffer :: struct
 	lines  : [..]u32;	// Number of utf32 codepoints for each line
 	line_index, column_index : s64;	// Starts at 0
 	selection : s64;
+	eol_sequence : EOL_Sequence;
 
 	undo_stack : Circular_Stack (Text_Operation);
 	redo_stack : Circular_Stack (Text_Operation);
@@ -91,6 +98,45 @@ clone_to_string :: (buffer : Gap_Buffer, allocator : Allocator, allocator_data :
 	return result;
 }
 
+detect_eol_sequence :: (using buffer : *Gap_Buffer) -> EOL_Sequence, correct : bool
+{
+	line := 1;
+	previous_char_was_cr := false;
+	correct := true;
+	for :utf32 codepoint, i : buffer
+	{
+		if codepoint == #char "\r"
+		{
+			if line != 1 && eol_sequence != .CRLF
+			{
+				println ("Inconsistent line endings at line %.", line);
+				correct = false;
+			}
+				
+			eol_sequence = .CRLF;
+			previous_char_was_cr = true;
+		}
+		else if codepoint == #char "\n"
+		{
+			if eol_sequence == .CRLF && !previous_char_was_cr
+			{
+				println ("Inconsistent line endings at line %.", line);
+				correct = false;
+			}
+
+			line += 1;
+		}
+		else if previous_char_was_cr
+		{
+			println ("Lonely CR character at line %.", line);
+		}
+
+		if codepoint != #char "\r" then previous_char_was_cr = false;
+	}
+
+	return eol_sequence, correct;
+}
+
 #scope_file
 
 split_current_line :: (using buffer : *Gap_Buffer)
@@ -117,6 +163,7 @@ insert_at_cursor :: (using buffer : *Gap_Buffer, char : u8, $auto_tab := false)
 {
 	if gap == 0 then grow_gap_buffer (buffer, 2);
 	if selection != 0 then delete_selection (buffer);
+	if char == #char "\n" && eol_sequence == .CRLF then insert_at_cursor (buffer, #char "\r");
 
 	data[cursor] = char;
 	cursor += 1;
@@ -418,9 +465,7 @@ skip_word_backward :: (using buffer : *Gap_Buffer, select := false) -> bool
 	return false;
 }
 
-// @Cleanup (stefan): Ideally we don't want to have to pass eol_sequence. To prevent that,
-// we could move the EOL sequence info from text input to here.
-move_line_up :: (using buffer : *Gap_Buffer, eol_sequence : string, buffer_operation := true) -> bool
+move_line_up :: (using buffer : *Gap_Buffer, buffer_operation := true) -> bool
 {
 	if line_index == 0 then return false;
 
@@ -451,15 +496,14 @@ move_line_up :: (using buffer : *Gap_Buffer, eol_sequence : string, buffer_opera
 		{
 			eol = is_at_eol (buffer, ignore_cr = true);
 			if is_last_line && eol then break;
-			push_to_array (*line_buffer, data[cursor + gap]);
+			if data[cursor + gap] != #char "\r" then push_to_array (*line_buffer, data[cursor + gap]);
 			delete_selection (buffer, delete_crlf = false);
 		}
 	}
 	
 	if is_last_line
 	{
-		for i : 0..eol_sequence.count - 1
-			push_to_array (*line_buffer, eol_sequence[i]);
+		push_to_array (*line_buffer, #char "\n");
 		// Remove the EOL of the previous line, so it becomes the last line
 		backspace_selection (buffer);
 		// Start inserting the characters back from the beginning of the line
@@ -479,7 +523,7 @@ move_line_up :: (using buffer : *Gap_Buffer, eol_sequence : string, buffer_opera
 	return true;
 }
 
-move_line_down :: (using buffer : *Gap_Buffer, eol_sequence : string, buffer_operation := true) -> bool
+move_line_down :: (using buffer : *Gap_Buffer, buffer_operation := true) -> bool
 {
 	if line_index == lines.count - 1 then return false;
 
@@ -507,18 +551,15 @@ move_line_down :: (using buffer : *Gap_Buffer, eol_sequence : string, buffer_ope
 	while !eol
 	{
 		eol = is_at_eol (buffer, ignore_cr = true);
-		push_to_array (*line_buffer, data[cursor + gap]);
+		if data[cursor + gap] != #char "\r" then push_to_array (*line_buffer, data[cursor + gap]);
 		delete_selection (buffer, delete_crlf = false);
 	}
 
 	if move_to_last_line
 	{
 		move_cursor_to_eol (buffer);
-		for i : 0..eol_sequence.count - 1
-			insert_at_cursor (buffer, eol_sequence[i]);
-		
-		for i : 0..eol_sequence.count - 1
-			pop_from_array (*line_buffer);
+		insert_at_cursor (buffer, #char "\n");
+		pop_from_array (*line_buffer);
 	}
 	else
 	{
@@ -674,13 +715,11 @@ undo_operation :: (using buffer : *Gap_Buffer) -> bool
 	case .DELETE;
 	case .MOVE_LINE_UP;
 		move_cursor_to_line (buffer, op.line_index - 1);
-		// @Todo (stefan): Move EOL info to Gap_Buffer.
-		move_line_down (buffer, "\r\n", buffer_operation = false);
+		move_line_down (buffer, buffer_operation = false);
 
 	case .MOVE_LINE_DOWN;
 		move_cursor_to_line (buffer, op.line_index + 1);
-		// @Todo (stefan): Move EOL info to Gap_Buffer.
-		move_line_up (buffer, "\r\n", buffer_operation = false);
+		move_line_up (buffer, buffer_operation = false);
 	}
 
 	return true;
@@ -699,13 +738,11 @@ redo_operation :: (using buffer : *Gap_Buffer) -> bool
 	case .DELETE;
 	case .MOVE_LINE_UP;
 		move_cursor_to_line (buffer, op.line_index);
-		// @Todo (stefan): Move EOL info to Gap_Buffer.
-		move_line_up (buffer, "\r\n", buffer_operation = false);
+		move_line_up (buffer, buffer_operation = false);
 
 	case .MOVE_LINE_DOWN;
 		move_cursor_to_line (buffer, op.line_index);
-		// @Todo (stefan): Move EOL info to Gap_Buffer.
-		move_line_down (buffer, "\r\n", buffer_operation = false);
+		move_line_down (buffer, buffer_operation = false);
 	}
 
 	return true;

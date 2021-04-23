@@ -544,6 +544,6 @@ draw_text_view :: (using view : *Text_View, draw_cursor : bool)
 	info_text_position.y = cast (f32) info_bar.y1 + INFO_TEXT_PADDING;
 	view_name := ifx filename then filename else "UNNAMED";
 	info_str := stringf (temp_allocator, "% - Ln %, Col % - % line(s) - UTF8 - % - % B",
-		view_name, input.buffer.line_index + 1, input.buffer.column_index + 1, input.buffer.lines.count, input.newline, gap_buffer_count (input.buffer));
+		view_name, input.buffer.line_index + 1, input.buffer.column_index + 1, input.buffer.lines.count, input.buffer.eol_sequence, gap_buffer_count (input.buffer));
 	draw_text (default_font, info_str, info_text_position, VERY_DARK_GRAY, view_area);
 }

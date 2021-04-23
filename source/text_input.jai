@@ -6,14 +6,7 @@ Text_Input :: struct
 		DISALLOW_TABS;
 	}
 
-	Newline_Policy :: enum
-	{
-		LF;
-		CRLF;
-	}
-
 	flags   : Flags;
-	newline : Newline_Policy;
 	buffer  : Gap_Buffer;
 }
 
@@ -29,8 +22,7 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 		case .UP;
 			if event.key_event.mods == .ALT
 			{
-				eol_sequence := ifx newline == .CRLF then "\r\n" else "\n";
-				if move_line_up (*buffer, eol_sequence) then modified = true;
+				if move_line_up (*buffer) then modified = true;
 			}
 			else if event.key_event.mods == .SHIFT
 			{
@@ -44,8 +36,7 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 		case .DOWN;
 			if event.key_event.mods == .ALT
 			{
-				eol_sequence := ifx newline == .CRLF then "\r\n" else "\n";
-				if move_line_down (*buffer, eol_sequence) then modified = true;
+				if move_line_down (*buffer) then modified = true;
 			}
 			else if event.key_event.mods == .SHIFT
 			{
@@ -105,13 +96,7 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 			{
 				ctrl_shift := (event.key_event.mods & .CONTROL) && (event.key_event.mods & .SHIFT) && !(event.key_event.mods & .ALT);
 				if ctrl_shift then move_cursor_to_bol (*buffer);
-
-				if #complete newline ==
-				{
-				case .LF;   insert_at_cursor (*buffer, "\n", auto_tab = true);
-				case .CRLF; insert_at_cursor (*buffer, "\r\n", auto_tab = true);
-				}
-
+				insert_at_cursor (*buffer, #char "\n", auto_tab = true);
 				if ctrl_shift then move_cursor_to_previous_line (*buffer);
 
 				modified = true;
@@ -154,34 +139,7 @@ load_file_into_buffer :: (using input : *Text_Input, filename : string) -> bool
 	
 	clear_gap_buffer (*buffer);
 	insert_at_cursor (*buffer, file_contents);
-	
-	// Detect newline policy
-	newline = .LF;
-	str := utf8 (file_contents);
-
-	// @Speed (stefan): Do this above when populating the gap buffer maybe ?
-	line := 1;
-	previous_char_was_cr := false;
-	for char, i : str
-	{
-		if char == #char "\r"
-		{
-			if line != 1 && newline != .CRLF then println ("Inconsistent line endings in file '%' (line %).", filename, line);
-			newline = .CRLF;
-			previous_char_was_cr = true;
-		}
-		else if char == #char "\n"
-		{
-			if newline == .CRLF && !previous_char_was_cr then println ("Inconsistent line endings in file '%' (line %).", filename, line);
-			line += 1;
-		}
-		else if previous_char_was_cr
-		{
-			println ("Lonely CR character in file '%' (line %).", filename, line);
-		}
-
-		if char != #char "\r" then previous_char_was_cr = false;
-	}
+	eol, correct := detect_eol_sequence (*buffer);
 
 	return true;
 }
