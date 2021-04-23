@@ -335,7 +335,7 @@ command_to_crlf :: (using screen : *Screen)
 
 	view := *text_views[active_view_index];
 	buffer := *view.input.buffer;
-	if view.input.newline == .CRLF
+	if view.input.buffer.eol_sequence == .CRLF
 	{
 		print_to_screen (screen, "Buffer is already CRLF.");
 
@@ -352,7 +352,7 @@ command_to_crlf :: (using screen : *Screen)
 		}
 		move_cursor_forward (buffer);
 	}
-	view.input.newline = .CRLF;
+	view.input.buffer.eol_sequence = .CRLF;
 	view.scroll_to_cursor = true;
 
 	print_to_screen (screen, "Converted buffer line endings to CRLF.");
@@ -365,7 +365,7 @@ command_to_lf :: (using screen : *Screen)
 
 	view := *text_views[active_view_index];
 	buffer := *view.input.buffer;
-	if view.input.newline == .LF
+	if view.input.buffer.eol_sequence == .LF
 	{
 		print_to_screen (screen, "Buffer is already LF.");
 
@@ -383,7 +383,7 @@ command_to_lf :: (using screen : *Screen)
 		}
 		move_cursor_forward (buffer);
 	}
-	view.input.newline = .LF;
+	view.input.buffer.eol_sequence = .LF;
 	view.scroll_to_cursor = true;
 
 	print_to_screen (screen, "Converted buffer line endings to LF.");
