@@ -52,6 +52,7 @@ init_gap_buffer :: (buffer : *Gap_Buffer, capacity : s64, allocator : Allocator,
 	buffer.selection = 0;
 	buffer.lines = make_array (u32, 5000, heap_allocator);
 	push_to_array (*buffer.lines, 0);
+	buffer.eol_sequence = .LF;
 	buffer.line_index   = 0;
 	buffer.column_index = 0;
 	init_circular_stack (*buffer.undo_stack, MAX_UNDO, allocator, allocator_data);
@@ -68,6 +69,7 @@ reset_gap_buffer :: (using buffer : *Gap_Buffer)
 	cursor = 0;
 	gap    = 0;
 	reset_array (*lines);
+	eol_sequence = .LF;
 	line_index   = 0;
 	column_index = 0;
 	reset_circular_stack (*undo_stack);
@@ -80,6 +82,7 @@ clear_gap_buffer :: (using buffer : *Gap_Buffer)
 	gap    = count;
 	clear_array (*lines);
 	push_to_array (*buffer.lines, 0);
+	eol_sequence = .LF;
 	line_index   = 0;
 	column_index = 0;
 }
