@@ -40,8 +40,13 @@ Text_Operation :: struct
 	kind : Kind;
 	cursor : s64;
 	line_index : s64;
+	// @Memory @Cleanup (stefan): Currently, this is allocated on the heap. Ideally, we want a single linear buffer
+	// for every operation, and each operation has an offset and a count in that shared buffer. We can do this
+	// because the data for operation N won't be freed before the data for operation N+1, unless we overflow
+	// the circular stack.
 	buffer : []u8;
-	char   : u8;	// Because we obviously don't want to allocate when inserting/deleting a single char
+	// Because we obviously don't want to allocate when inserting/deleting a single char (might not be true if we do the shared buffer thing as described above).
+	char   : u8;
 }
 
 init_gap_buffer :: (buffer : *Gap_Buffer, capacity : s64, allocator : Allocator, allocator_data := null)
@@ -185,7 +190,7 @@ insert_at_cursor :: (using buffer : *Gap_Buffer, char : u8, buffer_operation := 
 		op.cursor     = cursor;
 		op.line_index = line_index;
 		op.char       = char;
-		push_text_operation (buffer, op);
+		push_undo_operation (buffer, op);
 	}
 
 	data[cursor] = char;
@@ -234,8 +239,24 @@ insert_at_cursor :: inline (using buffer : *Gap_Buffer, codepoint : u32, buffer_
 
 insert_at_cursor :: inline (using buffer : *Gap_Buffer, str : string, buffer_operation := true, $auto_tab := false)
 {
+	if str.count == 0 then return;
+
+	if buffer_operation
+	{
+		clear_redo_stack (buffer);
+		op : Text_Operation;
+		op.kind       = .INSERT;
+		op.cursor     = cursor;
+		op.line_index = line_index;
+		if str.count > 1
+			op.buffer = clone_to_array (str, heap_allocator);
+		else
+			op.char = str[0];
+		push_undo_operation (buffer, op);
+	}
+
 	for i : 0..str.count - 1
-		insert_at_cursor (buffer, str[i], buffer_operation, auto_tab);
+		insert_at_cursor (buffer, str[i], buffer_operation = false, auto_tab);
 }
 
 backspace_selection :: (using buffer : *Gap_Buffer, $backspace_crlf := true) -> bool
@@ -499,7 +520,7 @@ move_line_up :: (using buffer : *Gap_Buffer, buffer_operation := true) -> bool
 		op.kind       = .MOVE_LINE_UP;
 		op.cursor     = cursor;
 		op.line_index = line_index;
-		push_text_operation (buffer, op);
+		push_undo_operation (buffer, op);
 	}
 
 	// Strategy:
@@ -559,7 +580,7 @@ move_line_down :: (using buffer : *Gap_Buffer, buffer_operation := true) -> bool
 		op.kind       = .MOVE_LINE_DOWN;
 		op.cursor     = cursor;
 		op.line_index = line_index;
-		push_text_operation (buffer, op);
+		push_undo_operation (buffer, op);
 	}
 
 	// Strategy:
@@ -716,19 +737,16 @@ select_backward :: (using buffer : *Gap_Buffer) -> bool
 	return modified;
 }
 
-push_text_operation :: (using buffer : *Gap_Buffer, op : Text_Operation)
+push_undo_operation :: (using buffer : *Gap_Buffer, op : Text_Operation)
 {
 	overwrote, overwritten := push_to_stack (*undo_stack, op);
 	if overwrote then free (overwritten.buffer, heap_allocator);
 }
 
-clear_redo_stack :: inline (using buffer : *Gap_Buffer)
+push_redo_operation :: (using buffer : *Gap_Buffer, op : Text_Operation)
 {
-	while !is_empty (redo_stack)
-	{
-		op := pop_from_stack (*redo_stack);
-		free (op.buffer, heap_allocator);
-	}
+	overwrote, overwritten := push_to_stack (*redo_stack, op);
+	if overwrote then free (overwritten.buffer, heap_allocator);
 }
 
 clear_undo_stack :: inline (using buffer : *Gap_Buffer)
@@ -740,15 +758,35 @@ clear_undo_stack :: inline (using buffer : *Gap_Buffer)
 	}
 }
 
+clear_redo_stack :: inline (using buffer : *Gap_Buffer)
+{
+	while !is_empty (redo_stack)
+	{
+		op := pop_from_stack (*redo_stack);
+		free (op.buffer, heap_allocator);
+	}
+}
+
 undo_operation :: (using buffer : *Gap_Buffer) -> bool
 {
 	if is_empty (undo_stack) then return false;
 	op := pop_from_stack (*undo_stack);
-	push_to_stack (*redo_stack, op);
+	push_redo_operation (buffer, op);
 
 	if #complete op.kind ==
 	{
 	case .INSERT;
+		set_cursor (buffer, op.cursor);
+		if op.buffer.count != 0
+		{
+			for 0..op.buffer.count - 1
+				delete_at_cursor (buffer, delete_crlf = false);
+		}
+		else
+		{
+			delete_at_cursor (buffer, delete_crlf = false);
+		}
+
 	case .BACKSPACE;
 	case .DELETE;
 	case .MOVE_LINE_UP;
@@ -767,11 +805,17 @@ redo_operation :: (using buffer : *Gap_Buffer) -> bool
 {
 	if is_empty (redo_stack) then return false;
 	op := pop_from_stack (*redo_stack);
-	push_text_operation (buffer, op);
+	push_undo_operation (buffer, op);
 
 	if #complete op.kind ==
 	{
 	case .INSERT;
+		set_cursor (buffer, op.cursor);
+		if op.buffer.count != 0
+			insert_at_cursor (buffer, to_string (op.buffer), buffer_operation = false, auto_tab = false);
+		else
+			insert_at_cursor (buffer, op.char, buffer_operation = false, auto_tab = false);
+
 	case .BACKSPACE;
 	case .DELETE;
 	case .MOVE_LINE_UP;
