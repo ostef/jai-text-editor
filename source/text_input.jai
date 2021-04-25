@@ -85,6 +85,15 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 				if redo_operation (*buffer) then modified = true;
 			}
 
+		case .A;
+			// Select all
+			if event.key_event.mods == .CONTROL
+			{
+				set_cursor (*buffer, 0);
+				while buffer.cursor < gap_buffer_count (buffer)
+					select_forward (*buffer);
+			}
+
 		case .BACKSPACE;
 			if backspace_selection (*buffer) then modified = true;
 
