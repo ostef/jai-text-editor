@@ -47,6 +47,16 @@ Text_Operation :: struct
 	buffer : []u8;
 	// Because we obviously don't want to allocate when inserting/deleting a single char (might not be true if we do the shared buffer thing as described above).
 	char   : u8;
+
+
+	/* @Todo
+	count : s64;
+	union
+	{
+		data : *u8;
+		char : u8;
+	};
+	*/
 }
 
 init_gap_buffer :: (buffer : *Gap_Buffer, capacity : s64, allocator : Allocator, allocator_data := null)
@@ -261,17 +271,27 @@ insert_at_cursor :: inline (using buffer : *Gap_Buffer, str : string, buffer_ope
 		insert_at_cursor (buffer, str[i], buffer_operation = false, auto_tab);
 }
 
-backspace_selection :: (using buffer : *Gap_Buffer, $backspace_crlf := true) -> bool
+backspace_selection :: (using buffer : *Gap_Buffer, buffer_operation := true, $backspace_crlf := true, accumulator : *[..]u8 = null) -> bool
 {
-	if selection != 0 then return delete_selection (buffer, buffer_operation = false);
+	if selection != 0 then return delete_selection (buffer, buffer_operation);
 
 	if cursor > 0
 	{
+		start_cursor     := cursor;
+		start_line_index := line_index;
 		// Handle multibyte characters
-		char := data[cursor];
 		size := 1;
-		while cursor - size > 0 && !utf8_is_first_of_sequence (data[cursor - size])  size += 1;
-		
+		while cursor - size > 0 && !utf8_is_first_of_sequence (data[cursor - size])
+			size += 1;
+		assert (size <= 4, "UTF8 sequence size cannot be larger than 4 (got %).", size);
+
+		backspaced_chars : [..]u8;
+		if buffer_operation && !accumulator
+		{
+			accumulator = *backspaced_chars;
+			backspaced_chars = make_array (u8, 5, temp_allocator);
+		}
+
 		// Update line cache
 		lines[line_index] -= 1;
 		column_index -= 1;
@@ -291,9 +311,29 @@ backspace_selection :: (using buffer : *Gap_Buffer, $backspace_crlf := true) -> 
 				merge_current_line_with_next_one (buffer);
 #if backspace_crlf
 {
-				if cursor > 0 && data[cursor - 1] == #char "\r" then backspace_selection (buffer);
+				if cursor > 0 && data[cursor - 1] == #char "\r" then backspace_selection (buffer, buffer_operation = false, accumulator = accumulator);
 }
 			}
+		}
+
+		if accumulator
+		{
+			for i : 0..size - 1
+				push_to_array (accumulator, data[start_cursor - size + i]);
+		}
+
+		if buffer_operation
+		{
+			clear_redo_stack (buffer);
+			op : Text_Operation;
+			op.kind       = .BACKSPACE;
+			op.cursor     = start_cursor;
+			op.line_index = start_line_index;
+			if accumulator.count > 1
+				op.buffer = clone_array (<<accumulator, heap_allocator);
+			else
+				op.char = (<<accumulator)[0];
+			push_undo_operation (buffer, op);
 		}
 	}
 
@@ -355,8 +395,8 @@ delete_at_cursor :: (using buffer : *Gap_Buffer, buffer_operation := true, $dele
 		{
 			clear_redo_stack (buffer);
 			op : Text_Operation;
-			op.kind = .DELETE;
-			op.cursor = start_cursor;
+			op.kind       = .DELETE;
+			op.cursor     = start_cursor;
 			op.line_index = line_index;
 			if accumulator.count > 1
 				op.buffer = clone_array (<<accumulator, heap_allocator);
@@ -603,7 +643,7 @@ move_line_up :: (using buffer : *Gap_Buffer, buffer_operation := true) -> bool
 		if eol_sequence == .CRLF then push_to_array (*line_buffer, #char "\r");
 		push_to_array (*line_buffer, #char "\n");
 		// Remove the EOL of the previous line, so it becomes the last line
-		backspace_selection (buffer);
+		backspace_selection (buffer, buffer_operation = false);
 		// Start inserting the characters back from the beginning of the line
 		move_cursor_to_bol (buffer);
 	}
@@ -841,17 +881,20 @@ undo_operation :: (using buffer : *Gap_Buffer) -> bool
 		}
 
 	case .BACKSPACE;
+		size := op.buffer.count;
+		if size == 0 then size = 1;
+		set_cursor (buffer, op.cursor - size);
+		if op.buffer.count != 0
+			insert_at_cursor (buffer, to_string (op.buffer), buffer_operation = false, auto_tab = false);
+		else
+			insert_at_cursor (buffer, op.char, buffer_operation = false, auto_tab = false);
+
 	case .DELETE;
 		set_cursor (buffer, op.cursor);
 		if op.buffer.count != 0
-		{
 			insert_at_cursor (buffer, to_string (op.buffer), buffer_operation = false, auto_tab = false);
-		}
 		else
-		{
 			insert_at_cursor (buffer, op.char, buffer_operation = false, auto_tab = false);
-			move_cursor_backward (buffer);
-		}
 
 	case .MOVE_LINE_UP;
 		move_cursor_to_line (buffer, op.line_index - 1);
@@ -881,6 +924,17 @@ redo_operation :: (using buffer : *Gap_Buffer) -> bool
 			insert_at_cursor (buffer, op.char, buffer_operation = false, auto_tab = false);
 
 	case .BACKSPACE;
+		set_cursor (buffer, op.cursor);
+		if op.buffer.count != 0
+		{
+			for 0..op.buffer.count - 1
+				backspace_selection (buffer, buffer_operation = false, backspace_crlf = false);
+		}
+		else
+		{
+			backspace_selection (buffer, buffer_operation = false, backspace_crlf = false);
+		}
+
 	case .DELETE;
 		set_cursor (buffer, op.cursor);
 		if op.buffer.count != 0
@@ -909,22 +963,14 @@ set_cursor :: (using buffer : *Gap_Buffer, position : s64) -> bool
 {
 	assert (position >= 0 && position <= gap_buffer_count (buffer), "Invalid cursor position (got % but should be in [0, %]).", position, gap_buffer_count (buffer));
 
-	modified := false;
-	if selection != 0
-	{
-		selection = 0;
-		modified  = true;
-	}
-	
+	modified := selection != 0 || cursor != position;
+	if selection != 0 then selection = 0;
+
 	while cursor < position
-	{
-		if move_cursor_forward (buffer) then modified = true;
-	}
+		move_cursor_forward (buffer);
 
 	while cursor > position
-	{
-		if move_cursor_backward (buffer) then modified = true;
-	}
+		move_cursor_backward (buffer);
 
 	return modified;
 }
