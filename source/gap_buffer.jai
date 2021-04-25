@@ -300,35 +300,22 @@ backspace_selection :: (using buffer : *Gap_Buffer, $backspace_crlf := true) -> 
 	return false;
 }
 
-delete_at_cursor :: (using buffer : *Gap_Buffer, buffer_operation := true, $delete_crlf := true) -> bool
+// @Cleanup (stefan): Get rid of the ugly accumulator thing and find a more elegant solution.
+delete_at_cursor :: (using buffer : *Gap_Buffer, buffer_operation := true, $delete_crlf := true, accumulator : *[..]u8 = null) -> bool
 {
-	delete_helper :: inline (using buffer : *Gap_Buffer, buffer_operation : bool, $delete_crlf : bool)
+	delete_helper :: inline (using buffer : *Gap_Buffer, $delete_crlf : bool, accumulator : *[..]u8)
 	{
 		// Handle multibyte characters
 		deleted_char := data[cursor + gap];
 		size := utf8_sequence_size (deleted_char);
 		assert (cursor + size <= gap_buffer_count (buffer), "move_cursor_forward: UTF8 character is % bytes, but there is not enough space between the cursor and the end.", size);
-		
-		if buffer_operation
+
+		if accumulator
 		{
-			clear_redo_stack (buffer);
-			op : Text_Operation;
-			op.kind       = .DELETE;
-			op.cursor     = cursor;
-			op.line_index = line_index;
-			if size == 1
-			{
-				op.char = deleted_char;
-			}
-			else
-			{
-				op.buffer = alloc_array (u8, size, heap_allocator);
-				for i : 0..size - 1
-					op.buffer[i] = data[cursor + gap + i];
-			}
-			push_undo_operation (buffer, op);
+			for i : 0..size - 1
+				push_to_array (accumulator, data[cursor + gap + i]);
 		}
-	
+
 		gap += size;
 
 		// Update line cache
@@ -339,23 +326,43 @@ delete_at_cursor :: (using buffer : *Gap_Buffer, buffer_operation := true, $dele
 #if delete_crlf
 {
 		if deleted_char == #char "\r"	// Handle CRLF
-		{
-			// @Todo (stefan): Unify buffering this operation with the one above! 
-			delete_at_cursor (buffer, buffer_operation = false);
-		}
+			delete_at_cursor (buffer, false, delete_crlf, accumulator);
 }
 	}
 
 	if cursor < gap_buffer_count (buffer) || selection != 0
 	{
+		deleted_characters : [..]u8;
+		start_cursor     := cursor;
+		start_line_index := line_index;
+		if !accumulator && buffer_operation
+		{
+			accumulator = *deleted_characters;
+			deleted_characters = make_array (u8, 2, temp_allocator);
+		}
+		
 		if selection <= 0
 		{
-			delete_helper (buffer, buffer_operation, delete_crlf);
+			delete_helper (buffer, delete_crlf, accumulator);
 		}
 		else if selection > 0
 		{
 			selection -= 1;
-			delete_helper (buffer, buffer_operation, delete_crlf);
+			delete_helper (buffer, delete_crlf, accumulator);
+		}
+
+		if buffer_operation
+		{
+			clear_redo_stack (buffer);
+			op : Text_Operation;
+			op.kind = .DELETE;
+			op.cursor = start_cursor;
+			op.line_index = line_index;
+			if accumulator.count > 1
+				op.buffer = clone_array (<<accumulator, heap_allocator);
+			else
+				op.char = (<<accumulator)[0];
+			push_undo_operation (buffer, op);
 		}
 
 		return true;
@@ -373,16 +380,32 @@ delete_selection :: (using buffer : *Gap_Buffer, buffer_operation := true, $dele
 		{
 			delete_at_cursor (buffer, buffer_operation, delete_crlf);
 		}
-
-		while selection < 0
+		else
 		{
-			select_backward (buffer);
-			delete_at_cursor (buffer, buffer_operation, delete_crlf);
-		}
+			if buffer_operation
+			{
+				clear_redo_stack (buffer);
+				op : Text_Operation;
+				op.kind       = .DELETE;
+				op.cursor     = ifx selection < 0 then cursor + selection else cursor;
+				op.line_index = line_index;
+				selected := make_array (u8, abs (selection), heap_allocator);
+				for :selected_chars char, i : buffer
+					push_to_array (*selected, char);
+				op.buffer     = selected;
+				push_undo_operation (buffer, op);
+			}
 
-		while selection > 0
-		{
-			delete_at_cursor (buffer, buffer_operation, delete_crlf);
+			while selection < 0
+			{
+				select_backward (buffer);
+				delete_at_cursor (buffer, false, delete_crlf, null);
+			}
+
+			while selection > 0
+			{
+				delete_at_cursor (buffer, false, delete_crlf, null);
+			}
 		}
 
 		return true;
@@ -391,7 +414,7 @@ delete_selection :: (using buffer : *Gap_Buffer, buffer_operation := true, $dele
 	return false;
 }
 
-move_cursor_forward :: (using buffer : *Gap_Buffer, clear_selection := true) -> bool, bytes_skipped : s64
+move_cursor_forward :: (using buffer : *Gap_Buffer, clear_selection := true, $skip_crlf := true) -> bool, bytes_skipped : s64
 {
 	if selection != 0 && clear_selection
 	{
@@ -420,11 +443,14 @@ move_cursor_forward :: (using buffer : *Gap_Buffer, clear_selection := true) -> 
 			line_index  += 1;
 			column_index = 0;
 		}
-		else if char == #char "\r"	// Handle CRLF
+#if skip_crlf
+{
+		if char == #char "\r"	// Handle CRLF
 		{
-			move_cursor_forward (buffer, clear_selection);
-			size += 1;
+			_, skipped := move_cursor_forward (buffer, clear_selection, skip_crlf);
+			size += skipped;
 		}
+}
 
 		return true, size;
 	}
@@ -432,7 +458,7 @@ move_cursor_forward :: (using buffer : *Gap_Buffer, clear_selection := true) -> 
 	return false, 0;
 }
 
-move_cursor_backward :: (using buffer : *Gap_Buffer, clear_selection := true) -> bool, bytes_skipped : s64
+move_cursor_backward :: (using buffer : *Gap_Buffer, clear_selection := true, $skip_crlf := true) -> bool, bytes_skipped : s64
 {
 	if selection != 0 && clear_selection
 	{
@@ -461,12 +487,15 @@ move_cursor_backward :: (using buffer : *Gap_Buffer, clear_selection := true) ->
 		{
 			line_index -= 1;
 			column_index = lines[line_index] - 1;
+#if skip_crlf
+{
 			// Handle CRLF
 			if cursor > 0 && data[cursor - 1] == #char "\r"
 			{
-				move_cursor_backward (buffer, clear_selection);
-				size += 1;
+				_, skipped := move_cursor_backward (buffer, clear_selection, skip_crlf);
+				size += skipped;
 			}
+}
 		}
 
 		return true, size;
@@ -740,10 +769,10 @@ move_cursor_to_eol :: (using buffer : *Gap_Buffer, select := false) -> bool
 }
 
 // @Todo (stefan): Unify move_cursor_forward and select_forward.
-select_forward :: (using buffer : *Gap_Buffer) -> bool
+select_forward :: (using buffer : *Gap_Buffer, $skip_crlf := true) -> bool
 {
 	cached_selection := selection;
-	modified, bytes_skipped := move_cursor_forward (buffer, false);
+	modified, bytes_skipped := move_cursor_forward (buffer, false, skip_crlf);
 	if modified then cached_selection -= bytes_skipped;
 	selection = cached_selection;
 
@@ -751,10 +780,10 @@ select_forward :: (using buffer : *Gap_Buffer) -> bool
 }
 
 // @Todo (stefan): Unify move_cursor_backward and select_backward.
-select_backward :: (using buffer : *Gap_Buffer) -> bool
+select_backward :: (using buffer : *Gap_Buffer, $skip_crlf := true) -> bool
 {
 	cached_selection := selection;
-	modified, bytes_skipped := move_cursor_backward (buffer, false);
+	modified, bytes_skipped := move_cursor_backward (buffer, false, skip_crlf);
 	if modified then cached_selection += bytes_skipped;
 	selection = cached_selection;
 
@@ -817,8 +846,6 @@ undo_operation :: (using buffer : *Gap_Buffer) -> bool
 		if op.buffer.count != 0
 		{
 			insert_at_cursor (buffer, to_string (op.buffer), buffer_operation = false, auto_tab = false);
-			for 0..buffer.count - 1
-				move_cursor_backward (buffer);
 		}
 		else
 		{
@@ -858,7 +885,7 @@ redo_operation :: (using buffer : *Gap_Buffer) -> bool
 		set_cursor (buffer, op.cursor);
 		if op.buffer.count != 0
 		{
-			for 0..buffer.count - 1
+			for 0..op.buffer.count - 1
 				delete_at_cursor (buffer, buffer_operation = false, delete_crlf = false);
 		}
 		else
@@ -1000,7 +1027,8 @@ for_expansion_helper :: (using buffer : *Gap_Buffer, body : Code, flags : For_Fl
 
 	for <=reverse `it_index : start..end
 	{
-		it = (<<buffer)[it_index];
+		#if by_pointer it = *(<<buffer)[it_index];
+		else           it = (<<buffer)[it_index];
 		#insert (remove=#assert false "Gap buffer remove while iterating is not yet implemented.") body;
 	}
 }
@@ -1032,6 +1060,33 @@ utf32_for_expansion_helper :: (using buffer : *Gap_Buffer, body : Code, flags : 
 }
 
 #scope_export
+
+selected_chars :: (using buffer : *Gap_Buffer, body : Code, flags : For_Flags) #expand
+{
+	by_pointer :: (flags & .POINTER) == .POINTER;
+	reverse    :: (flags & .REVERSE) == .REVERSE;
+
+	#if reverse
+	{
+		start := ifx selection < 0 then cursor - 1 else cursor + selection - 1;
+		end   := ifx selection < 0 then cursor + selection else cursor;
+	}
+	else
+	{
+		start := ifx selection < 0 then cursor + selection else cursor;
+		end   := ifx selection < 0 then cursor - 1 else cursor + selection - 1;
+	}
+
+	#if by_pointer `it : *u8;
+	else           `it : u8;
+
+	for <=reverse `it_index : start..end
+	{
+		#if by_pointer it = *(<<buffer)[it_index];
+		else           it = (<<buffer)[it_index];
+		#insert (remove=#assert false "Gap buffer remove while iterating is not yet implemented.") body;
+	}
+}
 
 bol_to_eol :: (using buffer : *Gap_Buffer, body : Code, flags : For_Flags) #expand
 {
