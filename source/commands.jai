@@ -343,13 +343,10 @@ command_to_crlf :: (using screen : *Screen)
 	}
 
 	set_cursor (buffer, 0);
-	// @Untested (stefan): It SEEMS to work, but I haven't made sure that the CRs are inserted at the right place
 	while buffer.cursor < gap_buffer_count (buffer)
 	{
 		if buffer.data[buffer.cursor + buffer.gap] == #char "\n"
-		{
 			insert_at_cursor (buffer, #char "\r");
-		}
 		move_cursor_forward (buffer);
 	}
 	view.input.buffer.eol_sequence = .CRLF;
