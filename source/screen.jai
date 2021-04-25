@@ -420,9 +420,33 @@ draw_text_view :: (using view : *Text_View, draw_cursor : bool)
 	info_text_position   : Vec2;
 	defer immediate_noclip ();
 
-	line_number_builder := make_string_builder (1000, temp_allocator);
+	max_line_digit_count := 0;
+	{
+		temp := input.buffer.lines.count;
+		while temp
+		{
+			temp /= 10;
+			max_line_digit_count += 1;
+		}
+	}
+
+	line_number_builder := make_string_builder (max_line_digit_count * input.buffer.lines.count, temp_allocator);
 	for line : 1..input.buffer.lines.count
+	{
+		// Align right
+		digit_count := 0;
+		temp := line;
+		while temp
+		{
+			temp /= 10;
+			digit_count += 1;
+		}
+		leading_spaces := max_line_digit_count - digit_count;
+		for 0..leading_spaces - 1
+			print_to_builder (*line_number_builder, " ");
+			
 		print_line_to_builder (*line_number_builder, "%", line);
+	}
 
 	{
 		view_area.x1 = cast (s32) x;
