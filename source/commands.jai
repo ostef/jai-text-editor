@@ -354,6 +354,8 @@ command_to_crlf :: (using screen : *Screen)
 	}
 	view.input.buffer.eol_sequence = .CRLF;
 	view.scroll_to_cursor = true;
+	clear_undo_stack (buffer);
+	clear_redo_stack (buffer);
 
 	print_to_screen (screen, "Converted buffer line endings to CRLF.");
 }
@@ -385,6 +387,8 @@ command_to_lf :: (using screen : *Screen)
 	}
 	view.input.buffer.eol_sequence = .LF;
 	view.scroll_to_cursor = true;
+	clear_undo_stack (buffer);
+	clear_redo_stack (buffer);
 
 	print_to_screen (screen, "Converted buffer line endings to LF.");
 }

@@ -38,9 +38,10 @@ Text_Operation :: struct
 	}
 
 	kind : Kind;
-	buffer : []u8;
 	cursor : s64;
 	line_index : s64;
+	buffer : []u8;
+	char   : u8;	// Because we obviously don't want to allocate when inserting/deleting a single char
 }
 
 init_gap_buffer :: (buffer : *Gap_Buffer, capacity : s64, allocator : Allocator, allocator_data := null)
@@ -162,11 +163,30 @@ merge_current_line_with_next_one :: (using buffer : *Gap_Buffer)
 
 #scope_export
 
-insert_at_cursor :: (using buffer : *Gap_Buffer, char : u8, $auto_tab := false)
+insert_eol_at_cursor :: (using buffer : *Gap_Buffer, buffer_operation := true, $auto_tab := false)
+{
+	if #complete eol_sequence ==
+	{
+	case .CRLF; insert_at_cursor (buffer, "\r\n", buffer_operation, auto_tab);
+	case .LF;   insert_at_cursor (buffer, "\n",   buffer_operation, auto_tab);
+	}
+}
+
+insert_at_cursor :: (using buffer : *Gap_Buffer, char : u8, buffer_operation := true, $auto_tab := false)
 {
 	if gap == 0 then grow_gap_buffer (buffer, 2);
 	if selection != 0 then delete_selection (buffer);
-	if char == #char "\n" && eol_sequence == .CRLF then insert_at_cursor (buffer, #char "\r");
+
+	if buffer_operation
+	{
+		clear_redo_stack (buffer);
+		op : Text_Operation;
+		op.kind       = .INSERT;
+		op.cursor     = cursor;
+		op.line_index = line_index;
+		op.char       = char;
+		push_text_operation (buffer, op);
+	}
 
 	data[cursor] = char;
 	cursor += 1;
@@ -199,23 +219,23 @@ insert_at_cursor :: (using buffer : *Gap_Buffer, char : u8, $auto_tab := false)
 
 		move_cursor_to_next_line (buffer);
 		for i : 0..leading_tabs - 1
-			insert_at_cursor (buffer, #char "\t");
+			insert_at_cursor (buffer, #char "\t", buffer_operation);
 }
 	}
 }
 
-insert_at_cursor :: inline (using buffer : *Gap_Buffer, codepoint : u32, $auto_tab := false)
+insert_at_cursor :: inline (using buffer : *Gap_Buffer, codepoint : u32, buffer_operation := true, $auto_tab := false)
 {
 	utf8 : [4]u8;
 	size := utf8_encode (utf8, codepoint);
 	for i : 0..size - 1
-		insert_at_cursor (buffer, utf8[i], auto_tab);
+		insert_at_cursor (buffer, utf8[i], buffer_operation, auto_tab);
 }
 
-insert_at_cursor :: inline (using buffer : *Gap_Buffer, str : string, $auto_tab := false)
+insert_at_cursor :: inline (using buffer : *Gap_Buffer, str : string, buffer_operation := true, $auto_tab := false)
 {
 	for i : 0..str.count - 1
-		insert_at_cursor (buffer, str[i], auto_tab);
+		insert_at_cursor (buffer, str[i], buffer_operation, auto_tab);
 }
 
 backspace_selection :: (using buffer : *Gap_Buffer, $backspace_crlf := true) -> bool
@@ -479,7 +499,7 @@ move_line_up :: (using buffer : *Gap_Buffer, buffer_operation := true) -> bool
 		op.kind       = .MOVE_LINE_UP;
 		op.cursor     = cursor;
 		op.line_index = line_index;
-		push_undo_operation (buffer, op);
+		push_text_operation (buffer, op);
 	}
 
 	// Strategy:
@@ -499,13 +519,14 @@ move_line_up :: (using buffer : *Gap_Buffer, buffer_operation := true) -> bool
 		{
 			eol = is_at_eol (buffer, ignore_cr = true);
 			if is_last_line && eol then break;
-			if data[cursor + gap] != #char "\r" then push_to_array (*line_buffer, data[cursor + gap]);
+			push_to_array (*line_buffer, data[cursor + gap]);
 			delete_selection (buffer, delete_crlf = false);
 		}
 	}
 	
 	if is_last_line
 	{
+		if eol_sequence == .CRLF then push_to_array (*line_buffer, #char "\r");
 		push_to_array (*line_buffer, #char "\n");
 		// Remove the EOL of the previous line, so it becomes the last line
 		backspace_selection (buffer);
@@ -518,7 +539,8 @@ move_line_up :: (using buffer : *Gap_Buffer, buffer_operation := true) -> bool
 	}
 
 	for char, i : line_buffer
-		insert_at_cursor (buffer, char);
+		insert_at_cursor (buffer, char, buffer_operation = false, auto_tab = false);
+
 	// We inserted a EOL sequence, and so we need to go back to the previous line
 	move_cursor_to_previous_line (buffer);
 	move_cursor_to_column (buffer, start_column_index);
@@ -537,7 +559,7 @@ move_line_down :: (using buffer : *Gap_Buffer, buffer_operation := true) -> bool
 		op.kind       = .MOVE_LINE_DOWN;
 		op.cursor     = cursor;
 		op.line_index = line_index;
-		push_undo_operation (buffer, op);
+		push_text_operation (buffer, op);
 	}
 
 	// Strategy:
@@ -554,14 +576,14 @@ move_line_down :: (using buffer : *Gap_Buffer, buffer_operation := true) -> bool
 	while !eol
 	{
 		eol = is_at_eol (buffer, ignore_cr = true);
-		if data[cursor + gap] != #char "\r" then push_to_array (*line_buffer, data[cursor + gap]);
+		push_to_array (*line_buffer, data[cursor + gap]);
 		delete_selection (buffer, delete_crlf = false);
 	}
 
 	if move_to_last_line
 	{
 		move_cursor_to_eol (buffer);
-		insert_at_cursor (buffer, #char "\n");
+		insert_eol_at_cursor (buffer, buffer_operation = false, auto_tab = false);
 		pop_from_array (*line_buffer);
 	}
 	else
@@ -570,7 +592,7 @@ move_line_down :: (using buffer : *Gap_Buffer, buffer_operation := true) -> bool
 	}
 
 	for char, i : line_buffer
-		insert_at_cursor (buffer, char);
+		insert_at_cursor (buffer, char, buffer_operation = false, auto_tab = false);
 
 	if !move_to_last_line then move_cursor_to_previous_line (buffer);
 	move_cursor_to_column (buffer, start_column_index);
@@ -694,7 +716,7 @@ select_backward :: (using buffer : *Gap_Buffer) -> bool
 	return modified;
 }
 
-push_undo_operation :: (using buffer : *Gap_Buffer, op : Text_Operation)
+push_text_operation :: (using buffer : *Gap_Buffer, op : Text_Operation)
 {
 	overwrote, overwritten := push_to_stack (*undo_stack, op);
 	if overwrote then free (overwritten.buffer, heap_allocator);
@@ -702,7 +724,20 @@ push_undo_operation :: (using buffer : *Gap_Buffer, op : Text_Operation)
 
 clear_redo_stack :: inline (using buffer : *Gap_Buffer)
 {
-	clear_circular_stack (*redo_stack);
+	while !is_empty (redo_stack)
+	{
+		op := pop_from_stack (*redo_stack);
+		free (op.buffer, heap_allocator);
+	}
+}
+
+clear_undo_stack :: inline (using buffer : *Gap_Buffer)
+{
+	while !is_empty (undo_stack)
+	{
+		op := pop_from_stack (*undo_stack);
+		free (op.buffer, heap_allocator);
+	}
 }
 
 undo_operation :: (using buffer : *Gap_Buffer) -> bool
@@ -732,7 +767,7 @@ redo_operation :: (using buffer : *Gap_Buffer) -> bool
 {
 	if is_empty (redo_stack) then return false;
 	op := pop_from_stack (*redo_stack);
-	push_undo_operation (buffer, op);
+	push_text_operation (buffer, op);
 
 	if #complete op.kind ==
 	{

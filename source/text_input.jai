@@ -96,7 +96,7 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 			{
 				ctrl_shift := (event.key_event.mods & .CONTROL) && (event.key_event.mods & .SHIFT) && !(event.key_event.mods & .ALT);
 				if ctrl_shift then move_cursor_to_bol (*buffer);
-				insert_at_cursor (*buffer, #char "\n", auto_tab = true);
+				insert_eol_at_cursor (*buffer, auto_tab = true);
 				if ctrl_shift then move_cursor_to_previous_line (*buffer);
 
 				modified = true;
@@ -138,7 +138,7 @@ load_file_into_buffer :: (using input : *Text_Input, filename : string) -> bool
 	if !ok then return false;
 	
 	clear_gap_buffer (*buffer);
-	insert_at_cursor (*buffer, file_contents);
+	insert_at_cursor (*buffer, file_contents, buffer_operation = false, auto_tab = false);
 	eol, correct := detect_eol_sequence (*buffer);
 
 	return true;
