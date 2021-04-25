@@ -179,8 +179,10 @@ insert_eol_at_cursor :: (using buffer : *Gap_Buffer, buffer_operation := true, $
 
 insert_at_cursor :: (using buffer : *Gap_Buffer, char : u8, buffer_operation := true, $auto_tab := false)
 {
+	if char == #char "\r" then assert (!buffer_operation, "Inserting a single CR character and buffering the operation. This is prohibited.");
+	if char == #char "\n" && eol_sequence == .CRLF then assert (!buffer_operation, "Inserting a single LF character and buffering the operation. This is prohibited because the EOL is CRLF.");
 	if gap == 0 then grow_gap_buffer (buffer, 2);
-	if selection != 0 then delete_selection (buffer);
+	if selection != 0 then delete_selection (buffer, buffer_operation);
 
 	if buffer_operation
 	{
@@ -261,7 +263,7 @@ insert_at_cursor :: inline (using buffer : *Gap_Buffer, str : string, buffer_ope
 
 backspace_selection :: (using buffer : *Gap_Buffer, $backspace_crlf := true) -> bool
 {
-	if selection != 0 then return delete_selection (buffer);
+	if selection != 0 then return delete_selection (buffer, buffer_operation = false);
 
 	if cursor > 0
 	{
@@ -298,27 +300,48 @@ backspace_selection :: (using buffer : *Gap_Buffer, $backspace_crlf := true) -> 
 	return false;
 }
 
-delete_at_cursor :: (using buffer : *Gap_Buffer, $delete_crlf := true) -> bool
+delete_at_cursor :: (using buffer : *Gap_Buffer, buffer_operation := true, $delete_crlf := true) -> bool
 {
-		delete_helper :: inline (using buffer : *Gap_Buffer, $delete_crlf : bool)
+	delete_helper :: inline (using buffer : *Gap_Buffer, buffer_operation : bool, $delete_crlf : bool)
 	{
 		// Handle multibyte characters
 		deleted_char := data[cursor + gap];
 		size := utf8_sequence_size (deleted_char);
 		assert (cursor + size <= gap_buffer_count (buffer), "move_cursor_forward: UTF8 character is % bytes, but there is not enough space between the cursor and the end.", size);
+		
+		if buffer_operation
+		{
+			clear_redo_stack (buffer);
+			op : Text_Operation;
+			op.kind       = .DELETE;
+			op.cursor     = cursor;
+			op.line_index = line_index;
+			if size == 1
+			{
+				op.char = deleted_char;
+			}
+			else
+			{
+				op.buffer = alloc_array (u8, size, heap_allocator);
+				for i : 0..size - 1
+					op.buffer[i] = data[cursor + gap + i];
+			}
+			push_undo_operation (buffer, op);
+		}
+	
 		gap += size;
 
 		// Update line cache
 		lines[line_index] -= 1;
 		if deleted_char == #char "\n"
-		{
 			merge_current_line_with_next_one (buffer);
-		}
+		
 #if delete_crlf
 {
 		if deleted_char == #char "\r"	// Handle CRLF
 		{
-			delete_at_cursor (buffer);
+			// @Todo (stefan): Unify buffering this operation with the one above! 
+			delete_at_cursor (buffer, buffer_operation = false);
 		}
 }
 	}
@@ -327,12 +350,12 @@ delete_at_cursor :: (using buffer : *Gap_Buffer, $delete_crlf := true) -> bool
 	{
 		if selection <= 0
 		{
-			delete_helper (buffer, delete_crlf);
+			delete_helper (buffer, buffer_operation, delete_crlf);
 		}
 		else if selection > 0
 		{
 			selection -= 1;
-			delete_helper (buffer, delete_crlf);
+			delete_helper (buffer, buffer_operation, delete_crlf);
 		}
 
 		return true;
@@ -341,24 +364,25 @@ delete_at_cursor :: (using buffer : *Gap_Buffer, $delete_crlf := true) -> bool
 	return false;
 }
 
-delete_selection :: (using buffer : *Gap_Buffer, $delete_crlf := true) -> bool
+delete_selection :: (using buffer : *Gap_Buffer, buffer_operation := true, $delete_crlf := true) -> bool
 {
+	// @Todo (stefan): Buffer single operation for whole selection
 	if cursor < gap_buffer_count (buffer) || selection != 0
 	{
 		if selection == 0
 		{
-			delete_at_cursor (buffer, delete_crlf);
+			delete_at_cursor (buffer, buffer_operation, delete_crlf);
 		}
 
 		while selection < 0
 		{
 			select_backward (buffer);
-			delete_at_cursor (buffer, delete_crlf);
+			delete_at_cursor (buffer, buffer_operation, delete_crlf);
 		}
 
 		while selection > 0
 		{
-			delete_at_cursor (buffer, delete_crlf);
+			delete_at_cursor (buffer, buffer_operation, delete_crlf);
 		}
 
 		return true;
@@ -541,10 +565,10 @@ move_line_up :: (using buffer : *Gap_Buffer, buffer_operation := true) -> bool
 			eol = is_at_eol (buffer, ignore_cr = true);
 			if is_last_line && eol then break;
 			push_to_array (*line_buffer, data[cursor + gap]);
-			delete_selection (buffer, delete_crlf = false);
+			delete_selection (buffer, buffer_operation = false, delete_crlf = false);
 		}
 	}
-	
+
 	if is_last_line
 	{
 		if eol_sequence == .CRLF then push_to_array (*line_buffer, #char "\r");
@@ -598,7 +622,7 @@ move_line_down :: (using buffer : *Gap_Buffer, buffer_operation := true) -> bool
 	{
 		eol = is_at_eol (buffer, ignore_cr = true);
 		push_to_array (*line_buffer, data[cursor + gap]);
-		delete_selection (buffer, delete_crlf = false);
+		delete_selection (buffer, buffer_operation = false, delete_crlf = false);
 	}
 
 	if move_to_last_line
@@ -780,15 +804,28 @@ undo_operation :: (using buffer : *Gap_Buffer) -> bool
 		if op.buffer.count != 0
 		{
 			for 0..op.buffer.count - 1
-				delete_at_cursor (buffer, delete_crlf = false);
+				delete_at_cursor (buffer, buffer_operation = false, delete_crlf = false);
 		}
 		else
 		{
-			delete_at_cursor (buffer, delete_crlf = false);
+			delete_at_cursor (buffer, buffer_operation = false, delete_crlf = false);
 		}
 
 	case .BACKSPACE;
 	case .DELETE;
+		set_cursor (buffer, op.cursor);
+		if op.buffer.count != 0
+		{
+			insert_at_cursor (buffer, to_string (op.buffer), buffer_operation = false, auto_tab = false);
+			for 0..buffer.count - 1
+				move_cursor_backward (buffer);
+		}
+		else
+		{
+			insert_at_cursor (buffer, op.char, buffer_operation = false, auto_tab = false);
+			move_cursor_backward (buffer);
+		}
+
 	case .MOVE_LINE_UP;
 		move_cursor_to_line (buffer, op.line_index - 1);
 		move_line_down (buffer, buffer_operation = false);
@@ -818,6 +855,17 @@ redo_operation :: (using buffer : *Gap_Buffer) -> bool
 
 	case .BACKSPACE;
 	case .DELETE;
+		set_cursor (buffer, op.cursor);
+		if op.buffer.count != 0
+		{
+			for 0..buffer.count - 1
+				delete_at_cursor (buffer, buffer_operation = false, delete_crlf = false);
+		}
+		else
+		{
+			delete_at_cursor (buffer, buffer_operation = false, delete_crlf = false);
+		}
+
 	case .MOVE_LINE_UP;
 		move_cursor_to_line (buffer, op.line_index);
 		move_line_up (buffer, buffer_operation = false);

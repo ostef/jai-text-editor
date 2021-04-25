@@ -313,14 +313,10 @@ command_line :: (using screen : *Screen, line : s64)
 	else if line > buffer.lines.count then line = buffer.lines.count;
 
 	while buffer.line_index < line - 1
-	{
 		move_cursor_forward (buffer);
-	}
 
 	while buffer.line_index > line - 1
-	{
 		move_cursor_backward (buffer);
-	}
 
 	move_cursor_to_bol (buffer);
 	view.scroll_to_cursor = true;
@@ -376,7 +372,7 @@ command_to_lf :: (using screen : *Screen)
 	{
 		if buffer.data[buffer.cursor + buffer.gap] == #char "\r"
 		{
-			delete_selection (buffer, delete_crlf = false);
+			delete_selection (buffer, buffer_operation = false, delete_crlf = false);
 
 			continue;
 		}
