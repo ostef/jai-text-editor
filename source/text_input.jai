@@ -120,9 +120,13 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 			}
 
 		case .BACKSPACE;
+			if event.key_event.mods == .CONTROL
+				skip_word_backward (*buffer, true);
 			if backspace_selection (*buffer) then modified = true;
 
 		case .DELETE;
+			if event.key_event.mods == .CONTROL
+				skip_word_forward (*buffer, true);
 			if delete_selection (*buffer) then modified = true;
 
 		case .RETURN;
