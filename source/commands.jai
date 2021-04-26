@@ -303,6 +303,16 @@ command_reload_shortcuts :: (using screen : *Screen, filename := "")
 }
 @Command
 
+command_reload_config :: (using screen : *Screen, filename := "")
+{
+	name := filename;
+	if !name then name = "config.edit";
+	ok := read_config_from_file (name);
+	if ok then print_to_screen (screen, "Reloaded config from file '%'.", name);
+	else       print_to_screen (screen, "Could not reload config from file '%'.", name);
+}
+@Command
+
 command_line :: (using screen : *Screen, line : s64)
 {
 	if text_views.count == 0 then return;

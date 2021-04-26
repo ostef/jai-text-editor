@@ -34,8 +34,6 @@ LIGHT_GRAY      :: Vec4.{ 0.6, 0.6, 0.6, 1 };
 VERY_LIGHT_GRAY :: Vec4.{ 0.75, 0.75, 0.75, 1 };
 NOT_QUITE_WHITE :: Vec4.{ 0.9, 0.9, 0.9, 1 };
 
-COMMAND_MESSAGE_TEXT_MARGIN :: 0;
-
 default_font : *Font;
 
 screen_handle_event :: (using screen : *Screen, event : Event)
@@ -207,7 +205,7 @@ toggle_command_input :: inline (using screen : *Screen)
 
 bottom_bar_height :: inline (using screen : *Screen) -> f32 #must
 {
-	return (default_font.ascender - default_font.descender) + 2.0 * COMMAND_MESSAGE_TEXT_MARGIN;
+	return (default_font.ascender - default_font.descender) + 2.0 * config.bottom_io_padding;
 }
 
 print_to_screen :: (using screen : *Screen, fmt : string, args : ..Any)
@@ -314,7 +312,7 @@ draw_screen :: (using screen : *Screen)
 	{
 		bottom_bar.x1 = 0;
 		bottom_bar.x2 = xx width;
-		bottom_bar.y1 = xx (height - 2 * COMMAND_MESSAGE_TEXT_MARGIN - xx (default_font.ascender - default_font.descender));
+		bottom_bar.y1 = xx (height - 2 * config.bottom_io_padding - xx (default_font.ascender - default_font.descender));
 		bottom_bar.y2 = xx height;
 	}
 
@@ -352,10 +350,10 @@ draw_screen :: (using screen : *Screen)
 	for * text_views
 	{
 		if it.x + it.w < xx width
-			immediate_line (vec2 (it.x + it.w, it.y), vec2 (it.x + it.w, it.y + it.h), LIGHT_GRAY, 1);
+			immediate_line (vec2 (it.x + it.w, it.y), vec2 (it.x + it.w, it.y + it.h), config.view_separation_color, 1);
 		
 		if it.y + it.h < xx height
-			immediate_line (vec2 (it.x, it.y + it.h), vec2 (it.x + it.w, it.y + it.h), LIGHT_GRAY, 1);
+			immediate_line (vec2 (it.x, it.y + it.h), vec2 (it.x + it.w, it.y + it.h), config.view_separation_color, 1);
 	}
 
 	// @Fix (stefan): Clipping does not work!
@@ -363,14 +361,14 @@ draw_screen :: (using screen : *Screen)
 	immediate_noclip ();
 
 	// Draw the bottom bar
-	immediate_quad (0, cast (f32) height - (default_font.ascender - default_font.descender) - 2.0 * COMMAND_MESSAGE_TEXT_MARGIN,
-		cast (f32) width, cast (f32) height, NOT_QUITE_BLACK);
+	immediate_quad (0, cast (f32) height - (default_font.ascender - default_font.descender) - 2.0 * config.bottom_io_padding,
+		cast (f32) width, cast (f32) height, config.bottom_io_background_color);
 
 	// Draw the command/message buffer
 	if is_inputting_command
 	{
-		position := vec2 (xx COMMAND_MESSAGE_TEXT_MARGIN, cast (f32) height - COMMAND_MESSAGE_TEXT_MARGIN - (default_font.ascender - default_font.descender));
-		draw_text (default_font, ">", position, NOT_QUITE_WHITE, bottom_bar);
+		position := vec2 (xx config.bottom_io_padding, cast (f32) height - config.bottom_io_padding - (default_font.ascender - default_font.descender));
+		draw_text (default_font, ">", position, config.bottom_io_text_color, bottom_bar);
 		bounds := calculate_drawn_text_bounds (default_font, ">");
 		position.x += bounds.x;
 		
@@ -388,13 +386,13 @@ draw_screen :: (using screen : *Screen)
 		
 		// Clip so we don't draw over the '>'
 		immediate_clip (command_text_clip);
-		draw_text_input (*command_input, position, NOT_QUITE_WHITE, bottom_bar);
+		draw_text_input (*command_input, position, config.bottom_io_text_color, bottom_bar);
 		immediate_noclip ();
 	}
 	else
 	{
 		draw_text (default_font, to_string (message_buffer),
-			vec2 (xx COMMAND_MESSAGE_TEXT_MARGIN, cast (f32) bottom_bar.y1 + COMMAND_MESSAGE_TEXT_MARGIN), NOT_QUITE_WHITE, bottom_bar);
+			vec2 (xx config.bottom_io_padding, cast (f32) bottom_bar.y1 + config.bottom_io_padding), config.bottom_io_text_color, bottom_bar);
 	}
 }
 
@@ -406,9 +404,6 @@ profile :: (name : string) #expand
 
 draw_text_view :: (using view : *Text_View, draw_cursor : bool)
 {
-	INFO_TEXT_PADDING :: 0;
-	LINE_TEXT_HORIZONTAL_PADDING :: 0;
-
 	text_line_height := default_font.ascender - default_font.descender;
 	text_offset          : Vec2;
 	view_area            : Clip_Rect;
@@ -459,7 +454,7 @@ draw_text_view :: (using view : *Text_View, draw_cursor : bool)
 	{
 		info_bar.x1 = view_area.x1;
 		info_bar.x2 = view_area.x2;
-		info_bar.y1 = view_area.y2 - cast (s32) (2 * INFO_TEXT_PADDING + text_line_height);
+		info_bar.y1 = view_area.y2 - cast (s32) (2 * config.buffer_info_padding + text_line_height);
 		info_bar.y2 = view_area.y2;
 	}
 
@@ -470,7 +465,7 @@ draw_text_view :: (using view : *Text_View, draw_cursor : bool)
 			line_info_text_end = calculate_drawn_text_bounds (default_font, to_string (line_number_builder));
 		}
 		line_bar.x1 = view_area.x1;
-		line_bar.x2 = line_bar.x1 + cast (s32) (line_info_text_end.x + 2 * LINE_TEXT_HORIZONTAL_PADDING);
+		line_bar.x2 = line_bar.x1 + cast (s32) (line_info_text_end.x + 2 * config.buffer_line_numbers_padding);
 		line_bar.y1 = view_area.y1;
 		line_bar.y2 = line_bar.y1 + cast (s32) h - (info_bar.y2 - info_bar.y1);
 	}
@@ -537,24 +532,24 @@ draw_text_view :: (using view : *Text_View, draw_cursor : bool)
 
 	immediate_clip (view_area);
 	// View background
-	immediate_quad (cast (f32) view_area.x1, cast (f32) view_area.y1, cast (f32) view_area.x2, cast (f32) view_area.y2, NOT_QUITE_BLACK);
+	immediate_quad (cast (f32) view_area.x1, cast (f32) view_area.y1, cast (f32) view_area.x2, cast (f32) view_area.y2, config.buffer_background_color);
 	// Line number - text separation
-	immediate_line (vec2 (xx line_bar.x2, xx view_area.y1), vec2 (xx line_bar.x2, xx info_bar.y1), LIGHT_GRAY, 1);
+	immediate_line (vec2 (xx line_bar.x2, xx view_area.y1), vec2 (xx line_bar.x2, xx info_bar.y1), config.buffer_line_numbers_separation_color, 1);
 
 	// Draw line numbers
-	line_number_position.x = cast (f32) line_bar.x1 + LINE_TEXT_HORIZONTAL_PADDING;
+	line_number_position.x = cast (f32) line_bar.x1 + config.buffer_line_numbers_padding;
 	line_number_position.y = cast (f32) line_bar.y1 + text_offset.y;
 	immediate_clip (line_bar);
 	{
 		profile ("draw line numbers");
-		draw_text (default_font, to_string (line_number_builder), line_number_position, VERY_LIGHT_GRAY, line_bar);
+		draw_text (default_font, to_string (line_number_builder), line_number_position, config.buffer_line_numbers_text_color, line_bar);
 	}
 
 	// Draw text buffer
 	immediate_clip (text_area);
 	{
 		profile ("draw text input");
-		draw_text_input (*input, text_position, NOT_QUITE_WHITE, text_area, draw_cursor);
+		draw_text_input (*input, text_position, config.buffer_text_color, text_area, draw_cursor);
 	}
 
 	// @Fix (stefan): For some reason the clipping does not work and nothing gets rendered
@@ -562,13 +557,13 @@ draw_text_view :: (using view : *Text_View, draw_cursor : bool)
 	//immediate_clip (info_bar);
 	immediate_clip (view_area);
 	// Info bar background
-	immediate_quad (cast (f32) info_bar.x1, cast (f32) info_bar.y1, cast (f32) info_bar.x2, cast (f32) info_bar.y2, LIGHT_GRAY);
+	immediate_quad (cast (f32) info_bar.x1, cast (f32) info_bar.y1, cast (f32) info_bar.x2, cast (f32) info_bar.y2, config.buffer_info_background_color);
 
 	// Draw info text
-	info_text_position.x = cast (f32) info_bar.x1 + INFO_TEXT_PADDING;
-	info_text_position.y = cast (f32) info_bar.y1 + INFO_TEXT_PADDING;
+	info_text_position.x = cast (f32) info_bar.x1 + config.buffer_info_padding;
+	info_text_position.y = cast (f32) info_bar.y1 + config.buffer_info_padding;
 	view_name := ifx filename then filename else "UNNAMED";
 	info_str := stringf (temp_allocator, "% - Ln %, Col % - % line(s) - UTF8 - % - % B",
 		view_name, input.buffer.line_index + 1, input.buffer.column_index + 1, input.buffer.lines.count, input.buffer.eol_sequence, gap_buffer_count (input.buffer));
-	draw_text (default_font, info_str, info_text_position, VERY_DARK_GRAY, view_area);
+	draw_text (default_font, info_str, info_text_position, config.buffer_info_text_color, view_area);
 }

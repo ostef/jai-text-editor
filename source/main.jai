@@ -17,6 +17,7 @@ Debug :: #import "Debug";
 #load "text_input.jai";
 #load "commands.jai";
 #load "clipboard.jai";
+#load "config.jai";
 
 running := false;
 window : Window;
@@ -41,6 +42,7 @@ main :: ()
 	context.logger    = console_logger;
 	linalg_register_print_procedures ();
 	register_all_commands ();
+	read_config_from_file ();
 
 	init_window (*window, "Edit", 100, 100, 1280, 720, null, handle_window_event);
 	make_window_context_current (*window);
