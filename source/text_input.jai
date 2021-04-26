@@ -94,6 +94,31 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 					select_forward (*buffer);
 			}
 
+		case .X; #through;
+		case .C;
+			if event.key_event.mods == .CONTROL
+			{
+				if buffer.selection != 0
+				{
+					text := alloc_string (abs (buffer.selection), temp_allocator);
+					i := 0;
+					for :selected_chars char, index : buffer
+					{
+						text[i] = char;
+						i += 1;
+					}
+					set_clipboard_text (*window, text);
+					if event.key_event.key_code == .X then delete_selection (*buffer);
+				}
+			}
+
+		case .V;
+			if event.key_event.mods == .CONTROL
+			{
+				pasted_text := clone_clipboard_text (*window, temp_allocator);
+				insert_at_cursor (*buffer, pasted_text);
+			}
+
 		case .BACKSPACE;
 			if backspace_selection (*buffer) then modified = true;
 

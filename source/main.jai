@@ -16,6 +16,7 @@ Debug :: #import "Debug";
 #load "gap_buffer.jai";
 #load "text_input.jai";
 #load "commands.jai";
+#load "clipboard.jai";
 
 running := false;
 window : Window;

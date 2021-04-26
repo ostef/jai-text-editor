@@ -866,6 +866,7 @@ undo_operation :: (using buffer : *Gap_Buffer) -> bool
 	op := pop_from_stack (*undo_stack);
 	push_redo_operation (buffer, op);
 
+	// @Fix (stefan): Undo inserting when something is selected.
 	if #complete op.kind ==
 	{
 	case .INSERT;
