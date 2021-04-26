@@ -34,7 +34,7 @@ LIGHT_GRAY      :: Vec4.{ 0.6, 0.6, 0.6, 1 };
 VERY_LIGHT_GRAY :: Vec4.{ 0.75, 0.75, 0.75, 1 };
 NOT_QUITE_WHITE :: Vec4.{ 0.9, 0.9, 0.9, 1 };
 
-COMMAND_MESSAGE_TEXT_MARGIN :: 3;
+COMMAND_MESSAGE_TEXT_MARGIN :: 0;
 
 default_font : *Font;
 
@@ -406,8 +406,8 @@ profile :: (name : string) #expand
 
 draw_text_view :: (using view : *Text_View, draw_cursor : bool)
 {
-	INFO_TEXT_PADDING :: 2;
-	LINE_TEXT_HORIZONTAL_PADDING :: 10;
+	INFO_TEXT_PADDING :: 0;
+	LINE_TEXT_HORIZONTAL_PADDING :: 0;
 
 	text_line_height := default_font.ascender - default_font.descender;
 	text_offset          : Vec2;
@@ -433,6 +433,7 @@ draw_text_view :: (using view : *Text_View, draw_cursor : bool)
 	line_number_builder := make_string_builder (max_line_digit_count * input.buffer.lines.count, temp_allocator);
 	for line : 1..input.buffer.lines.count
 	{
+		print_to_builder (*line_number_builder, " ");
 		// Align right
 		digit_count := 0;
 		temp := line;
@@ -445,7 +446,7 @@ draw_text_view :: (using view : *Text_View, draw_cursor : bool)
 		for 0..leading_spaces - 1
 			print_to_builder (*line_number_builder, " ");
 			
-		print_line_to_builder (*line_number_builder, "%", line);
+		print_line_to_builder (*line_number_builder, "% ", line);
 	}
 
 	{
