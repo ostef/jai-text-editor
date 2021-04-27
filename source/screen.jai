@@ -563,7 +563,7 @@ draw_text_view :: (using view : *Text_View, draw_cursor : bool)
 	info_text_position.x = cast (f32) info_bar.x1 + config.buffer_info_padding;
 	info_text_position.y = cast (f32) info_bar.y1 + config.buffer_info_padding;
 	view_name := ifx filename then filename else "UNNAMED";
-	info_str := stringf (temp_allocator, "% - Ln %, Col % - % line(s) - UTF8 - % - % B",
-		view_name, input.buffer.line_index + 1, input.buffer.column_index + 1, input.buffer.lines.count, input.buffer.eol_sequence, gap_buffer_count (input.buffer));
+	info_str := stringf (temp_allocator, "% - Ln %, Col % - % line(s) - UTF8 - %",
+		view_name, input.buffer.line_index + 1, input.buffer.column_index + 1, input.buffer.lines.count, input.buffer.eol_sequence);
 	draw_text (default_font, info_str, info_text_position, config.buffer_info_text_color, view_area);
 }

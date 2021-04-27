@@ -100,14 +100,14 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 			{
 				if buffer.selection != 0
 				{
-					text := alloc_string (abs (buffer.selection), temp_allocator);
+					text := alloc_array (u32, abs (buffer.selection), temp_allocator);
 					i := 0;
-					for :selected_chars char, index : buffer
+					for :selected_chars codepoint, index : buffer
 					{
-						text[i] = char;
+						text[i] = codepoint;
 						i += 1;
 					}
-					set_clipboard_text (*window, text);
+					set_clipboard_text (*window, utf8_runes_to_string (text, temp_allocator));
 					if event.key_event.key_code == .X then delete_selection (*buffer);
 				}
 			}
@@ -185,6 +185,8 @@ load_file_into_buffer :: (using input : *Text_Input, filename : string) -> bool
 
 write_buffer_to_file :: (using input : *Text_Input, filename : string) -> written : s64, ok : bool
 {
+	// @Note (stefan): We want to do only one call to write_to_file, unlike what VSCode does, because
+	// it can block another program to open the file otherwise when hot reloading it for example.
 	str := clone_to_string (buffer, temp_allocator);
 	written, ok := write_to_file (filename, str);
 
@@ -199,7 +201,7 @@ calculate_drawn_cursor_position :: (using input : *Text_Input, position : Vec2) 
 	pen := position;
 	pen.y += default_font.ascender;
 
-	for :utf32 codepoint, i : buffer
+	for codepoint, i : buffer
 	{
 		glyph := load_glyph (default_font, codepoint);
 		if !glyph then continue;
@@ -247,7 +249,7 @@ calculate_drawn_text_bounds :: (using input : *Text_Input) -> Vec2 #must
 {
 	pen := vec2 (0, xx (default_font.ascender - default_font.descender));
 	max := pen;
-	for :utf32 codepoint, i : buffer
+	for codepoint, i : buffer
 	{
 		glyph := load_glyph (default_font, codepoint);
 		if !glyph then continue;
@@ -297,7 +299,7 @@ draw_text_input :: (using input : *Text_Input, position : Vec2, color : Vec4, cl
 	pen.y += default_font.ascender;
 	immediate_shader (text_spo);
 
-	for :utf32 codepoint, i : buffer
+	for codepoint, i : buffer
 	{
 		if pen.y < xx clip_rect.y1 && codepoint != #char "\n" then continue;
 		if pen.y > xx clip_rect.y2 then break;
