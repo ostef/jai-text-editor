@@ -191,8 +191,8 @@ insert_at_cursor :: (using buffer : *Gap_Buffer, char : u8, buffer_operation := 
 {
 	if char == #char "\r" then assert (!buffer_operation, "Inserting a single CR character and buffering the operation. This is prohibited.");
 	if char == #char "\n" && eol_sequence == .CRLF then assert (!buffer_operation, "Inserting a single LF character and buffering the operation. This is prohibited because the EOL is CRLF.");
-	if gap == 0 then grow_gap_buffer (buffer, 2);
 	if selection != 0 then delete_selection (buffer, buffer_operation);
+	if gap == 0 then grow_gap_buffer (buffer, 2);
 
 	if buffer_operation
 	{
@@ -243,6 +243,7 @@ insert_at_cursor :: (using buffer : *Gap_Buffer, char : u8, buffer_operation := 
 
 insert_at_cursor :: inline (using buffer : *Gap_Buffer, codepoint : u32, buffer_operation := true, $auto_tab := false)
 {
+	// @Fix (stefan): Buffer only one operation for this, so we only undo one thing.
 	utf8 : [4]u8;
 	size := utf8_encode (utf8, codepoint);
 	for i : 0..size - 1
@@ -252,6 +253,7 @@ insert_at_cursor :: inline (using buffer : *Gap_Buffer, codepoint : u32, buffer_
 insert_at_cursor :: inline (using buffer : *Gap_Buffer, str : string, buffer_operation := true, $auto_tab := false)
 {
 	if str.count == 0 then return;
+	if selection != 0 then delete_selection (buffer, buffer_operation);
 
 	if buffer_operation
 	{
@@ -271,6 +273,7 @@ insert_at_cursor :: inline (using buffer : *Gap_Buffer, str : string, buffer_ope
 		insert_at_cursor (buffer, str[i], buffer_operation = false, auto_tab);
 }
 
+// @Cleanup (stefan): Get rid of the ugly accumulator thing and find a more elegant solution.
 backspace_selection :: (using buffer : *Gap_Buffer, buffer_operation := true, $backspace_crlf := true, accumulator : *[..]u8 = null) -> bool
 {
 	if selection != 0 then return delete_selection (buffer, buffer_operation);
@@ -866,7 +869,6 @@ undo_operation :: (using buffer : *Gap_Buffer) -> bool
 	op := pop_from_stack (*undo_stack);
 	push_redo_operation (buffer, op);
 
-	// @Fix (stefan): Undo inserting when something is selected.
 	if #complete op.kind ==
 	{
 	case .INSERT;

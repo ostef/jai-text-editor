@@ -115,6 +115,7 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 		case .V;
 			if event.key_event.mods == .CONTROL
 			{
+				// @Todo (stefan): Handle EOL and tabs when they're not allowed
 				pasted_text := clone_clipboard_text (*window, temp_allocator);
 				insert_at_cursor (*buffer, pasted_text);
 			}

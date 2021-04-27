@@ -34,8 +34,6 @@ handle_window_event :: (using event : Event)
 	if running then screen_handle_event (*screen, event);
 }
 
-// @Todo (stefan): Global config that reads from a file.
-
 main :: ()
 {
 	context.allocator = heap_allocator;
@@ -53,14 +51,11 @@ main :: ()
 	init_fonts ();
 	viewport_w, viewport_h := get_window_framebuffer_size (*window);
 	init_screen (*screen, xx viewport_w, xx viewport_h);
-	split_active_view (*screen, "shortcuts.edit");
 
 	args := get_command_line_arguments ();
 	args = advance (args);
-	for args
-	{
-		split_active_view (*screen, it);
-	}
+	for filename : args
+		split_active_view (*screen, filename);
 
 	glClearColor (0.2, 0.2, 0.2, 1);
 
