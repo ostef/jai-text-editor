@@ -21,6 +21,8 @@ Text_View :: struct
 	scroll_to_cursor : bool;
 	is_dirty : bool;
 
+	visual_scrolling : Vec2;
+
 	#place position;
 	x, y : f32;
 	#place size;
@@ -489,7 +491,9 @@ draw_text_view :: (using view : *Text_View, draw_cursor : bool)
 	if scrolling.x > max_scrolling.x then scrolling.x = max_scrolling.x;
 	if scrolling.y > max_scrolling.y then scrolling.y = max_scrolling.y;
 
-	text_offset = vec2 (-scrolling.x * default_font.space_advance, -scrolling.y * text_line_height);
+	scroll_lerp_amount := clamp (1 - config.visual_scrolling_smoothing, 0.05, 1);
+	visual_scrolling = lerp (visual_scrolling, scrolling, scroll_lerp_amount);
+	text_offset      = vec2 (-visual_scrolling.x * default_font.space_advance, -visual_scrolling.y * text_line_height);
 	// Calculate the text position
 	text_position.x = cast (f32) text_area.x1 + text_offset.x;
 	text_position.y = cast (f32) text_area.y1 + text_offset.y;
@@ -499,32 +503,36 @@ draw_text_view :: (using view : *Text_View, draw_cursor : bool)
 		profile ("scrolling cursor");
 		cursor_position := calculate_drawn_cursor_position (*input, VEC2_ZERO);
 		// @Cleanup @Speed (stefan): Make this use math instead of loops.
-		while text_position.x + cursor_position.x < xx text_area.x1
+		while text_position.x + cursor_position.x < xx text_area.x1 && scrolling.x > 0
 		{
 			scrolling.x    -= 1;
-			text_offset.x   = -scrolling.x * default_font.space_advance;
-			text_position.x = cast (f32) text_area.x1 + text_offset.x;
+			visual_scrolling.x = lerp (visual_scrolling.x, scrolling.x, scroll_lerp_amount);
+			text_offset.x      = -visual_scrolling.x * default_font.space_advance;
+			text_position.x    = cast (f32) text_area.x1 + text_offset.x;
 		}
 
 		while text_position.x + cursor_position.x + default_font.space_advance > xx text_area.x2
 		{
 			scrolling.x    += 1;
-			text_offset.x   = -scrolling.x * default_font.space_advance;
-			text_position.x = cast (f32) text_area.x1 + text_offset.x;
+			visual_scrolling.x = lerp (visual_scrolling.x, scrolling.x, scroll_lerp_amount);
+			text_offset.x      = -visual_scrolling.x * default_font.space_advance;
+			text_position.x    = cast (f32) text_area.x1 + text_offset.x;
 		}
 
-		while text_position.y + cursor_position.y < xx text_area.y1
+		while text_position.y + cursor_position.y < xx text_area.y1 && scrolling.y > 0
 		{
 			scrolling.y    -= 1;
-			text_offset.y   = -scrolling.y * text_line_height;
-			text_position.y = cast (f32) text_area.y1 + text_offset.y;
+			visual_scrolling.y = lerp (visual_scrolling.y, scrolling.y, scroll_lerp_amount);
+			text_offset.y      = -visual_scrolling.y * text_line_height;
+			text_position.y    = cast (f32) text_area.y1 + text_offset.y;
 		}
 		
 		while text_position.y + cursor_position.y + text_line_height > xx text_area.y2
 		{
 			scrolling.y    += 1;
-			text_offset.y   = -scrolling.y * text_line_height;
-			text_position.y = cast (f32) text_area.y1 + text_offset.y;
+			visual_scrolling.y = lerp (visual_scrolling.y, scrolling.y, scroll_lerp_amount);
+			text_offset.y      = -visual_scrolling.y * text_line_height;
+			text_position.y    = cast (f32) text_area.y1 + text_offset.y;
 		}
 	}
 	// Reset the flag
