@@ -8,8 +8,10 @@ buffer_line_numbers_text_color 0.6 0.6 0.6 1
 buffer_line_numbers_separation_color 0.6 0.6 0.6 1
 buffer_info_background_color 0.6 0.6 0.6 1
 buffer_info_text_color 0.25 0.25 0.25 1
+text_input_selection_color 0.3 0.5 0.9 0.7
 
 # Visuals
 bottom_io_padding 0
 buffer_line_numbers_padding 0
 buffer_info_padding 0
+
