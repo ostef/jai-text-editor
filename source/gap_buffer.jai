@@ -51,16 +51,6 @@ Text_Operation :: struct
 	buffer : []u32;
 	// Because we obviously don't want to allocate when inserting/deleting a single char (might not be true if we do the shared buffer thing as described above).
 	codepoint : u32;
-
-
-	/* @Todo
-	count : s64;
-	union
-	{
-		data : *u32;
-		char : u32;
-	};
-	*/
 }
 
 init_gap_buffer :: (buffer : *Gap_Buffer, capacity : s64, allocator : Allocator, allocator_data := null)
@@ -92,6 +82,7 @@ reset_gap_buffer :: (using buffer : *Gap_Buffer)
 	eol_sequence = .LF;
 	line_index   = 0;
 	column_index = 0;
+	selection = 0;
 	reset_circular_stack (*undo_stack);
 	reset_circular_stack (*redo_stack);
 }
@@ -105,6 +96,7 @@ clear_gap_buffer :: (using buffer : *Gap_Buffer)
 	eol_sequence = .LF;
 	line_index   = 0;
 	column_index = 0;
+	selection = 0;
 }
 
 clone_to_string :: (buffer : Gap_Buffer, allocator : Allocator, allocator_data := null) -> string #must
