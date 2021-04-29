@@ -10,6 +10,7 @@ Config :: struct
 	buffer_line_numbers_separation_color := LIGHT_GRAY;
 	buffer_info_background_color         := LIGHT_GRAY;
 	buffer_info_text_color               := VERY_DARK_GRAY;
+	text_input_selection_color           := Vec4.{ 0.3, 0.5, 0.9, 0.7 };
 
 	// Visuals
 	bottom_io_padding           := 0.0;
