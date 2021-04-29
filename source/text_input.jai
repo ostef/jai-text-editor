@@ -6,13 +6,14 @@ Text_Input :: struct
 		DISALLOW_TABS;
 	}
 
-	flags   : Flags;
-	buffer  : Gap_Buffer;
+	flags  : Flags;
+	buffer : Gap_Buffer;
 }
 
-text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
+text_input_handle_event :: (using input : *Text_Input, event : Event) -> modified : bool, dirty : bool
 {
 	modified := false;
+	dirty    := false;
 	if event.type ==
 	{
 	case .KEY_PRESS; #through;
@@ -22,7 +23,7 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 		case .UP;
 			if event.key_event.mods == .ALT
 			{
-				if move_line_up (*buffer) then modified = true;
+				if move_line_up (*buffer) then { modified = true; dirty = true; }
 			}
 			else if event.key_event.mods == .SHIFT
 			{
@@ -36,7 +37,7 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 		case .DOWN;
 			if event.key_event.mods == .ALT
 			{
-				if move_line_down (*buffer) then modified = true;
+				if move_line_down (*buffer) then { modified = true; dirty = true; }
 			}
 			else if event.key_event.mods == .SHIFT
 			{
@@ -78,11 +79,11 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 		case .Z;
 			if event.key_event.mods == .CONTROL
 			{
-				if undo_operation (*buffer) then modified = true;
+				if undo_operation (*buffer) then { modified = true; dirty = true; }
 			}
 			else if event.key_event.mods == (Mods.CONTROL | .SHIFT)
 			{
-				if redo_operation (*buffer) then modified = true;
+				if redo_operation (*buffer) then { modified = true; dirty = true; }
 			}
 
 		case .A;
@@ -118,17 +119,19 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 				// @Todo (stefan): Handle EOL and tabs when they're not allowed
 				pasted_text := clone_clipboard_text (*window, temp_allocator);
 				insert_at_cursor (*buffer, pasted_text);
+				modified = true;
+				dirty    = true;
 			}
 
 		case .BACKSPACE;
 			if event.key_event.mods == .CONTROL
 				skip_word_backward (*buffer, true);
-			if backspace_selection (*buffer) then modified = true;
+			if backspace_selection (*buffer) then { modified = true; dirty = true; }
 
 		case .DELETE;
 			if event.key_event.mods == .CONTROL
 				skip_word_forward (*buffer, true);
-			if delete_selection (*buffer) then modified = true;
+			if delete_selection (*buffer) then { modified = true; dirty = true; }
 
 		case .RETURN;
 			if (flags & .SINGLE_LINE) != .SINGLE_LINE
@@ -139,6 +142,7 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 				if ctrl_shift then move_cursor_to_previous_line (*buffer);
 
 				modified = true;
+				dirty    = true;
 			}
 
 		case .TAB;
@@ -146,6 +150,7 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 			{
 				insert_at_cursor (*buffer, "\t");
 				modified = true;
+				dirty    = true;
 			}
 		}
 
@@ -154,10 +159,11 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> bool
 		{
 			insert_at_cursor (*buffer, event.text_input_event.codepoint);
 			modified = true;
+			dirty    = true;
 		}
 	}
 
-	return modified;
+	return modified, dirty;
 }
 
 init_text_input :: (input : *Text_Input, flags : Text_Input.Flags)
@@ -289,9 +295,7 @@ calculate_drawn_text_bounds :: (using input : *Text_Input) -> Vec2 #must
 }
 
 draw_text_input :: (using input : *Text_Input, position : Vec2, color : Vec4, clip_rect : Clip_Rect, draw_cursor := true)
-{
-	SELECTION_COLOR :: Vec4.{ 0.3, 0.5, 0.9, 0.7 };
-	
+{	
 	cursor_position : Vec2;
 	cursor_advance  := default_font.space_advance;
 
@@ -313,7 +317,7 @@ draw_text_input :: (using input : *Text_Input, position : Vec2, color : Vec4, cl
 			buffer.selection  < 0 && i >= buffer.cursor + buffer.selection && i < buffer.cursor)
 		{
 			immediate_texture (0);
-			immediate_quad (pen.x, pen.y - default_font.ascender, pen.x + glyph.advance >> 6, pen.y - default_font.descender, SELECTION_COLOR);
+			immediate_quad (pen.x, pen.y - default_font.ascender, pen.x + glyph.advance >> 6, pen.y - default_font.descender, config.text_input_selection_color);
 		}
 
 		if i == buffer.cursor

@@ -122,6 +122,7 @@ command_split :: (using screen : *Screen, filename := "")
 // Open the specified file into the active text view. If the file does not exist, create a new file on disk when it is saved for the first time.
 command_open :: (using screen : *Screen, filename : string)
 {
+	if text_views.count == 0 then split_active_view (screen);
 	load_file_into_active_text_view (screen, filename);
 }
 @Command
@@ -139,8 +140,15 @@ command_save :: (using screen : *Screen)
 	}
 
 	ok := write_buffer_to_file (*view.input, view.filename);
-	if ok then print_to_screen (screen, "Saved buffer to file '%'.", view.filename);
-	else       print_to_screen (screen, "Could not save buffer to file '%'.", view.filename);
+	if ok
+	{
+		print_to_screen (screen, "Saved buffer to file '%'.", view.filename);
+		view.is_dirty = false;
+	}
+	else
+	{
+		print_to_screen (screen, "Could not save buffer to file '%'.", view.filename);
+	}
 }
 @Command
 
@@ -153,8 +161,15 @@ command_save_as :: (using screen : *Screen, filename : string)
 	view.filename = clone_string (filename, heap_allocator);
 
 	ok := write_buffer_to_file (*view.input, view.filename);
-	if ok then print_to_screen (screen, "Saved buffer to file '%'.", view.filename);
-	else       print_to_screen (screen, "Could not save buffer to file '%'.", view.filename);
+	if ok
+	{
+		print_to_screen (screen, "Saved buffer to file '%'.", view.filename);
+		view.is_dirty = false;
+	}
+	else
+	{
+		print_to_screen (screen, "Could not save buffer to file '%'.", view.filename);
+	}
 }
 @Command
 

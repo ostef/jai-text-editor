@@ -19,6 +19,7 @@ Text_View :: struct
 	filename : string;
 	scrolling : Vec2;	// In font units, 1 on x is the font's space advance, 1 on y is the font ascender-descender
 	scroll_to_cursor : bool;
+	is_dirty : bool;
 
 	#place position;
 	x, y : f32;
@@ -168,7 +169,9 @@ text_view_handle_event :: (using view : *Text_View, event : Event)
 	scrolling.x = max (scrolling.x, 0);
 	scrolling.y = max (scrolling.y, 0);
 
-	if text_input_handle_event (*input, event) then scroll_to_cursor = true;
+	modified, dirty := text_input_handle_event (*input, event);
+	if modified then scroll_to_cursor = true;
+	if dirty then is_dirty = true;
 }
 
 init_screen :: (screen : *Screen, width : u32, height : u32)
@@ -562,8 +565,13 @@ draw_text_view :: (using view : *Text_View, draw_cursor : bool)
 	// Draw info text
 	info_text_position.x = cast (f32) info_bar.x1 + config.buffer_info_padding;
 	info_text_position.y = cast (f32) info_bar.y1 + config.buffer_info_padding;
-	view_name := ifx filename then filename else "UNNAMED";
-	info_str := stringf (temp_allocator, "% - Ln %, Col % - % line(s) - UTF8 - %",
+	view_name := "UNNAMED";
+	if filename
+	{
+		if is_dirty then view_name = fstring (temp_allocator, "%*", filename);
+		else view_name = filename;
+	}
+	info_str := fstring (temp_allocator, "% - Ln %, Col % - % line(s) - UTF8 - %",
 		view_name, input.buffer.line_index + 1, input.buffer.column_index + 1, input.buffer.lines.count, input.buffer.eol_sequence);
 	draw_text (default_font, info_str, info_text_position, config.buffer_info_text_color, view_area);
 }
