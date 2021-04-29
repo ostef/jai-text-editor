@@ -2,32 +2,6 @@
 
 Command_Proc :: #type (*Screen, []string);
 
-Shortcut :: struct
-{
-	mods : Mods;
-	key  : Key_Code;
-}
-
-parse_shortcut :: (str : string) -> Shortcut #must, ok : bool
-{
-	if str.count == 0 then return Shortcut.{}, false;
-
-	result : Shortcut;
-	parts := break_by (str, "+", temp_allocator);
-	for parts
-	{
-		if it ==
-		{
-		case "CTRL";  result.mods |= .CONTROL;
-		case "SHIFT"; result.mods |= .SHIFT;
-		case "ALT";   result.mods |= .ALT;
-		case;         result.key = enum_value (Key_Code, it);
-		}
-	}
-
-	return result, true;
-}
-
 read_shortcuts_from_file :: (filename : string) -> bool
 {
 	read_until_space :: (str : string) -> identifier : string, remaining : string
@@ -55,7 +29,7 @@ read_shortcuts_from_file :: (filename : string) -> bool
 		{
 			if cmd.name == name
 			{
-				cmd.shortcut, cmd.has_shortcut = parse_shortcut (shortcut);
+				cmd.shortcut, cmd.has_shortcut = parse_key_binding (shortcut, allow_no_mods = false);
 			}
 		}
 	}
@@ -70,7 +44,7 @@ Command_Info :: struct
 	arg_count : s64;
 	first_optional_argument : s64;	// -1 if no argument is optional
 	has_shortcut : bool;
-	shortcut     : Shortcut;
+	shortcut     : Key_Binding;
 }
 
 registered_commands : [..]Command_Info;
@@ -82,7 +56,7 @@ register_command :: (name : string, proc : Command_Proc, arg_count : s64, first_
 	info.proc = proc;
 	info.arg_count = arg_count;
 	info.first_optional_argument = first_optional_argument;
-	info.shortcut, info.has_shortcut = parse_shortcut (shortcut_string);
+	info.shortcut, info.has_shortcut = parse_key_binding (shortcut_string, allow_no_mods = false);
 	push_to_array (*registered_commands, info);
 }
 

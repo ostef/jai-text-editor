@@ -18,125 +18,136 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> modifie
 	{
 	case .KEY_PRESS; #through;
 	case .KEY_REPEAT;
-		if event.key_event.key_code ==
+		// Move cursor and select
+		// Up
+		if matches_key_binding (event, config.key_move_up)
 		{
-		case .UP;
-			if event.key_event.mods == .ALT
+			if move_cursor_to_previous_line (*buffer) then modified = true;
+		}
+		else if matches_key_binding (event, config.key_select_up)
+		{
+			if move_cursor_to_previous_line (*buffer, select = true) then modified = true;
+		}
+		// Down
+		else if matches_key_binding (event, config.key_move_down)
+		{
+			if move_cursor_to_next_line (*buffer) then modified = true;
+		}
+		else if matches_key_binding (event, config.key_select_down)
+		{
+			if move_cursor_to_next_line (*buffer, select = true) then modified = true;
+		}
+		// Left
+		else if matches_key_binding (event, config.key_move_left)
+		{
+			if move_cursor_backward (*buffer) then modified = true;
+		}
+		else if matches_key_binding (event, config.key_select_left)
+		{
+			if select_backward (*buffer) then modified = true;
+		}
+		else if matches_key_binding (event, config.key_skip_left)
+		{
+			if skip_word_backward (*buffer) then modified = true;
+		}
+		else if matches_key_binding (event, config.key_select_skip_left)
+		{
+			if skip_word_backward (*buffer, select = true) then modified = true;
+		}
+		// Right
+		else if matches_key_binding (event, config.key_move_right)
+		{
+			if move_cursor_forward (*buffer) then modified = true;
+		}
+		else if matches_key_binding (event, config.key_select_right)
+		{
+			if select_forward (*buffer) then modified = true;
+		}
+		else if matches_key_binding (event, config.key_skip_right)
+		{
+			if skip_word_forward (*buffer) then modified = true;
+		}
+		else if matches_key_binding (event, config.key_select_skip_right)
+		{
+			if skip_word_forward (*buffer, select = true) then modified = true;
+		}
+		// Move line up and down
+		else if matches_key_binding (event, config.key_move_line_up)
+		{
+			if move_line_up (*buffer) then { modified = true; dirty = true; }
+		}
+		else if matches_key_binding (event, config.key_move_line_down)
+		{
+			if move_line_down (*buffer) then { modified = true; dirty = true; }
+		}
+		// Select all
+		else if matches_key_binding (event, config.key_select_all)
+		{
+			set_cursor (*buffer, 0);
+			while buffer.cursor < gap_buffer_count (buffer)
+				select_forward (*buffer);
+			modified = true;
+		}
+		// Undo
+		else if matches_key_binding (event, config.key_undo)
+		{
+			if undo_operation (*buffer) then { modified = true; dirty = true; }
+		}
+		// Redo
+		else if matches_key_binding (event, config.key_redo)
+		{
+			if redo_operation (*buffer) then { modified = true; dirty = true; }
+		}
+		// Copy, cut, paste
+		else if matches_key_binding (event, config.key_copy) || matches_key_binding (event, config.key_cut)
+		{
+			if buffer.selection != 0
 			{
-				if move_line_up (*buffer) then { modified = true; dirty = true; }
-			}
-			else if event.key_event.mods == .SHIFT
-			{
-				if move_cursor_to_previous_line (*buffer, select = true) then modified = true;
-			}
-			else if event.key_event.mods == .NONE
-			{
-				if move_cursor_to_previous_line (*buffer) then modified = true;
-			}
-
-		case .DOWN;
-			if event.key_event.mods == .ALT
-			{
-				if move_line_down (*buffer) then { modified = true; dirty = true; }
-			}
-			else if event.key_event.mods == .SHIFT
-			{
-				if move_cursor_to_next_line (*buffer, select = true) then modified = true;
-			}
-			else if event.key_event.mods == .NONE
-			{
-				if move_cursor_to_next_line (*buffer) then modified = true;
-			}
-
-		case .LEFT;
-			if event.key_event.mods == .SHIFT
-			{
-				if select_backward (*buffer) then modified = true;
-			}
-			else if (event.key_event.mods & .CONTROL)
-			{
-				if skip_word_backward (*buffer, (event.key_event.mods & .SHIFT) == .SHIFT) then modified = true;
-			}
-			else if event.key_event.mods == .NONE
-			{
-				if move_cursor_backward (*buffer) then modified = true;
-			}
-
-		case .RIGHT;
-			if event.key_event.mods == .SHIFT
-			{
-				if select_forward (*buffer) then modified = true;
-			}
-			else if (event.key_event.mods & .CONTROL)
-			{
-				if skip_word_forward (*buffer, (event.key_event.mods & .SHIFT) == .SHIFT) then modified = true;
-			}
-			else if event.key_event.mods == .NONE
-			{
-				if move_cursor_forward (*buffer) then modified = true;
-			}
-
-		case .Z;
-			if event.key_event.mods == .CONTROL
-			{
-				if undo_operation (*buffer) then { modified = true; dirty = true; }
-			}
-			else if event.key_event.mods == (Mods.CONTROL | .SHIFT)
-			{
-				if redo_operation (*buffer) then { modified = true; dirty = true; }
-			}
-
-		case .A;
-			// Select all
-			if event.key_event.mods == .CONTROL
-			{
-				set_cursor (*buffer, 0);
-				while buffer.cursor < gap_buffer_count (buffer)
-					select_forward (*buffer);
-			}
-
-		case .X; #through;
-		case .C;
-			if event.key_event.mods == .CONTROL
-			{
-				if buffer.selection != 0
+				text := alloc_array (u32, abs (buffer.selection), temp_allocator);
+				i := 0;
+				for :selected_chars codepoint, index : buffer
 				{
-					text := alloc_array (u32, abs (buffer.selection), temp_allocator);
-					i := 0;
-					for :selected_chars codepoint, index : buffer
-					{
-						text[i] = codepoint;
-						i += 1;
-					}
-					set_clipboard_text (*window, utf8_runes_to_string (text, temp_allocator));
-					if event.key_event.key_code == .X then delete_selection (*buffer);
+					text[i] = codepoint;
+					i += 1;
 				}
+				set_clipboard_text (*window, utf8_runes_to_string (text, temp_allocator));
+				if matches_key_binding (event, config.key_cut)
+				{
+					delete_selection (*buffer);
+					dirty = true;
+				}
+				modified = true;
 			}
-
-		case .V;
-			if event.key_event.mods == .CONTROL
+		}
+		else if matches_key_binding (event, config.key_paste)
+		{
+			// @Todo (stefan): Handle EOL and tabs when they're not allowed
+			pasted_text := clone_clipboard_text (*window, temp_allocator);
+			if pasted_text.count != 0
 			{
-				// @Todo (stefan): Handle EOL and tabs when they're not allowed
-				pasted_text := clone_clipboard_text (*window, temp_allocator);
 				insert_at_cursor (*buffer, pasted_text);
 				modified = true;
 				dirty    = true;
 			}
-
-		case .BACKSPACE;
+		}
+		// Backspace, delete, return, tab
+		else if event.key_event.key_code == .BACKSPACE
+		{
 			if event.key_event.mods == .CONTROL
 				skip_word_backward (*buffer, true);
 			if backspace_selection (*buffer) then { modified = true; dirty = true; }
-
-		case .DELETE;
+		}
+		else if event.key_event.key_code == .DELETE
+		{
 			if event.key_event.mods == .CONTROL
 				skip_word_forward (*buffer, true);
 			if delete_selection (*buffer) then { modified = true; dirty = true; }
-
-		case .RETURN;
+		}
+		else if event.key_event.key_code == .RETURN
+		{
 			if (flags & .SINGLE_LINE) != .SINGLE_LINE
 			{
-				ctrl_shift := (event.key_event.mods & .CONTROL) && (event.key_event.mods & .SHIFT) && !(event.key_event.mods & .ALT);
+				ctrl_shift := event.key_event.mods == Mods.CONTROL | .SHIFT;
 				if ctrl_shift then move_cursor_to_bol (*buffer);
 				insert_eol_at_cursor (*buffer, auto_tab = true);
 				if ctrl_shift then move_cursor_to_previous_line (*buffer);
@@ -144,8 +155,9 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> modifie
 				modified = true;
 				dirty    = true;
 			}
-
-		case .TAB;
+		}
+		else if event.key_event.key_code == .TAB
+		{
 			if (flags & .DISALLOW_TABS) != .DISALLOW_TABS
 			{
 				insert_at_cursor (*buffer, "\t");

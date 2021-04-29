@@ -14,3 +14,30 @@ text_input_selection_color 0.3 0.5 0.9 0.7
 bottom_io_padding 0
 buffer_line_numbers_padding 0
 buffer_info_padding 0
+
+# Key bindings
+key_previous_view CTRL+W
+key_next_view CTRL+E
+key_close_view CTRL+Q
+key_copy CTRL+C
+key_cut CTRL+X
+key_paste CTRL+V
+key_undo CTRL+Z
+key_redo CTRL+SHIFT+Z
+key_move_up UP
+key_move_down DOWN
+key_move_left LEFT
+key_move_right RIGHT
+key_select_up SHIFT+UP
+key_select_down SHIFT+DOWN
+key_select_left SHIFT+LEFT
+key_select_right SHIFT+RIGHT
+key_skip_left CTRL+LEFT
+key_skip_right CTRL+RIGHT
+key_select_skip_left CTRL+SHIFT+LEFT
+key_select_skip_right CTRL+SHIFT+RIGHT
+key_move_line_up ALT+UP
+key_move_line_down ALT+DOWN
+key_scroll_up CTRL+UP
+key_scroll_down CTRL+DOWN
+key_select_all CTRL+A
