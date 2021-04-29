@@ -16,6 +16,7 @@ buffer_line_numbers_padding 0
 buffer_info_padding 0
 
 # Key bindings
+key_toggle_command_input ESCAPE
 key_previous_view CTRL+W
 key_next_view CTRL+E
 key_close_view CTRL+Q

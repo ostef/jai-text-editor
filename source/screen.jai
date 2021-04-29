@@ -61,14 +61,14 @@ screen_handle_event :: (using screen : *Screen, event : Event)
 
 	case .KEY_PRESS; #through;
 	case .KEY_REPEAT;
+		// Search for matching command shortcut
 		if !is_inputting_command
 		{
 			for cmd : registered_commands
 			{
 				if !cmd.has_shortcut then continue;
 
-				if event.key_event.mods == cmd.shortcut.mods &&
-				event.key_event.key_code == cmd.shortcut.key
+				if matches_key_binding (event, cmd.shortcut)
 				{
 					// Execute the command if it can be called with no arguments
 					if cmd.arg_count == 0 || cmd.first_optional_argument == 0
@@ -86,7 +86,7 @@ screen_handle_event :: (using screen : *Screen, event : Event)
 			}
 		}
 
-		if event.key_event.key_code == .ESCAPE
+		if matches_key_binding (event, config.key_toggle_command_input)
 		{
 			toggle_command_input (screen);
 		}
@@ -109,12 +109,13 @@ screen_handle_event :: (using screen : *Screen, event : Event)
 				return;
 			}
 		}
-		else if event.key_event.mods == .CONTROL
+		else if matches_key_binding (event, config.key_previous_view)
 		{
-			if event.key_event.key_code == .E
-				active_view_index = wrap (active_view_index + 1, 0, text_views.count);
-			else if event.key_event.key_code == .W
-				active_view_index = wrap (active_view_index - 1, 0, text_views.count);
+			active_view_index = wrap (active_view_index - 1, 0, text_views.count);
+		}
+		else if matches_key_binding (event, config.key_next_view)
+		{
+			active_view_index = wrap (active_view_index + 1, 0, text_views.count);
 		}
 
 	case .MOUSE_BUTTON_PRESS;
@@ -149,14 +150,10 @@ text_view_handle_event :: (using view : *Text_View, event : Event)
 	{
 	case .KEY_PRESS; #through;
 	case .KEY_REPEAT;
-		if event.key_event.key_code ==
-		{
-		case .UP;
-			if event.key_event.mods == .CONTROL then scrolling.y -= 1;
-
-		case .DOWN;
-			if event.key_event.mods == .CONTROL then scrolling.y += 1;
-		}
+		if matches_key_binding (event, config.key_scroll_up)
+			scrolling.y -= 1;
+		else if matches_key_binding (event, config.key_scroll_down)
+			scrolling.y += 1;
 
 	case .MOUSE_WHEEL;
 		if event.mouse_wheel_event.x > 0 then scrolling.x -= SCROLL_SPEED;

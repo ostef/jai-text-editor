@@ -18,6 +18,7 @@ Config :: struct
 	buffer_info_padding         := 0.0;
 
 	// Key bindings
+	key_toggle_command_input := Key_Binding.{ Mods.NONE, .ESCAPE };
 	key_previous_view := Key_Binding.{ Mods.CONTROL, .W };
 	key_next_view     := Key_Binding.{ Mods.CONTROL, .E };
 	key_close_view    := Key_Binding.{ Mods.CONTROL, .Q };
