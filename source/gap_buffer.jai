@@ -99,6 +99,22 @@ clear_gap_buffer :: (using buffer : *Gap_Buffer)
 	selection = 0;
 }
 
+grow_gap_buffer :: (using buffer : *Gap_Buffer, factor : s64)
+{
+	char_count := gap_buffer_count (buffer);
+	back := gap_buffer_count (buffer) - cursor;
+	new_count := count * factor + 8;
+	new_gap := new_count - char_count;
+	new_data := alloc (new_count * size_of (u32), allocator, allocator_data);
+	memcpy (new_data, data, cursor * size_of (u32));
+	memcpy (new_data + cursor + new_gap, data + cursor + gap, back * size_of (u32));
+	
+	free (data, allocator, allocator_data);
+	data  = new_data;
+	count = new_count;
+	gap   = new_gap;
+}
+
 clone_to_string :: (buffer : Gap_Buffer, allocator : Allocator, allocator_data := null) -> string #must
 {
 	front := get_front_part (buffer);
@@ -266,14 +282,14 @@ insert_at_cursor :: inline (using buffer : *Gap_Buffer, utf32 : []u32, buffer_op
 		push_undo_operation (buffer, op);
 	}
 
-	for codepoint : utf32
+	for codepoint, i : utf32
 		insert_at_cursor (buffer, codepoint, buffer_operation = false, auto_tab);
 }
 
 insert_at_cursor :: inline (using buffer : *Gap_Buffer, str : string, buffer_operation := true, $auto_tab := false)
 {
 	if str.count == 0 then return;
-	utf32 := utf8_string_to_runes (str, temp_allocator);
+	utf32, ok := utf8_string_to_runes (str, temp_allocator);
 	insert_at_cursor (buffer, utf32, buffer_operation, auto_tab);
 }
 
@@ -967,22 +983,6 @@ gap_buffer_count :: inline (using buffer : *Gap_Buffer) -> s64 #must
 gap_buffer_count :: inline (using buffer : Gap_Buffer) -> s64 #must
 {
 	return count - gap;
-}
-
-grow_gap_buffer :: (using buffer : *Gap_Buffer, factor : s64)
-{
-	char_count := gap_buffer_count (buffer);
-	back := gap_buffer_count (buffer) - cursor;
-	new_count := count * factor + 8;
-	new_gap := new_count - char_count;
-	new_data := alloc (new_count, allocator, allocator_data);
-	memcpy (new_data, data, cursor);
-	memcpy (new_data + cursor + new_gap, data + cursor + gap, back);
-	
-	free (data, allocator, allocator_data);
-	data  = new_data;
-	count = new_count;
-	gap   = new_gap;
 }
 
 get_front_part :: inline (using buffer : Gap_Buffer) -> []u32 #must
