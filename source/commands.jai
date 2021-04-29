@@ -87,9 +87,15 @@ command_split :: (using screen : *Screen, filename := "")
 	split_active_view (screen);
 
 	if filename
-		load_file_into_active_text_view (screen, filename);
+	{
+		ok := load_file_into_active_text_view (screen, filename);
+		if ok then print_to_screen (screen, "Opened file '%' into active view.", filename);
+		else print_to_screen (screen, "Could not open file '%' into active view.", filename);
+	}
 	else
+	{
 		print_to_screen (screen, "Split active text view.");
+	}
 }
 @Command
 
@@ -97,7 +103,9 @@ command_split :: (using screen : *Screen, filename := "")
 command_open :: (using screen : *Screen, filename : string)
 {
 	if text_views.count == 0 then split_active_view (screen);
-	load_file_into_active_text_view (screen, filename);
+	ok := load_file_into_active_text_view (screen, filename);
+	if ok then print_to_screen (screen, "Opened file '%' into active view.", filename);
+	else print_to_screen (screen, "Could not open file '%' into active view.", filename);
 }
 @Command
 
