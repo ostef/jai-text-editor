@@ -348,9 +348,19 @@ draw_text_input :: (using input : *Text_Input, position : Vec2, color : Vec4, cl
 		else if codepoint == #char "\t"
 		{
 			pen.x += default_font.space_advance;
-
-			while cast (int) (pen.x - position.x) % (default_font.space_advance * 4) != 0
+			
+			// @Todo (stefan): Fix tabs jittering when smooth scrolling horizontally
+			while fmod (pen.x - position.x, default_font.space_advance * 4.0) != 0
 			{
+				// @Speed
+				if buffer.selection != 0 &&
+					(buffer.selection > 0 && i >= buffer.cursor && i < buffer.cursor + buffer.selection ||
+					buffer.selection  < 0 && i >= buffer.cursor + buffer.selection && i < buffer.cursor)
+				{
+					immediate_texture (0);
+					immediate_quad (pen.x, pen.y - default_font.ascender, pen.x + glyph.advance >> 6, pen.y - default_font.descender, config.text_input_selection_color);
+				}
+
 				pen.x += default_font.space_advance;
 			}
 
