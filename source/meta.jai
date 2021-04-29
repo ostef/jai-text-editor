@@ -148,7 +148,7 @@ generate_command_wrapper :: (name : string, decl : *Compiler.Code_Declaration, i
 
 		case;
 			Compiler.compiler_report (decl.filename, decl.l0, decl.c0,
-				stringf (temp_allocator, "Command procedure has arguments with type that we don't handle. Argument type was %. Handled argument types are: INTEGER, BOOL, FLOAT and STRING.", arg.type));
+				fstring (temp_allocator, "Command procedure has arguments with type that we don't handle. Argument type was %. Handled argument types are: INTEGER, BOOL, FLOAT and STRING.", arg.type));
 		}
 
 		nl (*builder);
@@ -224,7 +224,7 @@ handle_compiler_message :: (message : *Compiler.Message)
 				case "Command";
 					if decl.root_expression.kind != .PROCEDURE_HEADER
 					{
-						Compiler.compiler_report (note.filename, note.l0, note.c0, stringf (temp_allocator, "Found a 'Command' note on non-procedure declaration '%'. You can only register procedures as commands.", decl.name));
+						Compiler.compiler_report (note.filename, note.l0, note.c0, fstring (temp_allocator, "Found a 'Command' note on non-procedure declaration '%'. You can only register procedures as commands.", decl.name));
 					}
 					else
 					{
