@@ -5,17 +5,12 @@ Font :: struct
 {
 	filename : string;
 	ft_face  : FT_Face;
-	glyphs   : Map (u32, Font_Glyph);
-	height   : u32;
-	ascender, descender : s32;
-	space_advance : u32;
+	pages    : Map (u32, Font_Page);
 }
 
 Font_Glyph :: struct
 {
 	codepoint : u32;
-	height_in_px : u32;
-	is_dirty : bool;
 
 	// Metrics for horizontal layout, expressed as 26.6 format = 1/64th of a pixel (bitshift right by 6 to get the integral part)
 	width, height : u32;
@@ -25,7 +20,30 @@ Font_Glyph :: struct
 	bitmap_bearing_x, bitmap_bearing_y : u32;
 	bitmap_width, bitmap_height : u32;
 
-	texture   : GLuint;
+	uv0 : Vec2;
+	uv1 : Vec2;
+	texture : GLuint;
+}
+
+Font_Page :: struct
+{
+	font : *Font;
+	height  : u32;
+	atlases : [..]Font_Atlas;
+	glyphs  : Map (u32, Font_Glyph);
+	ascender, descender : s32;
+	space_advance : u32;
+}
+
+DEFAULT_FONT_ATLAS_WIDTH  : u32 : 1024;
+DEFAULT_FONT_ATLAS_HEIGHT : u32 : 1024;
+
+Font_Atlas :: struct
+{
+	texture, framebuffer : GLuint;
+	width, height : u32;
+	pen_x, pen_y : u32;
+	row_end : u32;
 }
 
 init_fonts :: ()
@@ -36,107 +54,200 @@ init_fonts :: ()
 	assert (text_spo != 0, "Could not create text shader program.");
 }
 
-load_font :: (filename : string, height_in_px : u32) -> Font #must, bool
+load_font :: (font : *Font, filename : string) -> bool
 {
-	result : Font;
-	result.filename = clone_string (filename, heap_allocator);
-	init_map (*result.glyphs, 512, heap_allocator);
-
+	font.filename = clone_string (filename, heap_allocator);
+	init_map (*font.pages, 10, heap_allocator);
 	ft_error : FT_Error;
-	ft_error = FT_New_Face (ft, clone_to_cstring (filename, temp_allocator), 0, *result.ft_face);
-	if ft_error != FT_Err_Ok then return result, log_error ("Font", "Could not load font file '%'.", filename);
-	set_font_height (*result, height_in_px);
+	ft_error = FT_New_Face (ft, clone_to_cstring (filename, temp_allocator), 0, *font.ft_face);
+	if ft_error != FT_Err_Ok then return log_error ("Font", "Could not load font file '%'.", filename);
 
-	return result, true;
+	return true;
 }
 
-load_glyph :: (using font : *Font, codepoint : u32) -> *Font_Glyph
+load_glyph :: inline (using font : *Font, codepoint : u32, height : u32) -> *Font_Glyph
 {
-	glyph := insert_to_map (*glyphs, codepoint);
-	if glyph.texture == 0
-	{
-		glGenTextures (1, *glyph.texture);
-		glyph.is_dirty = true;
-		glyph.height_in_px = height;
-	}
-
-	if glyph.is_dirty
-	{
-		ft_error := FT_Load_Char (ft_face, codepoint, FT_LOAD_RENDER);
-		if ft_error != FT_Err_Ok then return null;
-		slot := ft_face.glyph;
-
-		glyph.width     = xx slot.metrics.width;
-		glyph.height    = xx slot.metrics.height;
-		glyph.bearing_x = xx slot.metrics.horiBearingX;
-		glyph.bearing_y = xx slot.metrics.horiBearingY;
-		glyph.advance   = xx slot.metrics.horiAdvance;
-
-		glyph.bitmap_width     = xx slot.bitmap.width;
-		glyph.bitmap_height    = xx slot.bitmap.rows;
-		glyph.bitmap_bearing_x = xx slot.bitmap_left;
-		glyph.bitmap_bearing_y = xx slot.bitmap_top;
-
-		glBindTexture (GL_TEXTURE_2D, glyph.texture);
-		glPixelStorei (GL_UNPACK_ALIGNMENT, 1);
-		glTexImage2D (GL_TEXTURE_2D, 0, GL_RED, glyph.bitmap_width, glyph.bitmap_height, 0, GL_RED, GL_UNSIGNED_BYTE, slot.bitmap.buffer);
-		glPixelStorei (GL_UNPACK_ALIGNMENT, 4);
-		glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-		glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-		glBindTexture (GL_TEXTURE_2D, 0);
-
-		glyph.is_dirty = false;
-	}
+	page  := add_font_page (font, height);
+	glyph := add_glyph_to_page (page, codepoint);
 
 	return glyph;
 }
 
-set_font_height :: (using font : *Font, height_in_px : u32)
+load_glyphs :: inline (using font : *Font, str : string, height : u32)
 {
-	assert (font != null, "Font was null.");
-
-	ft_error := FT_Set_Pixel_Sizes (ft_face, 0, height_in_px);
-	if ft_error == FT_Err_Ok
-	{
-		height = height_in_px;
-		for * glyph, codepoint : glyphs
-		{
-			if glyph.height_in_px != height_in_px
-			{
-				glyph.is_dirty = true;
-				glyph.height_in_px = height_in_px;
-			}
-		}
-		
-		space_glyph := load_glyph (font, #char " ");
-		space_advance = space_glyph.advance >> 6;
-		ascender = xx ft_face.size.metrics.ascender >> 6;
-		descender = xx ft_face.size.metrics.descender >> 6;
-	}
-	else
-	{
-		log_error ("Font", "Could not set pixel size for font '%'.", filename);
-	}
+	page := add_font_page (font, height);
+	for i : 0..str.count - 1
+		add_glyph_to_page (page, str[i]);
 }
 
-draw_text :: (using font : *Font, text : string, position : Vec2, color : Vec4, clip_rect : Clip_Rect)
+load_all_ascii_characters :: inline (using font : *Font, height : u32)
+{
+	page := add_font_page (font, height);
+	for i : 0..0x7f
+		add_glyph_to_page (page, xx i);
+}
+
+prepare_text :: inline (using font : *Font, text : string, height : u32)
+{
+	codepoints := utf8_string_to_runes  (text, temp_allocator);
+	page := add_font_page (font, height);
+	for codepoint : codepoints
+		add_glyph_to_page (page, codepoint);
+}
+
+add_atlas_to_page :: (using page : *Font_Page, atlas_width := DEFAULT_FONT_ATLAS_WIDTH, atlas_height := DEFAULT_FONT_ATLAS_HEIGHT) -> *Font_Atlas
+{
+	result := push_to_array (*atlases, initialize = true);
+	result.width  = atlas_width;
+	result.height = atlas_height;
+
+	// Generate the atlas texture
+	glGenTextures (1, *result.texture);
+	glBindTexture (GL_TEXTURE_2D, result.texture);
+	defer glBindTexture (GL_TEXTURE_2D, 0);
+	glPixelStorei (GL_UNPACK_ALIGNMENT, 1);
+	glTexImage2D (GL_TEXTURE_2D, 0, GL_RED, atlas_width, atlas_height, 0, GL_RED, GL_UNSIGNED_BYTE, null);
+	glPixelStorei (GL_UNPACK_ALIGNMENT, 4);
+	glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+	glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+
+	// Generate the atlas framebuffer
+	glGenFramebuffers (1, *result.framebuffer);
+	glBindFramebuffer (GL_FRAMEBUFFER, result.framebuffer);
+	defer glBindFramebuffer (GL_FRAMEBUFFER, 0);
+	glFramebufferTexture2D (GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, result.texture, 0);
+	assert (glCheckFramebufferStatus (GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE, "Could not initialize the atlas' framebuffer.");
+
+	return result;
+}
+
+load_glyph :: add_glyph_to_page;
+add_glyph_to_page :: (using page : *Font_Page, codepoint : u32) -> *Font_Glyph
+{
+	glyph, was_present := insert_to_map (*glyphs, codepoint);
+	if was_present then return glyph;
+
+	// Load the glyph metrics and texture to be rendered in the font atlas
+	FT_Set_Pixel_Sizes (font.ft_face, 0, height);
+	ft_error := FT_Load_Char (font.ft_face, codepoint, FT_LOAD_RENDER);
+	assert (ft_error == FT_Err_Ok, "Could not load glyph %.", codepoint);
+	slot := font.ft_face.glyph;
+
+	glyph.codepoint = codepoint;
+	glyph.width     = xx slot.metrics.width;
+	glyph.height    = xx slot.metrics.height;
+	glyph.bearing_x = xx slot.metrics.horiBearingX;
+	glyph.bearing_y = xx slot.metrics.horiBearingY;
+	glyph.advance   = xx slot.metrics.horiAdvance;
+
+	glyph.bitmap_width     = xx slot.bitmap.width;
+	glyph.bitmap_height    = xx slot.bitmap.rows;
+	glyph.bitmap_bearing_x = xx slot.bitmap_left;
+	glyph.bitmap_bearing_y = xx slot.bitmap_top;
+
+	atlas : *Font_Atlas;
+	// Find a font atlas to place the glyph into
+	for * atlases
+	{
+		// Check if there is enough space to place the glyph
+		if it.width - it.pen_x > glyph.bitmap_width && it.height - it.pen_y > glyph.bitmap_height || it.height - it.row_end > glyph.bitmap_height
+		{
+			atlas = it;
+
+			break;
+		}
+	}
+
+	// We need to add a new atlas
+	if !atlas then atlas = add_atlas_to_page (page);
+
+	// Render the glyph on the font atlas
+	// Setup glyph texture
+	glyph_texture : GLuint;
+	glGenTextures (1, *glyph_texture);
+	defer glDeleteTextures (1, *glyph_texture);
+	glBindTexture (GL_TEXTURE_2D, glyph_texture);
+	glPixelStorei (GL_UNPACK_ALIGNMENT, 1);
+	glTexImage2D (GL_TEXTURE_2D, 0, GL_RED, glyph.bitmap_width, glyph.bitmap_height, 0, GL_RED, GL_UNSIGNED_BYTE, slot.bitmap.buffer);
+	glPixelStorei (GL_UNPACK_ALIGNMENT, 4);
+	glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+	glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+	glBindTexture (GL_TEXTURE_2D, 0);
+
+	// Get glyph uvs
+	if atlas.width - atlas.pen_x < glyph.bitmap_width || atlas.height - atlas.pen_y < glyph.bitmap_height
+	{
+		atlas.pen_x = 0;
+		atlas.pen_y = atlas.row_end;
+		atlas.row_end += glyph.bitmap_height;
+	}
+
+	glyph.uv0 = vec2 (atlas.pen_x / cast (f32) atlas.width, 1 - atlas.pen_y / cast (f32) atlas.height);
+	glyph.uv1 = vec2 ((atlas.pen_x + glyph.bitmap_width) / cast (f32) atlas.width, 1 - (atlas.pen_y + glyph.bitmap_height) / cast (f32) atlas.height);
+	glyph.texture = atlas.texture;
+	
+	// Draw glyph
+	// @Note (stefan): This can be called inside draw_text, and it will fuck up the Immediate_State if that's the case.
+	// This is why we cache the current state.
+	// @Todo (stefan): Add a push_state/pop_state thing in Immediate_Graphics, that obviously does not cache the vertices array.
+	previous_texture := context.immediate_state.texture;
+	previous_spo     := context.immediate_state.spo;
+	immediate_texture (glyph_texture);
+	defer immediate_texture (previous_texture);
+	immediate_shader (text_spo);
+	defer immediate_shader (previous_spo);
+	immediate_framebuffer (atlas.framebuffer);
+	defer immediate_framebuffer (0);
+	immediate_framebuffer_viewport (0, 0, xx atlas.width, xx atlas.height);
+	
+	drawn := immediate_quad (cast (f32) atlas.pen_x, cast (f32) atlas.pen_y, cast (f32) atlas.pen_x + glyph.bitmap_width, cast (f32) atlas.pen_y + glyph.bitmap_height, VEC4_ONE);
+
+	// Update the atlas pen and row_end
+	atlas.pen_x += glyph.bitmap_width;
+	atlas.row_end = max (atlas.row_end, atlas.pen_y + glyph.bitmap_height);
+
+	return glyph;
+}
+
+get_font_page :: add_font_page;
+add_font_page :: (using font : *Font, height : u32) -> *Font_Page #must
+{
+	page, was_present := insert_to_map (*pages, height);
+	if was_present then return page;
+
+	page.font = font;
+	page.height = height;
+	init_array (*page.atlases, 3, heap_allocator);
+	init_map (*page.glyphs, 512, heap_allocator);
+	space_glyph := add_glyph_to_page (page, #char " ");
+	page.ascender      = xx ft_face.size.metrics.ascender >> 6;
+	page.descender     = xx ft_face.size.metrics.descender >> 6;
+	page.space_advance = xx space_glyph.advance >> 6;
+
+	return page;
+}
+
+draw_text :: (using font : *Font, text : string, height : u32, position : Vec2, color : Vec4, clip_rect : Clip_Rect)
 {
 	codepoints := utf8_string_to_runes  (text, temp_allocator);
 
-	inline draw_text (font, codepoints, position, color, clip_rect);
+	inline draw_text (font, codepoints, height, position, color, clip_rect);
 }
 
 // @Note (stefan): Find a way to pass anything that can be iterated on as a sequence of u32s, such as a Utf8_String,
 // or even a special text buffer like a Gap_Buffer.
 // @Note (stefan): We have calculate_drawn_text_bounds that does almost the same thing as this, maybe make a for_expansion ? 
-draw_text :: (using font : *Font, text : []u32, position : Vec2, color : Vec4, clip_rect : Clip_Rect)
+draw_text :: (using font : *Font, text : []u32, height : u32, position : Vec2, color : Vec4, clip_rect : Clip_Rect)
 {
 	assert (font != null, "Font was null.");
 
+	page := get_font_page (font, height);
 	pen := position;
-	pen.y += ascender;
+	pen.y += page.ascender;
 	immediate_shader (text_spo);
 
 	for i : 0..text.count - 1
@@ -148,47 +259,44 @@ draw_text :: (using font : *Font, text : []u32, position : Vec2, color : Vec4, c
 		if codepoint == #char "\n"
 		{
 			pen.x = position.x;
-			pen.y += (ascender - descender);
+			pen.y += (page.ascender - page.descender);
 
 			continue;
 		}
 		else if codepoint == #char "\t"
 		{
-			pen.x += font.space_advance;
-
-			while fmod (pen.x - position.x, font.space_advance * 4.0) != 0
-			{
-				pen.x += font.space_advance;
-			}
+			pen.x += page.space_advance;
+			pen.x = position.x + ceil ((pen.x - position.x) / (page.space_advance * 4.0)) * page.space_advance * 4.0;
 
 			continue;
 		}
 		
-		glyph := load_glyph (font, codepoint);
+		glyph := load_glyph (page, codepoint);
 		if !glyph then continue;
 		glyph_position := vec2 (pen.x + glyph.bitmap_bearing_x, pen.y - glyph.bitmap_bearing_y);
 		immediate_texture (glyph.texture);
-		immediate_quad (glyph_position.x, glyph_position.y, glyph_position.x + glyph.bitmap_width, glyph_position.y + glyph.bitmap_height, color);
-		immediate_flush ();
+		immediate_quad (glyph_position.x, glyph_position.y, glyph_position.x + glyph.bitmap_width, glyph_position.y + glyph.bitmap_height, color,
+			glyph.uv0, vec2 (glyph.uv1.x, glyph.uv0.y), glyph.uv1, vec2 (glyph.uv0.x, glyph.uv1.y));
 		pen.x += glyph.advance >> 6;
 	}
 
-	immediate_texture (0);
 	immediate_shader (0);
+	immediate_texture (0);
 }
 
-calculate_drawn_text_bounds :: (using font : *Font, text : string) -> Vec2 #must
+calculate_drawn_text_bounds :: (using font : *Font, text : string, height : u32) -> Vec2 #must
 {
 	codepoints := utf8_string_to_runes (text, temp_allocator);
 
-	return inline calculate_drawn_text_bounds (font, codepoints);
+	return inline calculate_drawn_text_bounds (font, codepoints, height);
 }
 
-calculate_drawn_text_bounds :: (using font : *Font, text : []u32) -> Vec2 #must
+calculate_drawn_text_bounds :: (using font : *Font, text : []u32, height : u32) -> Vec2 #must
 {
 	assert (font != null, "Font was null.");
 
-	pen := vec2 (0, xx (ascender - descender));
+	page := get_font_page (font, height);
+	pen := vec2 (0, xx (page.ascender - page.descender));
 	max := pen;
 	for i : 0..text.count - 1
 	{
@@ -196,7 +304,7 @@ calculate_drawn_text_bounds :: (using font : *Font, text : []u32) -> Vec2 #must
 		if codepoint == #char "\n"
 		{
 			pen.x = 0;
-			pen.y += (ascender - descender);
+			pen.y += (page.ascender - page.descender);
 			if pen.x > max.x then max.x = pen.x;
 			if pen.y > max.y then max.y = pen.y;
 
@@ -204,11 +312,11 @@ calculate_drawn_text_bounds :: (using font : *Font, text : []u32) -> Vec2 #must
 		}
 		else if codepoint == #char "\t"
 		{
-			pen.x += font.space_advance;
+			pen.x += page.space_advance;
 
-			while cast (int) pen.x % (font.space_advance * 4) != 0
+			while cast (int) pen.x % (page.space_advance * 4) != 0
 			{
-				pen.x += font.space_advance;
+				pen.x += page.space_advance;
 			}
 
 			if pen.x > max.x then max.x = pen.x;
@@ -217,7 +325,7 @@ calculate_drawn_text_bounds :: (using font : *Font, text : []u32) -> Vec2 #must
 			continue;
 		}
 		
-		glyph := load_glyph (font, codepoint);
+		glyph := load_glyph (page, codepoint);
 		if !glyph then continue;
 		glyph_position := vec2 (pen.x + glyph.bitmap_bearing_x, pen.y - glyph.bitmap_bearing_y);
 		pen.x += glyph.advance >> 6;

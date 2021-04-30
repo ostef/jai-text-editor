@@ -211,17 +211,18 @@ write_buffer_to_file :: (using input : *Text_Input, filename : string) -> writte
 	return written, ok;
 }
 
-calculate_drawn_cursor_position :: (using input : *Text_Input, position : Vec2) -> Vec2 #must
+calculate_drawn_cursor_position :: (using input : *Text_Input, height : u32, position : Vec2) -> Vec2 #must
 {
+	page := get_font_page (default_font, height);
 	cursor_position : Vec2;
-	cursor_advance  := default_font.space_advance;
+	cursor_advance  := page.space_advance;
 
 	pen := position;
-	pen.y += default_font.ascender;
+	pen.y += page.ascender;
 
 	for codepoint, i : buffer
 	{
-		glyph := load_glyph (default_font, codepoint);
+		glyph := load_glyph (page, codepoint);
 		if !glyph then continue;
 		
 		if i == buffer.cursor
@@ -233,18 +234,14 @@ calculate_drawn_cursor_position :: (using input : *Text_Input, position : Vec2) 
 		if codepoint == #char "\n"
 		{
 			pen.x = position.x;
-			pen.y += (default_font.ascender - default_font.descender);
+			pen.y += (page.ascender - page.descender);
 
 			continue;
 		}
 		else if codepoint == #char "\t"
 		{
-			pen.x += default_font.space_advance;
-
-			while cast (int) (pen.x - position.x) % (default_font.space_advance * 4) != 0
-			{
-				pen.x += default_font.space_advance;
-			}
+			pen.x += page.space_advance;
+			pen.x = position.x + ceil ((pen.x - position.x) / (page.space_advance * 4.0)) * page.space_advance * 4.0;
 
 			// Highlight the whole tab
 			if i == buffer.cursor
@@ -263,19 +260,20 @@ calculate_drawn_cursor_position :: (using input : *Text_Input, position : Vec2) 
 	return cursor_position;
 }
 
-calculate_drawn_text_bounds :: (using input : *Text_Input) -> Vec2 #must
+calculate_drawn_text_bounds :: (using input : *Text_Input, height : u32) -> Vec2 #must
 {
-	pen := vec2 (0, xx (default_font.ascender - default_font.descender));
+	page := get_font_page (default_font, height);
+	pen := vec2 (0, xx (page.ascender - page.descender));
 	max := pen;
 	for codepoint, i : buffer
 	{
-		glyph := load_glyph (default_font, codepoint);
+		glyph := load_glyph (page, codepoint);
 		if !glyph then continue;
 
 		if codepoint == #char "\n"
 		{
 			pen.x = 0;
-			pen.y += (default_font.ascender - default_font.descender);
+			pen.y += (page.ascender - page.descender);
 			if pen.x > max.x then max.x = pen.x;
 			if pen.y > max.y then max.y = pen.y;
 
@@ -283,12 +281,8 @@ calculate_drawn_text_bounds :: (using input : *Text_Input) -> Vec2 #must
 		}
 		else if codepoint == #char "\t"
 		{
-			pen.x += default_font.space_advance;
-
-			while cast (int) pen.x % (default_font.space_advance * 4) != 0
-			{
-				pen.x += default_font.space_advance;
-			}
+			pen.x += page.space_advance;
+			pen.x = ceil (pen.x / (page.space_advance * 4.0)) * page.space_advance * 4.0;
 
 			if pen.x > max.x then max.x = pen.x;
 			if pen.y > max.y then max.y = pen.y;
@@ -306,13 +300,14 @@ calculate_drawn_text_bounds :: (using input : *Text_Input) -> Vec2 #must
 	return max;
 }
 
-draw_text_input :: (using input : *Text_Input, position : Vec2, color : Vec4, clip_rect : Clip_Rect, draw_cursor := true)
-{	
+draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, color : Vec4, clip_rect : Clip_Rect, draw_cursor := true)
+{
+	page := get_font_page (default_font, height);
 	cursor_position : Vec2;
-	cursor_advance  := default_font.space_advance;
+	cursor_advance  := page.space_advance;
 
 	pen := position;
-	pen.y += default_font.ascender;
+	pen.y += page.ascender;
 	immediate_shader (text_spo);
 
 	for codepoint, i : buffer
@@ -320,7 +315,7 @@ draw_text_input :: (using input : *Text_Input, position : Vec2, color : Vec4, cl
 		if pen.y < xx clip_rect.y1 && codepoint != #char "\n" then continue;
 		if pen.y > xx clip_rect.y2 then break;
 		
-		glyph := load_glyph (default_font, codepoint);
+		glyph := load_glyph (page, codepoint);
 		if !glyph then continue;
 		
 		// @Speed
@@ -329,7 +324,7 @@ draw_text_input :: (using input : *Text_Input, position : Vec2, color : Vec4, cl
 			buffer.selection  < 0 && i >= buffer.cursor + buffer.selection && i < buffer.cursor)
 		{
 			immediate_texture (0);
-			immediate_quad (pen.x, pen.y - default_font.ascender, pen.x + glyph.advance >> 6, pen.y - default_font.descender, config.text_input_selection_color);
+			immediate_quad (pen.x, pen.y - page.ascender, pen.x + glyph.advance >> 6, pen.y - page.descender, config.text_input_selection_color);
 		}
 
 		if i == buffer.cursor
@@ -341,30 +336,14 @@ draw_text_input :: (using input : *Text_Input, position : Vec2, color : Vec4, cl
 		if codepoint == #char "\n"
 		{
 			pen.x = position.x;
-			pen.y += (default_font.ascender - default_font.descender);
+			pen.y += (page.ascender - page.descender);
 
 			continue;
 		}
 		else if codepoint == #char "\t"
 		{
-			pen.x += default_font.space_advance;
-			pen.x = position.x + ceil ((pen.x - position.x) / (default_font.space_advance * 4.0)) * default_font.space_advance * 4.0;
-
-			/*
-			while fmod (pen.x - position.x, default_font.space_advance * 4.0) != 0
-			{
-				// @Speed
-				if buffer.selection != 0 &&
-					(buffer.selection > 0 && i >= buffer.cursor && i < buffer.cursor + buffer.selection ||
-					buffer.selection  < 0 && i >= buffer.cursor + buffer.selection && i < buffer.cursor)
-				{
-					immediate_texture (0);
-					immediate_quad (pen.x, pen.y - default_font.ascender, pen.x + glyph.advance >> 6, pen.y - default_font.descender, config.text_input_selection_color);
-				}
-
-				pen.x += default_font.space_advance;
-			}
-			*/
+			pen.x += page.space_advance;
+			pen.x = position.x + ceil ((pen.x - position.x) / (page.space_advance * 4.0)) * page.space_advance * 4.0;
 
 			// Highlight the whole tab
 			if i == buffer.cursor
@@ -377,8 +356,8 @@ draw_text_input :: (using input : *Text_Input, position : Vec2, color : Vec4, cl
 		
 		glyph_position := vec2 (pen.x + glyph.bitmap_bearing_x, pen.y - glyph.bitmap_bearing_y);
 		immediate_texture (glyph.texture);
-		immediate_quad (glyph_position.x, glyph_position.y, glyph_position.x + glyph.bitmap_width, glyph_position.y + glyph.bitmap_height, color);
-		immediate_flush ();
+		immediate_quad (glyph_position.x, glyph_position.y, glyph_position.x + glyph.bitmap_width, glyph_position.y + glyph.bitmap_height, color,
+			glyph.uv0, vec2 (glyph.uv1.x, glyph.uv0.y), glyph.uv1, vec2 (glyph.uv0.x, glyph.uv1.y));
 
 		pen.x += glyph.advance >> 6;
 	}
@@ -390,7 +369,7 @@ draw_text_input :: (using input : *Text_Input, position : Vec2, color : Vec4, cl
 	if draw_cursor
 	{
 		cursor_alpha := cast (f32) range_map (cos (Basic.get_time () * 5), -1, 1, 0, 1);
-		immediate_quad (cursor_position.x, cursor_position.y - default_font.ascender,
-			cursor_position.x + cursor_advance, cursor_position.y - default_font.descender, vec4 (1, 1, 1, cursor_alpha));
+		immediate_quad (cursor_position.x, cursor_position.y - page.ascender,
+			cursor_position.x + cursor_advance, cursor_position.y - page.descender, vec4 (1, 1, 1, cursor_alpha));
 	}
 }

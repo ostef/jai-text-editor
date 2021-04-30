@@ -180,7 +180,7 @@ init_screen :: (screen : *Screen, width : u32, height : u32)
 	if !default_font
 	{
 		default_font   = alloc_item (Font, heap_allocator);
-		<<default_font = load_font ("fonts/jetbrains_mono.ttf", 16);
+		load_font (default_font, "fonts/jetbrains_mono.ttf");
 	}
 
 	init_text_input (*screen.command_input, Text_Input.Flags.SINGLE_LINE | .DISALLOW_TABS);
@@ -209,7 +209,9 @@ toggle_command_input :: inline (using screen : *Screen)
 
 bottom_bar_height :: inline (using screen : *Screen) -> f32 #must
 {
-	return (default_font.ascender - default_font.descender) + 2.0 * config.bottom_io_padding;
+	page := get_font_page (default_font, config.bottom_io_font_height);
+
+	return (page.ascender - page.descender) + 2.0 * config.bottom_io_padding;
 }
 
 print_to_screen :: (using screen : *Screen, fmt : string, args : ..Any)
@@ -313,10 +315,11 @@ draw_screen :: (using screen : *Screen)
 	bottom_bar : Clip_Rect;
 	views_area : Clip_Rect;
 
+	page := get_font_page (default_font, config.bottom_io_font_height);
 	{
 		bottom_bar.x1 = 0;
 		bottom_bar.x2 = xx width;
-		bottom_bar.y1 = xx (height - 2 * config.bottom_io_padding - xx (default_font.ascender - default_font.descender));
+		bottom_bar.y1 = xx (height - 2 * config.bottom_io_padding - xx (page.ascender - page.descender));
 		bottom_bar.y2 = xx height;
 	}
 
@@ -365,15 +368,15 @@ draw_screen :: (using screen : *Screen)
 	immediate_noclip ();
 
 	// Draw the bottom bar
-	immediate_quad (0, cast (f32) height - (default_font.ascender - default_font.descender) - 2.0 * config.bottom_io_padding,
+	immediate_quad (0, cast (f32) height - (page.ascender - page.descender) - 2.0 * config.bottom_io_padding,
 		cast (f32) width, cast (f32) height, config.bottom_io_background_color);
 
 	// Draw the command/message buffer
 	if is_inputting_command
 	{
-		position := vec2 (xx config.bottom_io_padding, cast (f32) height - config.bottom_io_padding - (default_font.ascender - default_font.descender));
-		draw_text (default_font, ">", position, config.bottom_io_text_color, bottom_bar);
-		bounds := calculate_drawn_text_bounds (default_font, ">");
+		position := vec2 (xx config.bottom_io_padding, cast (f32) height - config.bottom_io_padding - (page.ascender - page.descender));
+		draw_text (default_font, ">", config.bottom_io_font_height, position, config.bottom_io_text_color, bottom_bar);
+		bounds := calculate_drawn_text_bounds (default_font, ">", config.bottom_io_font_height);
 		position.x += bounds.x;
 		
 		// @Fix (stefan): The clipping rect's height is the entire screen because clipping is buggy right now.
@@ -382,20 +385,20 @@ draw_screen :: (using screen : *Screen)
 		command_text_clip.y1 = 0;
 		command_text_clip.y2 = xx height;
 
-		cursor_position := calculate_drawn_cursor_position (*command_input, position);
+		cursor_position := calculate_drawn_cursor_position (*command_input, config.bottom_io_font_height, position);
 		xoffset := 0.0;
-		while cursor_position.x + xoffset + default_font.space_advance > xx width
-			xoffset -= default_font.space_advance;
+		while cursor_position.x + xoffset + page.space_advance > xx width
+			xoffset -= page.space_advance;
 		position.x += xoffset;
 		
 		// Clip so we don't draw over the '>'
 		immediate_clip (command_text_clip);
-		draw_text_input (*command_input, position, config.bottom_io_text_color, bottom_bar);
+		draw_text_input (*command_input, config.bottom_io_font_height, position, config.bottom_io_text_color, bottom_bar);
 		immediate_noclip ();
 	}
 	else
 	{
-		draw_text (default_font, to_string (message_buffer),
+		draw_text (default_font, to_string (message_buffer), config.bottom_io_font_height,
 			vec2 (xx config.bottom_io_padding, cast (f32) bottom_bar.y1 + config.bottom_io_padding), config.bottom_io_text_color, bottom_bar);
 	}
 }
@@ -408,7 +411,10 @@ profile :: (name : string) #expand
 
 draw_text_view :: (using view : *Text_View, draw_cursor : bool)
 {
-	text_line_height := default_font.ascender - default_font.descender;
+	buffer_page := get_font_page (default_font, config.buffer_font_height);
+	info_page := get_font_page (default_font, config.buffer_info_font_height);
+	text_line_height := buffer_page.ascender - buffer_page.descender;
+	info_line_height := info_page.ascender - info_page.descender;
 	text_offset          : Vec2;
 	view_area            : Clip_Rect;
 	line_bar             : Clip_Rect;
@@ -458,7 +464,7 @@ draw_text_view :: (using view : *Text_View, draw_cursor : bool)
 	{
 		info_bar.x1 = view_area.x1;
 		info_bar.x2 = view_area.x2;
-		info_bar.y1 = view_area.y2 - cast (s32) (2 * config.buffer_info_padding + text_line_height);
+		info_bar.y1 = view_area.y2 - cast (s32) (2 * config.buffer_info_padding + info_line_height);
 		info_bar.y2 = view_area.y2;
 	}
 
@@ -466,7 +472,7 @@ draw_text_view :: (using view : *Text_View, draw_cursor : bool)
 		line_info_text_end : Vec2;
 		{
 			profile ("calculate_drawn_text_bounds for line numbers");
-			line_info_text_end = calculate_drawn_text_bounds (default_font, to_string (line_number_builder));
+			line_info_text_end = calculate_drawn_text_bounds (default_font, to_string (line_number_builder), config.buffer_font_height);
 		}
 		line_bar.x1 = view_area.x1;
 		line_bar.x2 = line_bar.x1 + cast (s32) (line_info_text_end.x + 2 * config.buffer_line_numbers_padding);
@@ -485,9 +491,9 @@ draw_text_view :: (using view : *Text_View, draw_cursor : bool)
 	text_max : Vec2;
 	{
 		profile ("calculate_drawn_text_bounds for scrolling");
-		text_max = calculate_drawn_text_bounds (*input);
+		text_max = calculate_drawn_text_bounds (*input, config.buffer_font_height);
 	}
-	max_scrolling := vec2 (ceil (text_max.x / default_font.space_advance), ceil (text_max.y / text_line_height));
+	max_scrolling := vec2 (ceil (text_max.x / buffer_page.space_advance), ceil (text_max.y / text_line_height));
 	max_scrolling.x = max (max_scrolling.x - 2, 0);		// Add padding
 	max_scrolling.y = max (max_scrolling.y - 2, 0);		// Add padding
 	if scrolling.x > max_scrolling.x then scrolling.x = max_scrolling.x;
@@ -495,7 +501,7 @@ draw_text_view :: (using view : *Text_View, draw_cursor : bool)
 
 	scroll_lerp_amount := clamp (1 - config.visual_scrolling_smoothing, 0.05, 1);
 	visual_scrolling = lerp (visual_scrolling, scrolling, scroll_lerp_amount);
-	text_offset      = vec2 (-visual_scrolling.x * default_font.space_advance, -visual_scrolling.y * text_line_height);
+	text_offset      = vec2 (-visual_scrolling.x * buffer_page.space_advance, -visual_scrolling.y * text_line_height);
 	// Calculate the text position
 	text_position.x = cast (f32) text_area.x1 + text_offset.x;
 	text_position.y = cast (f32) text_area.y1 + text_offset.y;
@@ -503,21 +509,21 @@ draw_text_view :: (using view : *Text_View, draw_cursor : bool)
 	if scroll_to_cursor
 	{
 		profile ("scrolling cursor");
-		cursor_position := calculate_drawn_cursor_position (*input, VEC2_ZERO);
+		cursor_position := calculate_drawn_cursor_position (*input, config.buffer_font_height, VEC2_ZERO);
 		// @Cleanup @Speed (stefan): Make this use math instead of loops.
 		while text_position.x + cursor_position.x < xx text_area.x1 && scrolling.x > 0
 		{
 			scrolling.x    -= 1;
 			visual_scrolling.x = lerp (visual_scrolling.x, scrolling.x, scroll_lerp_amount);
-			text_offset.x      = -visual_scrolling.x * default_font.space_advance;
+			text_offset.x      = -visual_scrolling.x * buffer_page.space_advance;
 			text_position.x    = cast (f32) text_area.x1 + text_offset.x;
 		}
 
-		while text_position.x + cursor_position.x + default_font.space_advance > xx text_area.x2
+		while text_position.x + cursor_position.x + buffer_page.space_advance > xx text_area.x2
 		{
 			scrolling.x    += 1;
 			visual_scrolling.x = lerp (visual_scrolling.x, scrolling.x, scroll_lerp_amount);
-			text_offset.x      = -visual_scrolling.x * default_font.space_advance;
+			text_offset.x      = -visual_scrolling.x * buffer_page.space_advance;
 			text_position.x    = cast (f32) text_area.x1 + text_offset.x;
 		}
 
@@ -552,14 +558,14 @@ draw_text_view :: (using view : *Text_View, draw_cursor : bool)
 	immediate_clip (line_bar);
 	{
 		profile ("draw line numbers");
-		draw_text (default_font, to_string (line_number_builder), line_number_position, config.buffer_line_numbers_text_color, line_bar);
+		draw_text (default_font, to_string (line_number_builder), config.buffer_font_height, line_number_position, config.buffer_line_numbers_text_color, line_bar);
 	}
 
 	// Draw text buffer
 	immediate_clip (text_area);
 	{
 		profile ("draw text input");
-		draw_text_input (*input, text_position, config.buffer_text_color, text_area, draw_cursor);
+		draw_text_input (*input, config.buffer_font_height, text_position, config.buffer_text_color, text_area, draw_cursor);
 	}
 
 	// @Fix (stefan): For some reason the clipping does not work and nothing gets rendered
@@ -580,5 +586,5 @@ draw_text_view :: (using view : *Text_View, draw_cursor : bool)
 	}
 	info_str := fstring (temp_allocator, "% - Ln %, Col % - % line(s) - UTF8 - %",
 		view_name, input.buffer.line_index + 1, input.buffer.column_index + 1, input.buffer.lines.count, input.buffer.eol_sequence);
-	draw_text (default_font, info_str, info_text_position, config.buffer_info_text_color, view_area);
+	draw_text (default_font, info_str, config.buffer_info_font_height, info_text_position, config.buffer_info_text_color, view_area);
 }

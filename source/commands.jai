@@ -199,6 +199,7 @@ resize_helper :: (using screen : *Screen, amount : s64, left : bool) -> bool
 {
 	if text_views.count <= 1 then return false;
 
+	page := get_font_page (default_font, config.buffer_font_height);
 	view := *text_views[active_view_index];
 	if left
 	{
@@ -207,17 +208,17 @@ resize_helper :: (using screen : *Screen, amount : s64, left : bool) -> bool
 			previous_view := *text_views[active_view_index - 1];
 			if view.w < previous_view.w
 			{
-				amount = xx (max (view.w + default_font.space_advance * amount, default_font.space_advance * 10.0) - view.w);
-				amount /= default_font.space_advance;
+				amount = xx (max (view.w + page.space_advance * amount, page.space_advance * 10.0) - view.w);
+				amount /= page.space_advance;
 			}
 			else
 			{
-				amount = xx -(max (previous_view.w - default_font.space_advance * amount, default_font.space_advance * 10.0) - previous_view.w);
-				amount /= default_font.space_advance;
+				amount = xx -(max (previous_view.w - page.space_advance * amount, page.space_advance * 10.0) - previous_view.w);
+				amount /= page.space_advance;
 			}
-			previous_view.w -= default_font.space_advance * amount;
-			view.x -= default_font.space_advance * amount;
-			view.w += default_font.space_advance * amount;
+			previous_view.w -= page.space_advance * amount;
+			view.x -= page.space_advance * amount;
+			view.w += page.space_advance * amount;
 		}
 	}
 	else
@@ -227,17 +228,17 @@ resize_helper :: (using screen : *Screen, amount : s64, left : bool) -> bool
 			next_view := *text_views[active_view_index + 1];
 			if view.w < next_view.w
 			{
-				amount = xx (max (view.w + default_font.space_advance * amount, default_font.space_advance * 10.0) - view.w);
-				amount /= default_font.space_advance;
+				amount = xx (max (view.w + page.space_advance * amount, page.space_advance * 10.0) - view.w);
+				amount /= page.space_advance;
 			}
 			else
 			{
-				amount = xx -(max (next_view.w - default_font.space_advance * amount, default_font.space_advance * 10.0) - next_view.w);
-				amount /= default_font.space_advance;
+				amount = xx -(max (next_view.w - page.space_advance * amount, page.space_advance * 10.0) - next_view.w);
+				amount /= page.space_advance;
 			}
-			view.w += default_font.space_advance * amount;
-			next_view.x += default_font.space_advance * amount;
-			next_view.w -= default_font.space_advance * amount;
+			view.w += page.space_advance * amount;
+			next_view.x += page.space_advance * amount;
+			next_view.w -= page.space_advance * amount;
 		}
 	}
 
