@@ -1,3 +1,5 @@
+// Acrylic window background: https://stackoverflow.com/questions/43931709/acrylic-material-in-win32-app
+
 Screen :: struct
 {
 	width, height : u32;
@@ -566,7 +568,7 @@ draw_text_view :: (using view : *Text_View, draw_cursor : bool)
 	immediate_clip (view_area);
 	// Info bar background
 	immediate_quad (cast (f32) info_bar.x1, cast (f32) info_bar.y1, cast (f32) info_bar.x2, cast (f32) info_bar.y2, config.buffer_info_background_color);
-
+	
 	// Draw info text
 	info_text_position.x = cast (f32) info_bar.x1 + config.buffer_info_padding;
 	info_text_position.y = cast (f32) info_bar.y1 + config.buffer_info_padding;

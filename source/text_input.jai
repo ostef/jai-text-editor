@@ -348,8 +348,9 @@ draw_text_input :: (using input : *Text_Input, position : Vec2, color : Vec4, cl
 		else if codepoint == #char "\t"
 		{
 			pen.x += default_font.space_advance;
-			
-			// @Todo (stefan): Fix tabs jittering when smooth scrolling horizontally
+			pen.x = position.x + ceil ((pen.x - position.x) / (default_font.space_advance * 4.0)) * default_font.space_advance * 4.0;
+
+			/*
 			while fmod (pen.x - position.x, default_font.space_advance * 4.0) != 0
 			{
 				// @Speed
@@ -363,6 +364,7 @@ draw_text_input :: (using input : *Text_Input, position : Vec2, color : Vec4, cl
 
 				pen.x += default_font.space_advance;
 			}
+			*/
 
 			// Highlight the whole tab
 			if i == buffer.cursor
