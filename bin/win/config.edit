@@ -15,6 +15,9 @@ bottom_io_padding 0
 buffer_line_numbers_padding 0
 buffer_info_padding 0
 visual_scrolling_smoothing 0.7
+bottom_io_font_height 16
+buffer_font_height 16
+buffer_info_font_height 16
 
 # Key bindings
 key_toggle_command_input ESCAPE
