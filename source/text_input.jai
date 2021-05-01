@@ -308,6 +308,9 @@ draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, co
 
 	pen := position;
 	pen.y += page.ascender;
+	immediate_push_state ();
+	defer immediate_pop_state ();
+	
 	immediate_shader (text_spo);
 
 	for codepoint, i : buffer
