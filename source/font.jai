@@ -196,12 +196,21 @@ add_glyph_to_page :: (using page : *Font_Page, codepoint : u32) -> *Font_Glyph
 	// @Todo (stefan): Add a push_state/pop_state thing in Immediate_Graphics, that obviously does not cache the vertices array.
 	previous_texture := context.immediate_state.texture;
 	previous_spo     := context.immediate_state.spo;
+	previous_clip_rect := context.immediate_state.clip_rect;
+	previous_clip_state := context.immediate_state.use_clip_rect;
 	immediate_texture (glyph_texture);
 	defer immediate_texture (previous_texture);
 	immediate_shader (text_spo);
 	defer immediate_shader (previous_spo);
 	immediate_framebuffer (atlas.framebuffer);
 	defer immediate_framebuffer (0);
+	immediate_noclip ();
+	defer
+	{
+		if previous_clip_state then immediate_clip (previous_clip_rect);
+		else immediate_noclip ();
+	}
+	
 	immediate_framebuffer_viewport (0, 0, xx atlas.width, xx atlas.height);
 	
 	drawn := immediate_quad (cast (f32) atlas.pen_x, cast (f32) atlas.pen_y, cast (f32) atlas.pen_x + glyph.bitmap_width, cast (f32) atlas.pen_y + glyph.bitmap_height, VEC4_ONE);
