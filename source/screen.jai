@@ -1,22 +1,48 @@
+#import "Bucket_Array";
+
 // Acrylic window background: https://stackoverflow.com/questions/43931709/acrylic-material-in-win32-app
 
 Screen :: struct
 {
 	width, height : u32;
+	
+	// Bottom IO
 	command_input : Text_Input;
 	is_inputting_command := true;
 	message_buffer : String_Builder;
-	text_views     : [..]Text_View;
+
+	// Views
+	text_views    : Bucket_Array (Text_View, 10);
+	visible_views : [..]*Screen_View;
 	active_view_index : s64;
 }
 
-SCROLL_SPEED :: 3;
+Screen_View :: struct
+{
+	Kind :: enum
+	{
+		TEXT;
+	}
+
+	kind : Kind;
+	index_in_bucket_array : Bucket_Array_Index;
+	index_in_views_array  : s64;
+	position : Vec2;
+	#place position;
+	x, y : f32;
+	size     : Vec2;
+	#place size;
+	w, h : f32;
+}
 
 // @Todo (stefan): Handle multiple views of the same buffer
 Text_View :: struct
 {
-	position : Vec2;
-	size     : Vec2;
+	SCROLL_SPEED :: 3;
+	
+	using base : Screen_View;
+	kind = .TEXT;
+
 	input    : Text_Input;
 	filename : string;
 	scrolling : Vec2;	// In font units, 1 on x is the font's space advance, 1 on y is the font ascender-descender
@@ -24,11 +50,6 @@ Text_View :: struct
 	is_dirty : bool;
 
 	visual_scrolling : Vec2;
-
-	#place position;
-	x, y : f32;
-	#place size;
-	w, h : f32;
 }
 
 NOT_QUITE_BLACK :: Vec4.{ 0.1, 0.1, 0.1, 1 };
@@ -142,9 +163,17 @@ screen_handle_event :: (using screen : *Screen, event : Event)
 	}
 	
 	if is_inputting_command
+	{
 		text_input_handle_event (*command_input, event);
-	else if text_views.count != 0
-		text_view_handle_event (*text_views[active_view_index], event);
+	}
+	else if visible_views.count != 0
+	{
+		view := visible_views[active_view_index];
+		if view.kind ==
+		{
+		case .TEXT;  text_view_handle_event (cast (*Text_View) view, event);
+		}
+	}
 }
 
 text_view_handle_event :: (using view : *Text_View, event : Event)
@@ -183,11 +212,14 @@ init_screen :: (screen : *Screen, width : u32, height : u32)
 		load_font (default_font, "fonts/jetbrains_mono.ttf");
 	}
 
-	init_text_input (*screen.command_input, Text_Input.Flags.SINGLE_LINE | .DISALLOW_TABS);
-	screen.message_buffer = make_string_builder (100, heap_allocator);
-	screen.text_views     = make_array (Text_View, 5, heap_allocator);
 	screen.width  = width;
 	screen.height = height;
+	// Bottom IO
+	init_text_input (*screen.command_input, Text_Input.Flags.SINGLE_LINE | .DISALLOW_TABS);
+	screen.message_buffer = make_string_builder (100, heap_allocator);
+	// Views
+	init_bucket_array (*screen.text_views, 10, heap_allocator);
+	init_array (*screen.visible_views, 10, heap_allocator);
 	screen.active_view_index = -1;
 }
 
@@ -198,6 +230,7 @@ init_text_view :: (using view : *Text_View)
 
 reset_text_view :: (using view : *Text_View)
 {
+	if filename then free (filename, heap_allocator);
 	reset_text_input (*input);
 }
 
@@ -220,29 +253,47 @@ print_to_screen :: (using screen : *Screen, fmt : string, args : ..Any)
 	print_to_builder (*message_buffer, fmt, ..args);
 }
 
-split_active_view :: (using screen : *Screen, filename := "")
+split_active_view :: (using screen : *Screen, new_view_kind : Screen_View.Kind) -> *Screen_View
 {
 	position : Vec2 = ---;
 	size     : Vec2 = ---;
-	if text_views.count == 0
+	if visible_views.count == 0
 	{
 		position = VEC2_ZERO;
 		size     = vec2 (xx width, height - bottom_bar_height (screen));
 	}
 	else
 	{
-		active_view := *text_views[active_view_index];
+		active_view := visible_views[active_view_index];
 		active_view.size.x *= 0.5;
 		position = active_view.position;
 		position.x += active_view.size.x;
-		size     = active_view.size;
+		size = active_view.size;
 	}
 
-	view := sorted_insert_to_array (*text_views, active_view_index + 1, initialize = true);
-	init_text_view (view);
+	view : *Screen_View;
+	if new_view_kind ==
+	{
+	case .TEXT;
+		text_view, index := add_to_bucket_array (*text_views, initialize = true);
+		text_view.index_in_bucket_array = index;
+		init_text_view (text_view);
+		view = text_view;
+	}
+
+	sorted_insert_to_array (*visible_views, active_view_index + 1, view);
+	active_view_index += 1;
+	view.kind = new_view_kind;
+	view.index_in_views_array = active_view_index;
 	view.position = position;
 	view.size     = size;
-	active_view_index += 1;
+
+	return view;
+}
+
+split_active_view_into_text_view :: (using screen : *Screen, filename := "")
+{
+	split_active_view (screen, .TEXT);
 
 	if filename
 		load_file_into_active_text_view (screen, filename);
@@ -250,20 +301,21 @@ split_active_view :: (using screen : *Screen, filename := "")
 
 load_file_into_active_text_view :: (using screen : *Screen, filename : string) -> bool
 {
-	if text_views.count == 0 then return false;
+	if visible_views.count == 0 then return false;
+	assert (visible_views[active_view_index].kind == .TEXT, "Active view is not a text view.");
 	if !filename then return false;
 
 	for * view, i : text_views
 	{
 		if view.filename == filename
 		{
-			print_to_screen (screen, "Could not open file '%' because it is already opened in another buffer.", filename);
+			print_to_screen (screen, "Could not open file '%' because it is already opened in another text view.", filename);
 
 			return false;
 		}
 	}
 
-	view := *text_views[active_view_index];
+	view := cast (*Text_View) visible_views[active_view_index];
 	ok := load_file_into_buffer (*view.input, filename);
 	if ok
 	{
@@ -278,16 +330,18 @@ load_file_into_active_text_view :: (using screen : *Screen, filename : string) -
 
 close_active_view :: (using screen : *Screen)
 {
-	if text_views.count == 0 then return;
+	if visible_views.count == 0 then return;
 
-	view := *text_views[active_view_index];
-	if view.filename then free (view.filename, heap_allocator);
-	reset_text_input (*view.input);
-	
+	view := visible_views[active_view_index];
+	if view.kind ==
+	{
+	case .TEXT;  reset_text_view (cast (*Text_View) view);
+	}
+
 	if active_view_index > 0 && active_view_index < text_views.count - 1
 	{
-		previous_view := *text_views[active_view_index - 1];
-		next_view     := *text_views[active_view_index + 1];
+		previous_view := visible_views[active_view_index - 1];
+		next_view     := visible_views[active_view_index + 1];
 		first_half  := view.w * 0.5;
 		second_half := view.w - first_half;
 		previous_view.w += first_half;
@@ -296,18 +350,23 @@ close_active_view :: (using screen : *Screen)
 	}
 	else if active_view_index > 0
 	{
-		previous_view := *text_views[active_view_index - 1];
+		previous_view   := visible_views[active_view_index - 1];
 		previous_view.w += view.w;
 	}
 	else if active_view_index < text_views.count - 1
 	{
-		next_view     := *text_views[active_view_index + 1];
+		next_view   := visible_views[active_view_index + 1];
 		next_view.x  = view.x;
 		next_view.w += view.w;
 	}
 
-	sorted_remove_from_array (*text_views, active_view_index);
-	if active_view_index == text_views.count then active_view_index -= 1;
+	sorted_remove_from_array (*visible_views, active_view_index);
+	if view.kind ==
+	{
+	case .TEXT;  remove_from_bucket_array (*text_views, view.index_in_bucket_array);
+	}
+
+	if active_view_index == visible_views.count then active_view_index -= 1;
 }
 
 draw_screen :: (using screen : *Screen)
@@ -333,7 +392,7 @@ draw_screen :: (using screen : *Screen)
 	defer immediate_noclip ();
 	immediate_clip (views_area);
 
-	if text_views.count == 0
+	if visible_views.count == 0
 	{
 		// Draw lines crossing the screen if no text view is opened
 		LINE_THICKNESS :: 6.0;
@@ -349,12 +408,12 @@ draw_screen :: (using screen : *Screen)
 	for * text_views
 	{
 		profile ("draw text view");
-		draw_cursor := !is_inputting_command && it_index == active_view_index;
-		draw_text_view (it, draw_cursor);
+		active := !is_inputting_command && it.index_in_views_array == active_view_index;
+		draw_text_view (it, active);
 	}
 
-	// Draw text view separations
-	for * text_views
+	// Draw visible view separations
+	for visible_views
 	{
 		if it.x + it.w < xx width
 			immediate_line (vec2 (it.x + it.w, it.y), vec2 (it.x + it.w, it.y + it.h), config.view_separation_color, 1);
@@ -409,7 +468,7 @@ profile :: (name : string) #expand
 	//`defer { profile_end := get_time (); println ("% took % s.", name, profile_end - profile_start); }
 }
 
-draw_text_view :: (using view : *Text_View, draw_cursor : bool)
+draw_text_view :: (using view : *Text_View, is_active : bool)
 {
 	buffer_page := get_font_page (default_font, config.buffer_font_height);
 	info_page := get_font_page (default_font, config.buffer_info_font_height);
@@ -565,7 +624,7 @@ draw_text_view :: (using view : *Text_View, draw_cursor : bool)
 	immediate_clip (text_area);
 	{
 		profile ("draw text input");
-		draw_text_input (*input, config.buffer_font_height, text_position, config.buffer_text_color, text_area, draw_cursor);
+		draw_text_input (*input, config.buffer_font_height, text_position, config.buffer_text_color, text_area, draw_cursor = is_active);
 	}
 
 	// @Fix (stefan): For some reason the clipping does not work and nothing gets rendered

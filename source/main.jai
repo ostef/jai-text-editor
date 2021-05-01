@@ -55,7 +55,7 @@ main :: ()
 	args := get_command_line_arguments ();
 	args = advance (args);
 	for filename : args
-		split_active_view (*screen, filename);
+		split_active_view_into_text_view (*screen, filename);
 
 	glClearColor (0.2, 0.2, 0.2, 1);
 

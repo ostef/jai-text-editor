@@ -84,7 +84,7 @@ execute_command :: (using screen : *Screen, str : string)
 // Split the active view horizontally
 command_split :: (using screen : *Screen, filename := "")
 {
-	split_active_view (screen);
+	split_active_view_into_text_view (screen);
 
 	if filename
 	{
@@ -102,7 +102,7 @@ command_split :: (using screen : *Screen, filename := "")
 // Open the specified file into the active text view. If the file does not exist, create a new file on disk when it is saved for the first time.
 command_open :: (using screen : *Screen, filename : string)
 {
-	if text_views.count == 0 then split_active_view (screen);
+	if text_views.count == 0 then split_active_view_into_text_view (screen);
 	ok := load_file_into_active_text_view (screen, filename);
 	if ok then print_to_screen (screen, "Opened file '%' into active view.", filename);
 	else print_to_screen (screen, "Could not open file '%' into active view.", filename);
@@ -113,7 +113,14 @@ command_save :: (using screen : *Screen)
 {
 	if text_views.count == 0 then return;
 
-	view := *text_views[active_view_index];
+	view := cast (*Text_View) visible_views[active_view_index];
+	if view.kind != .TEXT
+	{
+		print_to_screen (screen, "Active view is not a text view.");
+
+		return;
+	}
+
 	if !view.filename
 	{
 		print_to_screen (screen, "Active buffer is not bound to a file. Use 'save_as' instead.");
@@ -138,7 +145,14 @@ command_save_as :: (using screen : *Screen, filename : string)
 {
 	if text_views.count == 0 then return;
 
-	view := *text_views[active_view_index];
+	view := cast (*Text_View) visible_views[active_view_index];
+	if view.kind != .TEXT
+	{
+		print_to_screen (screen, "Active view is not a text view.");
+
+		return;
+	}
+
 	if view.filename then free (view.filename, heap_allocator);
 	view.filename = clone_string (filename, heap_allocator);
 
@@ -157,6 +171,7 @@ command_save_as :: (using screen : *Screen, filename : string)
 
 command_save_all :: (using screen : *Screen)
 {
+	// @Todo
 	print_to_screen (screen, "Saved all buffers.");
 }
 @Command
@@ -165,16 +180,16 @@ command_save_all :: (using screen : *Screen)
 command_close :: (using screen : *Screen)
 {
 	close_active_view (screen);
-	print_to_screen (screen, "Closed active buffer.");
+	print_to_screen (screen, "Closed active view.");
 }
 @Command
 
 // Close all text views
 command_close_all :: (using screen : *Screen)
 {
-	while text_views.count != 0
+	while visible_views.count != 0
 		close_active_view (screen);
-	print_to_screen (screen, "Closed all buffers.");
+	print_to_screen (screen, "Closed all views.");
 }
 @Command
 
@@ -189,6 +204,7 @@ command_quit :: (using screen : *Screen)
 // Open a new scratch buffer into a new text view
 command_scratch :: (using screen : *Screen)
 {
+	// @Todo
 	print_to_screen (screen, "New scratch buffer.");
 }
 @Command
@@ -197,15 +213,15 @@ command_scratch :: (using screen : *Screen)
 
 resize_helper :: (using screen : *Screen, amount : s64, left : bool) -> bool
 {
-	if text_views.count <= 1 then return false;
+	if visible_views.count <= 1 then return false;
 
 	page := get_font_page (default_font, config.buffer_font_height);
-	view := *text_views[active_view_index];
+	view := visible_views[active_view_index];
 	if left
 	{
 		if active_view_index != 0
 		{
-			previous_view := *text_views[active_view_index - 1];
+			previous_view := visible_views[active_view_index - 1];
 			if view.w < previous_view.w
 			{
 				amount = xx (max (view.w + page.space_advance * amount, page.space_advance * 10.0) - view.w);
@@ -223,9 +239,9 @@ resize_helper :: (using screen : *Screen, amount : s64, left : bool) -> bool
 	}
 	else
 	{
-		if active_view_index != text_views.count - 1
+		if active_view_index != visible_views.count - 1
 		{
-			next_view := *text_views[active_view_index + 1];
+			next_view := visible_views[active_view_index + 1];
 			if view.w < next_view.w
 			{
 				amount = xx (max (view.w + page.space_advance * amount, page.space_advance * 10.0) - view.w);
@@ -250,44 +266,44 @@ resize_helper :: (using screen : *Screen, amount : s64, left : bool) -> bool
 command_lgrow :: (using screen : *Screen, amount : u64 = 1)
 {
 	if amount == 0 then amount = 1;
-	if resize_helper (screen, xx amount, true) then print_to_screen (screen, "Grew active text view.");
+	if resize_helper (screen, xx amount, true) then print_to_screen (screen, "Grew active view.");
 }
 @Command
 
 command_rgrow :: (using screen : *Screen, amount : u64 = 1)
 {
 	if amount == 0 then amount = 1;
-	if resize_helper (screen, xx amount, false) then print_to_screen (screen, "Grew active text view.");
+	if resize_helper (screen, xx amount, false) then print_to_screen (screen, "Grew active view.");
 }
 @Command
 
 command_lshrink :: (using screen : *Screen, amount : u64 = 1)
 {
 	if amount == 0 then amount = 1;
-	if resize_helper (screen, -cast (s64) amount, true) then print_to_screen (screen, "Shrank active text view.");
+	if resize_helper (screen, -cast (s64) amount, true) then print_to_screen (screen, "Shrank active view.");
 }
 @Command
 
 command_rshrink :: (using screen : *Screen, amount : u64 = 1 )
 {
 	if amount == 0 then amount = 1;
-	if resize_helper (screen, -cast (s64) amount, false) then print_to_screen (screen, "Shrank active text view.");
+	if resize_helper (screen, -cast (s64) amount, false) then print_to_screen (screen, "Shrank active view.");
 }
 @Command
 
 // Make all text views have the same width
 command_equalize :: (using screen : *Screen)
 {
-	if text_views.count <= 1 then return;
+	if visible_views.count <= 1 then return;
 
-	view_width := width / cast (f32) text_views.count;
-	for * view, i : text_views
+	view_width := width / cast (f32) visible_views.count;
+	for view, i : visible_views
 	{
 		view.x = i * view_width;
 		view.w = view_width;
 	}
 
-	print_to_screen (screen, "Equalized text view widths.");
+	print_to_screen (screen, "Equalized view widths.");
 }
 @Command
 
@@ -315,7 +331,14 @@ command_line :: (using screen : *Screen, line : s64)
 {
 	if text_views.count == 0 then return;
 
-	view := *text_views[active_view_index];
+	view := cast (*Text_View) visible_views[active_view_index];
+	if view.kind != .TEXT
+	{
+		print_to_screen (screen, "Active view is not a text view.");
+
+		return;
+	}
+	
 	buffer := *view.input.buffer;
 	if line < 0 then line = 1;
 	else if line > buffer.lines.count then line = buffer.lines.count;
@@ -337,7 +360,14 @@ command_to_crlf :: (using screen : *Screen)
 {
 	if text_views.count == 0 then return;
 
-	view := *text_views[active_view_index];
+	view := cast (*Text_View) visible_views[active_view_index];
+	if view.kind != .TEXT
+	{
+		print_to_screen (screen, "Active view is not a text view.");
+
+		return;
+	}
+
 	buffer := *view.input.buffer;
 	if view.input.buffer.eol_sequence == .CRLF
 	{
@@ -366,7 +396,14 @@ command_to_lf :: (using screen : *Screen)
 {
 	if text_views.count == 0 then return;
 
-	view := *text_views[active_view_index];
+	view := cast (*Text_View) visible_views[active_view_index];
+	if view.kind != .TEXT
+	{
+		print_to_screen (screen, "Active view is not a text view.");
+
+		return;
+	}
+
 	buffer := *view.input.buffer;
 	if view.input.buffer.eol_sequence == .LF
 	{
