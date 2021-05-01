@@ -191,27 +191,13 @@ add_glyph_to_page :: (using page : *Font_Page, codepoint : u32) -> *Font_Glyph
 	glyph.texture = atlas.texture;
 	
 	// Draw glyph
-	// @Note (stefan): This can be called inside draw_text, and it will fuck up the Immediate_State if that's the case.
-	// This is why we cache the current state.
-	// @Todo (stefan): Add a push_state/pop_state thing in Immediate_Graphics, that obviously does not cache the vertices array.
-	previous_texture := context.immediate_state.texture;
-	previous_spo     := context.immediate_state.spo;
-	previous_clip_rect := context.immediate_state.clip_rect;
-	previous_clip_state := context.immediate_state.use_clip_rect;
+	immediate_push_state ();
+	defer immediate_pop_state ();
 	immediate_texture (glyph_texture);
-	defer immediate_texture (previous_texture);
 	immediate_shader (text_spo);
-	defer immediate_shader (previous_spo);
 	immediate_framebuffer (atlas.framebuffer);
-	defer immediate_framebuffer (0);
-	immediate_noclip ();
-	defer
-	{
-		if previous_clip_state then immediate_clip (previous_clip_rect);
-		else immediate_noclip ();
-	}
-	
 	immediate_framebuffer_viewport (0, 0, xx atlas.width, xx atlas.height);
+	immediate_noclip ();
 	
 	drawn := immediate_quad (cast (f32) atlas.pen_x, cast (f32) atlas.pen_y, cast (f32) atlas.pen_x + glyph.bitmap_width, cast (f32) atlas.pen_y + glyph.bitmap_height, VEC4_ONE);
 
@@ -254,9 +240,13 @@ draw_text :: (using font : *Font, text : []u32, height : u32, position : Vec2, c
 {
 	assert (font != null, "Font was null.");
 
+	immediate_push_state ();
+	defer immediate_pop_state ();
+
 	page := get_font_page (font, height);
 	pen := position;
 	pen.y += page.ascender;
+
 	immediate_shader (text_spo);
 
 	for i : 0..text.count - 1
@@ -288,9 +278,6 @@ draw_text :: (using font : *Font, text : []u32, height : u32, position : Vec2, c
 			glyph.uv0, vec2 (glyph.uv1.x, glyph.uv0.y), glyph.uv1, vec2 (glyph.uv0.x, glyph.uv1.y));
 		pen.x += glyph.advance >> 6;
 	}
-
-	immediate_shader (0);
-	immediate_texture (0);
 }
 
 calculate_drawn_text_bounds :: (using font : *Font, text : string, height : u32) -> Vec2 #must

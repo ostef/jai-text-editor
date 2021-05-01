@@ -389,7 +389,8 @@ draw_screen :: (using screen : *Screen)
 		views_area.y2 = bottom_bar.y1;
 	}
 
-	defer immediate_noclip ();
+	immediate_push_state ();
+	defer immediate_pop_state ();
 	immediate_clip (views_area);
 
 	if visible_views.count == 0
@@ -482,7 +483,9 @@ draw_text_view :: (using view : *Text_View, is_active : bool)
 	text_position        : Vec2;
 	info_bar             : Clip_Rect;
 	info_text_position   : Vec2;
-	defer immediate_noclip ();
+
+	immediate_push_state ();
+	defer immediate_pop_state ();
 
 	max_line_digit_count := 0;
 	{
