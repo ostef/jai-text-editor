@@ -61,7 +61,7 @@ LIGHT_GRAY      :: Vec4.{ 0.6, 0.6, 0.6, 1 };
 VERY_LIGHT_GRAY :: Vec4.{ 0.75, 0.75, 0.75, 1 };
 NOT_QUITE_WHITE :: Vec4.{ 0.9, 0.9, 0.9, 1 };
 
-default_font : *Font;
+default_font : Font;
 
 screen_handle_event :: (using screen : *Screen, event : Event)
 {
@@ -207,11 +207,7 @@ text_view_handle_event :: (using view : *Text_View, event : Event)
 
 init_screen :: (screen : *Screen, width : u32, height : u32)
 {
-	if !default_font
-	{
-		default_font   = alloc_item (Font, heap_allocator);
-		load_font (default_font, "fonts/jetbrains_mono.ttf");
-	}
+	if !default_font.loaded then load_font_from_file (*default_font, "fonts/jetbrains_mono.ttf");
 
 	screen.width  = width;
 	screen.height = height;
@@ -243,7 +239,7 @@ toggle_command_input :: inline (using screen : *Screen)
 
 bottom_bar_height :: inline (using screen : *Screen) -> f32 #must
 {
-	page := get_font_page (default_font, config.bottom_io_font_height);
+	page := get_font_page (*default_font, config.bottom_io_font_height);
 
 	return (page.ascender - page.descender) + 2.0 * config.bottom_io_padding;
 }
@@ -392,7 +388,7 @@ draw_screen :: (using screen : *Screen)
 	bottom_bar : Clip_Rect;
 	views_area : Clip_Rect;
 
-	page := get_font_page (default_font, config.bottom_io_font_height);
+	page := get_font_page (*default_font, config.bottom_io_font_height);
 	{
 		bottom_bar.x1 = 0;
 		bottom_bar.x2 = xx width;
@@ -453,8 +449,8 @@ draw_screen :: (using screen : *Screen)
 	if is_inputting_command
 	{
 		position := vec2 (xx config.bottom_io_padding, cast (f32) height - config.bottom_io_padding - (page.ascender - page.descender));
-		draw_text (default_font, ">", config.bottom_io_font_height, position, config.bottom_io_text_color, bottom_bar);
-		bounds := calculate_drawn_text_bounds (default_font, ">", config.bottom_io_font_height);
+		draw_text (*default_font, ">", config.bottom_io_font_height, position, config.bottom_io_text_color, bottom_bar);
+		bounds := calculate_drawn_text_bounds (*default_font, ">", config.bottom_io_font_height);
 		position.x += bounds.x;
 		
 		// @Fix (stefan): The clipping rect's height is the entire screen because clipping is buggy right now.
@@ -476,7 +472,7 @@ draw_screen :: (using screen : *Screen)
 	}
 	else
 	{
-		draw_text (default_font, to_string (message_buffer), config.bottom_io_font_height,
+		draw_text (*default_font, to_string (message_buffer), config.bottom_io_font_height,
 			vec2 (xx config.bottom_io_padding, cast (f32) bottom_bar.y1 + config.bottom_io_padding), config.bottom_io_text_color, bottom_bar);
 	}
 }
@@ -489,8 +485,8 @@ profile :: (name : string) #expand
 
 draw_text_view :: (using view : *Text_View, is_active : bool)
 {
-	buffer_page := get_font_page (default_font, config.buffer_font_height);
-	info_page   := get_font_page (default_font, config.buffer_info_font_height);
+	buffer_page := get_font_page (*default_font, config.buffer_font_height);
+	info_page   := get_font_page (*default_font, config.buffer_info_font_height);
 	text_line_height := buffer_page.ascender - buffer_page.descender;
 	info_line_height := info_page.ascender   - info_page.descender;
 	text_offset          : Vec2;
@@ -552,7 +548,7 @@ draw_text_view :: (using view : *Text_View, is_active : bool)
 		line_info_text_end : Vec2;
 		{
 			profile ("calculate_drawn_text_bounds for line numbers");
-			line_info_text_end = calculate_drawn_text_bounds (default_font, to_string (line_number_builder), config.buffer_font_height);
+			line_info_text_end = calculate_drawn_text_bounds (*default_font, to_string (line_number_builder), config.buffer_font_height);
 		}
 		line_bar.x1 = view_area.x1;
 		line_bar.x2 = line_bar.x1 + cast (s32) (line_info_text_end.x + 2 * config.buffer_line_numbers_padding);
@@ -638,7 +634,7 @@ draw_text_view :: (using view : *Text_View, is_active : bool)
 	immediate_clip (line_bar);
 	{
 		profile ("draw line numbers");
-		draw_text (default_font, to_string (line_number_builder), config.buffer_font_height, line_number_position, config.buffer_line_numbers_text_color, line_bar);
+		draw_text (*default_font, to_string (line_number_builder), config.buffer_font_height, line_number_position, config.buffer_line_numbers_text_color, line_bar);
 	}
 
 	// @Todo (stefan): Now that we've lexed the whole buffer, find a way to use the result for coloring
@@ -721,5 +717,5 @@ draw_text_view :: (using view : *Text_View, is_active : bool)
 	else
 		info_str = fstring (temp_allocator, "% - Ln %, Col % - % line(s) - UTF8 - %",
 		view_name, input.buffer.line_index + 1, input.buffer.column_index + 1, input.buffer.lines.count, input.buffer.eol_sequence);
-	draw_text (default_font, info_str, config.buffer_info_font_height, info_text_position, config.buffer_info_text_color, view_area);
+	draw_text (*default_font, info_str, config.buffer_info_font_height, info_text_position, config.buffer_info_text_color, view_area);
 }

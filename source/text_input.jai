@@ -213,7 +213,7 @@ write_buffer_to_file :: (using input : *Text_Input, filename : string) -> writte
 
 calculate_drawn_cursor_position :: (using input : *Text_Input, height : u32, position : Vec2) -> Vec2 #must
 {
-	page := get_font_page (default_font, height);
+	page := get_font_page (*default_font, height);
 	cursor_position : Vec2;
 	cursor_advance  := page.space_advance;
 
@@ -262,7 +262,7 @@ calculate_drawn_cursor_position :: (using input : *Text_Input, height : u32, pos
 
 calculate_drawn_text_bounds :: (using input : *Text_Input, height : u32) -> Vec2 #must
 {
-	page := get_font_page (default_font, height);
+	page := get_font_page (*default_font, height);
 	pen := vec2 (0, xx (page.ascender - page.descender));
 	max := pen;
 	for codepoint, i : buffer
@@ -325,7 +325,7 @@ draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, co
 
 draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, colors : []Text_Color_Range, clip_rect : Clip_Rect, draw_cursor := true)
 {
-	page := get_font_page (default_font, height);
+	page := get_font_page (*default_font, height);
 	cursor_position : Vec2;
 	cursor_advance  := page.space_advance;
 
