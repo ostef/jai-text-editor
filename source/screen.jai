@@ -48,6 +48,7 @@ Text_View :: struct
 	scrolling : Vec2;	// In font units, 1 on x is the font's space advance, 1 on y is the font ascender-descender
 	scroll_to_cursor : bool;
 	is_dirty : bool;
+	language : Language;
 
 	visual_scrolling : Vec2;
 }
@@ -299,6 +300,19 @@ split_active_view_into_text_view :: (using screen : *Screen, filename := "")
 		load_file_into_active_text_view (screen, filename);
 }
 
+detect_language :: (using view : *Text_View)
+{
+	if filename
+	{
+		// @Todo (stefan): Make this configurable.
+		ext := get_filename_extension (filename);
+		if ext ==
+		{
+		case "jai"; view.language = .JAI;
+		}
+	}
+}
+
 load_file_into_active_text_view :: (using screen : *Screen, filename : string) -> bool
 {
 	if visible_views.count == 0 then return false;
@@ -323,7 +337,11 @@ load_file_into_active_text_view :: (using screen : *Screen, filename : string) -
 		view.scroll_to_cursor = true;
 	}
 
-	if ok then view.filename = clone_string (filename, heap_allocator);
+	if ok
+	{
+		view.filename = clone_string (filename, heap_allocator);
+		detect_language (view);
+	}
 
 	return ok;
 }
@@ -335,7 +353,7 @@ close_active_view :: (using screen : *Screen)
 	view := visible_views[active_view_index];
 	if view.kind ==
 	{
-	case .TEXT;  reset_text_view (cast (*Text_View) view);
+	case .TEXT; reset_text_view (cast (*Text_View) view);
 	}
 
 	if active_view_index > 0 && active_view_index < text_views.count - 1
@@ -363,7 +381,7 @@ close_active_view :: (using screen : *Screen)
 	sorted_remove_from_array (*visible_views, active_view_index);
 	if view.kind ==
 	{
-	case .TEXT;  remove_from_bucket_array (*text_views, view.index_in_bucket_array);
+	case .TEXT; remove_from_bucket_array (*text_views, view.index_in_bucket_array);
 	}
 
 	if active_view_index == visible_views.count then active_view_index -= 1;
@@ -400,7 +418,7 @@ draw_screen :: (using screen : *Screen)
 		i := 0.0;
 		while i < width * 2.0
 		{
-			immediate_line (vec2 (i, -LINE_THICKNESS), vec2 (-LINE_THICKNESS, i), DARK_GRAY, LINE_THICKNESS);
+			immediate_line (vec2 (i, -LINE_THICKNESS), vec2 (-LINE_THICKNESS, i), config.inactive_stripes_color, LINE_THICKNESS);
 			i += 50;
 		}
 	}
@@ -472,9 +490,9 @@ profile :: (name : string) #expand
 draw_text_view :: (using view : *Text_View, is_active : bool)
 {
 	buffer_page := get_font_page (default_font, config.buffer_font_height);
-	info_page := get_font_page (default_font, config.buffer_info_font_height);
+	info_page   := get_font_page (default_font, config.buffer_info_font_height);
 	text_line_height := buffer_page.ascender - buffer_page.descender;
-	info_line_height := info_page.ascender - info_page.descender;
+	info_line_height := info_page.ascender   - info_page.descender;
 	text_offset          : Vec2;
 	view_area            : Clip_Rect;
 	line_bar             : Clip_Rect;
@@ -623,11 +641,61 @@ draw_text_view :: (using view : *Text_View, is_active : bool)
 		draw_text (default_font, to_string (line_number_builder), config.buffer_font_height, line_number_position, config.buffer_line_numbers_text_color, line_bar);
 	}
 
-	// Draw text buffer
-	immediate_clip (text_area);
+	// @Todo (stefan): Now that we've lexed the whole buffer, find a way to use the result for coloring
+	if language == .JAI
 	{
-		profile ("draw text input");
-		draw_text_input (*input, config.buffer_font_height, text_position, config.buffer_text_color, text_area, draw_cursor = is_active);
+		buffer_str    := clone_to_string (input.buffer, temp_allocator);
+		color_ranges  := make_array (Text_Color_Range, 1500, temp_allocator);
+		lexer         := make_lexer (buffer_str);
+		current_token := jai_read_next_token (*lexer);
+		while current_token.kind != .EOI
+		{
+			color_range : Text_Color_Range;
+			color_range.start = current_token.start - lexer.start;
+			color_range.end   = current_token.end   - lexer.start;
+			color_range.l0    = current_token.l0;
+			color_range.c0    = current_token.c0;
+			color_range.l1    = current_token.l1;
+			color_range.c1    = current_token.c1;
+			color_range.color = NOT_QUITE_WHITE;
+			if current_token.kind ==
+			{
+			case .UNKNOWN; #through;
+			case .INVALID_COMPILER_DIRECTIVE; color_range.color = color (235, 64, 52);
+			case .COMMENT; color_range.color = color (82, 176, 65);
+			case .IDENTIFIER; color_range.color = color (198, 245, 239);
+			case .CONTROL_KEYWORD; color_range.color = color (232, 121, 178);
+			case .STORAGE_TYPE_KEYWORD; #through;
+			case .TYPE_KEYWORD; #through;
+			case .FUNCTION_KEYWORD; #through;
+			case .POLYMORPHIC_ARGUMENT; #through;
+			case .COMPILER_DIRECTIVE; #through;
+			case .NOTE; #through;
+			case .OTHER_KEYWORD; color_range.color = color (74, 161, 255);
+			case .STRING_LITERAL; color_range.color = color (224, 131, 105);
+			case .NUMBER_LITERAL; color_range.color = color (174, 219, 154);
+			case .SYMBOL; color_range.color = NOT_QUITE_WHITE;
+			}
+			
+			push_to_array (*color_ranges, color_range);
+			current_token = jai_read_next_token (*lexer);
+		}
+
+		// Draw text buffer
+		immediate_clip (text_area);
+		{
+			profile ("draw text input");
+			draw_text_input (*input, config.buffer_font_height, text_position, color_ranges, text_area, draw_cursor = is_active);
+		}
+	}
+	else
+	{
+		// Draw text buffer
+		immediate_clip (text_area);
+		{
+			profile ("draw text input");
+			draw_text_input (*input, config.buffer_font_height, text_position, NOT_QUITE_WHITE, text_area, draw_cursor = is_active);
+		}
 	}
 
 	// @Fix (stefan): For some reason the clipping does not work and nothing gets rendered
@@ -646,7 +714,12 @@ draw_text_view :: (using view : *Text_View, is_active : bool)
 		if is_dirty then view_name = fstring (temp_allocator, "%*", filename);
 		else view_name = filename;
 	}
-	info_str := fstring (temp_allocator, "% - Ln %, Col % - % line(s) - UTF8 - %",
+	info_str : string;
+	if language != .NONE
+		info_str = fstring (temp_allocator, "% - Ln %, Col % - % line(s) - UTF8 - % - %",
+		view_name, input.buffer.line_index + 1, input.buffer.column_index + 1, input.buffer.lines.count, input.buffer.eol_sequence, language);
+	else
+		info_str = fstring (temp_allocator, "% - Ln %, Col % - % line(s) - UTF8 - %",
 		view_name, input.buffer.line_index + 1, input.buffer.column_index + 1, input.buffer.lines.count, input.buffer.eol_sequence);
 	draw_text (default_font, info_str, config.buffer_info_font_height, info_text_position, config.buffer_info_text_color, view_area);
 }

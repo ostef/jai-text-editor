@@ -300,7 +300,30 @@ calculate_drawn_text_bounds :: (using input : *Text_Input, height : u32) -> Vec2
 	return max;
 }
 
+Text_Color_Range :: struct
+{
+	start, end : s64;
+	l0, c0, l1, c1 : s64;
+	color : Vec4;
+}
+
 draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, color : Vec4, clip_rect : Clip_Rect, draw_cursor := true)
+{
+	whole_range : Text_Color_Range;
+	whole_range.l0 = 1;
+	whole_range.c0 = 1;
+	whole_range.l1 = buffer.lines.count - 1;
+	whole_range.c1 = buffer.lines[buffer.lines.count - 1];
+	whole_range.color = color;
+
+	colors : []Text_Color_Range;
+	colors.data  = *whole_range;
+	colors.count = 1;
+
+	inline draw_text_input (input, height, position, colors, clip_rect, draw_cursor);
+}
+
+draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, colors : []Text_Color_Range, clip_rect : Clip_Rect, draw_cursor := true)
 {
 	page := get_font_page (default_font, height);
 	cursor_position : Vec2;
@@ -313,6 +336,7 @@ draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, co
 	
 	immediate_shader (text_spo);
 
+	color_index := 0;
 	for codepoint, i : buffer
 	{
 		if pen.y < xx clip_rect.y1 && codepoint != #char "\n" then continue;
@@ -347,17 +371,20 @@ draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, co
 		{
 			pen.x += page.space_advance;
 			pen.x = position.x + ceil ((pen.x - position.x) / (page.space_advance * 4.0)) * page.space_advance * 4.0;
-
 			// Highlight the whole tab
-			if i == buffer.cursor
-			{
-				cursor_advance = xx (pen.x - cursor_position.x);
-			}
+			if i == buffer.cursor then cursor_advance = xx (pen.x - cursor_position.x);
 
 			continue;
 		}
 		
 		glyph_position := vec2 (pen.x + glyph.bitmap_bearing_x, pen.y - glyph.bitmap_bearing_y);
+		
+		color := NOT_QUITE_WHITE;
+		while color_index < colors.count && i >= colors[color_index].end
+			color_index += 1;
+		
+		if color_index < colors.count && i >= colors[color_index].start && i < colors[color_index].end then color = colors[color_index].color;
+
 		immediate_texture (glyph.texture);
 		immediate_quad (glyph_position.x, glyph_position.y, glyph_position.x + glyph.bitmap_width, glyph_position.y + glyph.bitmap_height, color,
 			glyph.uv0, vec2 (glyph.uv1.x, glyph.uv0.y), glyph.uv1, vec2 (glyph.uv0.x, glyph.uv1.y));

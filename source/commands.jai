@@ -155,6 +155,7 @@ command_save_as :: (using screen : *Screen, filename : string)
 
 	if view.filename then free (view.filename, heap_allocator);
 	view.filename = clone_string (filename, heap_allocator);
+	detect_language (view);
 
 	ok := write_buffer_to_file (*view.input, view.filename);
 	if ok

@@ -18,6 +18,8 @@ Debug :: #import "Debug";
 #load "commands.jai";
 #load "clipboard.jai";
 #load "config.jai";
+#load "language.jai";
+#load "languages/jai.jai";
 
 running := false;
 window : Window;
@@ -52,12 +54,13 @@ main :: ()
 	viewport_w, viewport_h := get_window_framebuffer_size (*window);
 	init_screen (*screen, xx viewport_w, xx viewport_h);
 
+	split_active_view_into_text_view (*screen, "../../source/screen.jai");
 	args := get_command_line_arguments ();
 	args = advance (args);
 	for filename : args
 		split_active_view_into_text_view (*screen, filename);
 
-	glClearColor (0.2, 0.2, 0.2, 1);
+	glClearColor (config.inactive_background_color.r, config.inactive_background_color.g, config.inactive_background_color.b, 1);
 
 	running = true;
 	while running
