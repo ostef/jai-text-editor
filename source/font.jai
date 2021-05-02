@@ -6,6 +6,7 @@ Font :: struct
 	filename : string;
 	ft_face  : FT_Face;
 	pages    : Map (u32, Font_Page);
+	loaded   : bool;
 }
 
 Font_Glyph :: struct
@@ -54,15 +55,37 @@ init_fonts :: ()
 	assert (text_spo != 0, "Could not create text shader program.");
 }
 
-load_font :: (font : *Font, filename : string) -> bool
+load_font_from_file :: (font : *Font, filename : string) -> bool
 {
 	font.filename = clone_string (filename, heap_allocator);
 	init_map (*font.pages, 10, heap_allocator);
 	ft_error : FT_Error;
 	ft_error = FT_New_Face (ft, clone_to_cstring (filename, temp_allocator), 0, *font.ft_face);
 	if ft_error != FT_Err_Ok then return log_error ("Font", "Could not load font file '%'.", filename);
+	font.loaded = true;
 
 	return true;
+}
+
+cleanup_font :: (using font : *Font)
+{
+	free (filename, heap_allocator);
+	filename = "";
+	FT_Done_Face (ft_face);
+	ft_face = null;
+	for * page, height : pages
+	{
+		for atlas, i : page.atlases
+		{
+			glDeleteTextures (1, *atlas.texture);
+			glDeleteFramebuffers (1, *atlas.framebuffer);
+		}
+
+		reset_array (*page.atlases);
+		reset_map (*page.glyphs);
+	}
+	reset_map (*pages);
+	loaded = false;
 }
 
 load_glyph :: inline (using font : *Font, codepoint : u32, height : u32) -> *Font_Glyph
