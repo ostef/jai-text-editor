@@ -1,24 +1,29 @@
+// We provide a certain number of language token such as comment, identifier, keywords,
+// but a language can define its own that will be lookup up in the theme, and if not
+// found it will default to a built-in one.
+
 Jai_Token_Kind :: enum
 {
-	UNKNOWN;
-	COMMENT;
+	UNKNOWN; //@Token(invalid)
+	COMMENT; //@Token(comment)
 	
-	IDENTIFIER;
-	CONTROL_KEYWORD;
-	STORAGE_TYPE_KEYWORD;
-	TYPE_KEYWORD;
-	FUNCTION_KEYWORD;
-	OTHER_KEYWORD;
+	IDENTIFIER; //@Token(identifier)
+	CONTROL_KEYWORD; //@Token(keyword,keyword_control)
+	STORAGE_TYPE_KEYWORD; //@Token(keyword,keyword_storage_type)
+	TYPE_KEYWORD; //@Token(keyword,keyword_type)
+	FUNCTION_KEYWORD; //@Token(keyword,keyword_function)
+	OTHER_KEYWORD; //@Token(keyword)
 
-	STRING_LITERAL;
-	NUMBER_LITERAL;
+	STRING_LITERAL; //@Token(string)
+	NUMBER_LITERAL; //@Token(number)
+	INVALID_NUMBER_LITERAL; //@Token(invalid,invalid_number_literal)
 
-	POLYMORPHIC_ARGUMENT;
-	COMPILER_DIRECTIVE;
-	INVALID_COMPILER_DIRECTIVE;
-	NOTE;
+	POLYMORPHIC_ARGUMENT; //@Token(tag,polymorphic)
+	COMPILER_DIRECTIVE; //@Token(tag,compiler_directive)
+	INVALID_COMPILER_DIRECTIVE; //@Token(invalid,invalid_compiler_directive)
+	NOTE; //@Token(tag)
 	
-	SYMBOL;
+	SYMBOL; //@Token(symbol)
 	EOI;
 }
 
@@ -28,8 +33,14 @@ JAI_CONTROL_KEYWORDS :: string.[ "if", "ifx", "then", "else", "case", "for", "wh
 JAI_STORAGE_TYPE_KEYWORDS :: string.[ "struct", "union", "enum", "enum_flags" ];
 JAI_TYPE_KEYWORDS :: string.[ "void", "u8", "u16", "u32", "u64", "s8", "s16", "s32", "s64", "int", "float32", "float64", "f32", "f64", "float", "bool", "string" ];
 JAI_FUNCTION_KEYWORDS :: string.[ "cast", "xx", "type_of", "type_info", "size_of", "align_of", "initializer_of" ];
-JAI_OTHER_KEYWORDS :: string.[ "push_context", "context", "null", "true", "false", "it", "it_index", "no_check", "truncate", "no_dll" ];
-JAI_COMPILER_DIRECTIVES :: string.[ "import", "load", "foreign", "foreign_library", "foreign_system_library", "must", "no_abc", "insert", "run", "char", "place", "through", "expand", "if", "scope_file", "scope_module", "scope_export", "assert", "bake_arguments", "complete" ];
+JAI_OTHER_KEYWORDS :: string.[ "push_context", "context", "null", "true", "false", "it", "it_index", "no_check", "truncate", "no_dll", "stallable" ];
+JAI_COMPILER_DIRECTIVES :: string.[
+	"import", "load", "foreign", "foreign_library", "foreign_system_library", "must", "no_abc", "insert", "insert_internal",
+	"run", "char", "place", "through", "expand", "if", "scope_file", "scope_module", "scope_export", "assert", "bake", "bake_arguments", "bake_constants",
+	"complete", "string", "no_reset", "dump", "code", "caller_location", "c_call", "c_callback", "module_parameters", "elsewhere", "placeholder", "instrinsic",
+	"compiler", "symmetric", "modify", "cpp_return_type_is_non_pod", "cpp_method", "add_context", "dynamic_specialize", "specified", "filepath", "file", "line",
+	"poke_name", "program_export", "procedure_of_call", "location", "type_info_none", "type_info_procedures_are_void_pointers", "type_info_no_size_complaint",
+	"no_alias", "type", "deprecated", "align" ];
 
 jai_read_next_token :: (using lexer : *Lexer) -> Jai_Token #must
 {
@@ -89,10 +100,64 @@ jai_read_next_token :: (using lexer : *Lexer) -> Jai_Token #must
 	}
 	else if is_digit (<<curr)
 	{
-		while curr < end && is_digit (<<curr)
-			advance (lexer);
+		is_float_hex := advance_if_matches (lexer, "0h");
+		is_int_hex   := false;
+		if !is_float_hex then is_int_hex = advance_if_matches (lexer, "0x");
+		is_int_bin   := false;
+		if !is_float_hex && !is_int_hex then is_int_bin = advance_if_matches (lexer, "0b");
 
-		result.kind = .NUMBER_LITERAL;
+		valid := true;
+		found_decimal     := false;
+		found_exponent    := false;
+		last_was_decimal  := false;
+		last_was_exponent := false;
+		digit_count          := 0;
+		whole_digit_count    := 0;
+		decimal_digit_count  := 0;
+		exponent_digit_count := 0;
+		while curr < end
+		{
+			if <<curr == #char "."
+			{
+				if found_exponent || found_decimal || is_float_hex || is_int_hex || is_int_bin then valid = false;
+				found_decimal    = true;
+				last_was_decimal = true;
+			}
+			else if <<curr == #char "e" && !is_float_hex && !is_int_hex
+			{
+				if digit_count == 0 || found_exponent || is_int_bin then valid = false;
+				found_exponent    = true;
+				last_was_exponent = true;
+			}
+			else if is_alpha_num (<<curr)
+			{
+				if (is_float_hex || is_int_hex) && !is_hex_digit (<<curr) then valid = false;
+				if is_int_bin && !is_bin_digit (<<curr) then valid = false;
+				if <<curr == #char "_" && last_was_exponent then valid = false;
+
+				digit_count += 1;
+				if found_exponent then exponent_digit_count += 1;
+				else if found_decimal then decimal_digit_count += 1;
+				else whole_digit_count += 1;
+				last_was_decimal  = false;
+				last_was_exponent = false;
+			}
+			else
+			{
+				break;
+			}
+
+			advance (lexer);
+		}
+
+		if digit_count == 0 ||
+			found_decimal && decimal_digit_count == 0 ||
+			found_exponent && exponent_digit_count == 0
+		{
+			valid = false;
+		}
+
+		result.kind = ifx valid then Jai_Token_Kind.NUMBER_LITERAL else Jai_Token_Kind.INVALID_NUMBER_LITERAL;
 		set_token_end (lexer, *result);
 	}
 	else if <<curr == #char "\""

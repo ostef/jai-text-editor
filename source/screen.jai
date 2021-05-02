@@ -657,9 +657,10 @@ draw_text_view :: (using view : *Text_View, is_active : bool)
 			if current_token.kind ==
 			{
 			case .UNKNOWN; #through;
+			case .INVALID_NUMBER_LITERAL; #through;
 			case .INVALID_COMPILER_DIRECTIVE; color_range.color = color (235, 64, 52);
 			case .COMMENT; color_range.color = color (82, 176, 65);
-			case .IDENTIFIER; color_range.color = color (198, 245, 239);
+			case .IDENTIFIER; color_range.color = NOT_QUITE_WHITE;
 			case .CONTROL_KEYWORD; color_range.color = color (232, 121, 178);
 			case .STORAGE_TYPE_KEYWORD; #through;
 			case .TYPE_KEYWORD; #through;
