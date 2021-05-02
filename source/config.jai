@@ -1,6 +1,8 @@
 Config :: struct
 {
 	// Colors
+	inactive_background_color            := Vec4.{ 0.2, 0.2, 0.2, 1 };
+	inactive_stripes_color               := DARK_GRAY;
 	bottom_io_background_color           := NOT_QUITE_BLACK;
 	bottom_io_text_color                 := NOT_QUITE_WHITE;
 	view_separation_color                := LIGHT_GRAY;
