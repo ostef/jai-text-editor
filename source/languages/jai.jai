@@ -117,7 +117,11 @@ jai_read_next_token :: (using lexer : *Lexer) -> Jai_Token #must
 		exponent_digit_count := 0;
 		while curr < end
 		{
-			if <<curr == #char "."
+			if matches (lexer, "..")
+			{
+				break;
+			}
+			else if <<curr == #char "."
 			{
 				if found_exponent || found_decimal || is_float_hex || is_int_hex || is_int_bin then valid = false;
 				found_decimal    = true;
