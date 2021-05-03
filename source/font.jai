@@ -135,6 +135,13 @@ prepare_text :: inline (using font : *Font, text : string, height : u32)
 		add_glyph_to_page (page, codepoint);
 }
 
+get_font_ascender_descender :: (using font : *Font, height : u32) -> ascender : s32, descender : s32
+{
+	page := get_font_page (font, height);
+
+	return page.ascender, page.descender;
+}
+
 add_atlas_to_page :: (using page : *Font_Page, atlas_width := DEFAULT_FONT_ATLAS_WIDTH, atlas_height := DEFAULT_FONT_ATLAS_HEIGHT) -> *Font_Atlas
 {
 	result := push_to_array (*atlases, initialize = true);

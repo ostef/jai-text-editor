@@ -24,6 +24,10 @@ Debug :: #import "Debug";
 running := false;
 window : Window;
 screen : Screen;
+// @Note (stefan): We might call some font functions in the Window event callback or a command (which is called by the event callback),
+// and since the context is made up because it originates from the WndProc on windows (#c_call), context.immediate_state will be null.
+// If the font procedures we called need to render to the font atlas then the program will crash.
+main_context_immediate_state : *Immediate_State;
 
 handle_window_event :: (using event : Event)
 {
@@ -57,6 +61,7 @@ main :: ()
 	}
 	
 	init_immediate_graphics (*window);
+	main_context_immediate_state = context.immediate_state;
 	viewport_w, viewport_h := get_window_framebuffer_size (*window);
 	init_screen (*screen, xx viewport_w, xx viewport_h);
 

@@ -65,25 +65,12 @@ loaded_font : Font;
 
 screen_handle_event :: (using screen : *Screen, event : Event)
 {
+	context.immediate_state = main_context_immediate_state;
+
 	if event.type ==
 	{
 	case .WINDOW_RESIZE;
-		old_width  := width;
-		old_height := height;
-		width  = xx event.window_resize_event.w;
-		height = xx event.window_resize_event.h;
-		w_ratio := width  / cast (f32) old_width;
-		h_ratio := (height - bottom_bar_height (screen)) / cast (f32) (old_height - bottom_bar_height (screen));
-
-		// Resize text views
-		for * text_views
-		{
-			it.position.x *= w_ratio;
-			it.size.x     *= w_ratio;
-		
-			it.position.y *= h_ratio;
-			it.size.y     *= h_ratio;
-		}
+		resize_screen (screen, xx event.window_resize_event.w, xx event.window_resize_event.h);
 
 	case .KEY_PRESS; #through;
 	case .KEY_REPEAT;
@@ -218,6 +205,38 @@ init_screen :: (screen : *Screen, width : u32, height : u32)
 	screen.active_view_index = -1;
 }
 
+resize_screen :: (using screen : *Screen, new_width : u32, new_height : u32)
+{
+	old_width  := width;
+	old_height := height;
+	width  = new_width;
+	height = new_height;
+	w_ratio := width  / cast (f32) old_width;
+	h_ratio := (height - bottom_bar_height ()) / cast (f32) (old_height - bottom_bar_height ());
+
+	// Resize text views
+	for visible_views
+	{
+		it.position.x *= w_ratio;
+		it.size.x     *= w_ratio;
+	
+		it.position.y *= h_ratio;
+		it.size.y     *= h_ratio;
+	}
+}
+
+update_screen_from_config_reload :: (using screen : *Screen, previous_bottom_bar_height : f32)
+{
+	h_ratio := (height - bottom_bar_height ()) / cast (f32) (height - previous_bottom_bar_height);
+
+	// Resize text views
+	for visible_views
+	{
+		it.position.y *= h_ratio;
+		it.size.y     *= h_ratio;
+	}
+}
+
 init_text_view :: (using view : *Text_View)
 {
 	init_text_input (*input, 0);
@@ -235,7 +254,7 @@ toggle_command_input :: inline (using screen : *Screen)
 	clear_gap_buffer (*command_input.buffer);
 }
 
-bottom_bar_height :: inline (using screen : *Screen) -> f32 #must
+bottom_bar_height :: inline () -> f32 #must
 {
 	page := get_font_page (*loaded_font, config.bottom_io_font_height);
 
@@ -255,7 +274,7 @@ split_active_view :: (using screen : *Screen, new_view_kind : Screen_View.Kind) 
 	if visible_views.count == 0
 	{
 		position = VEC2_ZERO;
-		size     = vec2 (xx width, height - bottom_bar_height (screen));
+		size     = vec2 (xx width, height - bottom_bar_height ());
 	}
 	else
 	{
@@ -639,7 +658,7 @@ draw_text_view :: (using view : *Text_View, is_active : bool)
 
 	if language == .JAI
 	{
-		buffer_str    := clone_to_string (input.buffer, temp_allocator);
+		buffer_str    := stitch_front_and_back_together (input.buffer, temp_allocator);
 		color_ranges  := make_array (Text_Color_Range, 1500, temp_allocator);
 		lexer         := make_lexer (buffer_str);
 		current_token := jai_read_next_token (*lexer);
