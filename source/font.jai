@@ -15,10 +15,10 @@ Font_Glyph :: struct
 
 	// Metrics for horizontal layout, expressed as 26.6 format = 1/64th of a pixel (bitshift right by 6 to get the integral part)
 	width, height : u32;
-	bearing_x, bearing_y : u32;
+	bearing_x, bearing_y : s32;
 	advance : u32;
 	// Bitmap metrics, expressed in pixels
-	bitmap_bearing_x, bitmap_bearing_y : u32;
+	bitmap_bearing_x, bitmap_bearing_y : s32;
 	bitmap_width, bitmap_height : u32;
 
 	uv0 : Vec2;
@@ -55,13 +55,30 @@ init_fonts :: ()
 	assert (text_spo != 0, "Could not create text shader program.");
 }
 
+try_reloading_font :: (font : *Font, filename : string) -> bool
+{
+	cached := <<font;
+	initialize_item (font);
+	if !load_font_from_file (font, filename)
+	{
+		cleanup_font (font);
+		<<font = cached;
+
+		return false;
+	}
+	
+	cleanup_font (*cached);
+
+	return true;
+}
+
 load_font_from_file :: (font : *Font, filename : string) -> bool
 {
 	font.filename = clone_string (filename, heap_allocator);
 	init_map (*font.pages, 10, heap_allocator);
 	ft_error : FT_Error;
 	ft_error = FT_New_Face (ft, clone_to_cstring (filename, temp_allocator), 0, *font.ft_face);
-	if ft_error != FT_Err_Ok then return log_error ("Font", "Could not load font file '%'.", filename);
+	if ft_error != FT_Err_Ok then return log_error ("Font", "Could not load font '%': (FreeType) '%'.", filename, ft_error);
 	font.loaded = true;
 
 	return true;

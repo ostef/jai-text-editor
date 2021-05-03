@@ -41,16 +41,16 @@ main :: ()
 	context.allocator = heap_allocator;
 	context.logger    = console_logger;
 	linalg_register_print_procedures ();
-	register_all_commands ();
-	read_config_from_file ();
 
 	init_window (*window, "Edit", 100, 100, 1280, 720, null, handle_window_event);
 	make_window_context_current (*window);
 	gl_load (*gl, get_gl_proc_address);
 	show_window (*window);
+	init_fonts ();
+	register_all_commands ();
+	read_config_from_file ();
 	
 	init_immediate_graphics (*window);
-	init_fonts ();
 	viewport_w, viewport_h := get_window_framebuffer_size (*window);
 	init_screen (*screen, xx viewport_w, xx viewport_h);
 

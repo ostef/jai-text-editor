@@ -15,6 +15,7 @@ Config :: struct
 	text_input_selection_color           := Vec4.{ 0.3, 0.5, 0.9, 0.7 };
 
 	// Visuals
+	font : string;	// @Note (stefan): Don't give it a default value, because when we'll try to free it, it will crash!
 	bottom_io_padding           := 0.0;
 	buffer_line_numbers_padding := 0.0;
 	buffer_info_padding         := 0.0;
@@ -104,6 +105,7 @@ read_config_from_file :: (filename := "config.edit") -> bool
 {
 	file_contents, ok := read_entire_file (filename, temp_allocator, null_terminate = false);
 	if !ok then return false;
+	free (config.font, heap_allocator);
 
 	lines := break_by_lines (file_contents, temp_allocator);
 	for * lines
@@ -169,6 +171,22 @@ read_config_from_file :: (filename := "config.edit") -> bool
 
 				memcpy (cast (*u8) *config + member.offset_in_bytes, *value, member.type.runtime_size);
 			}
+			else if member.type == type_info (string)
+			{
+				quoted := line[0] == #char "\"";
+				if quoted then line = advance (line);
+				i := 0;
+				while i < line.count
+				{
+					if line[i] == #char "\"" then break;
+					i += 1;
+				}
+				if quoted && line[i] != #char "\"" then continue member;
+				if quoted then i -= 1;
+				line.count = i + 1;
+				str := clone_string (line, heap_allocator);
+				memcpy (cast (*u8) *config + member.offset_in_bytes, *str, member.type.runtime_size);
+			}
 			else if member.type == type_info (Vec4)
 			{
 				value : Vec4;
@@ -228,6 +246,9 @@ read_config_from_file :: (filename := "config.edit") -> bool
 			}
 		}
 	}
+
+	font_filename := join (temp_allocator, "fonts/", config.font);
+	if loaded_font.filename != font_filename then try_reloading_font (*loaded_font, font_filename);
 
 	return true;
 }

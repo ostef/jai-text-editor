@@ -216,7 +216,7 @@ resize_helper :: (using screen : *Screen, amount : s64, left : bool) -> bool
 {
 	if visible_views.count <= 1 then return false;
 
-	page := get_font_page (*default_font, config.buffer_font_height);
+	page := get_font_page (*loaded_font, config.buffer_font_height);
 	view := visible_views[active_view_index];
 	if left
 	{
