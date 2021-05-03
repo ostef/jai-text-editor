@@ -98,9 +98,6 @@ parse_key_binding :: (str : string, allow_no_mods := true) -> Key_Binding #must,
 
 config : Config;
 
-// @Todo (stefan): Verify at compile time that the config.edit file does not have
-// entries that our Config struct does not.
-
 read_config_from_file :: (filename := "config.edit") -> bool
 {
 	file_contents, ok := read_entire_file (filename, temp_allocator, null_terminate = false);

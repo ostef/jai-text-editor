@@ -49,6 +49,12 @@ main :: ()
 	init_fonts ();
 	register_all_commands ();
 	read_config_from_file ();
+	if !loaded_font.loaded
+	{
+		open_error_message_box (*window, "Edit", fstring (temp_allocator, "Could not load font '%'. Make sure the font specified in 'config.edit' exists in the 'fonts' folder.", config.font));
+		
+		return;
+	}
 	
 	init_immediate_graphics (*window);
 	viewport_w, viewport_h := get_window_framebuffer_size (*window);
