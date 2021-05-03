@@ -19,6 +19,8 @@ Config :: struct
 	buffer_line_numbers_padding := 0.0;
 	buffer_info_padding         := 0.0;
 	visual_scrolling_smoothing  := 0.7;		// @Todo (stefan): Make sure this is between 0 and 1
+	buffer_render_whitespace := true;
+	buffer_rendered_whitespace_dimming := 0.8;
 	bottom_io_font_height : u32 = 16;
 	buffer_font_height : u32 = 16;
 	buffer_info_font_height : u32 = 16;
@@ -154,6 +156,18 @@ read_config_from_file :: (filename := "config.edit") -> bool
 				value32 := cast (u32) value;
 
 				memcpy (cast (*u8) *config + member.offset_in_bytes, *value32, member.type.runtime_size);
+			}
+			else if member.type == type_info (bool)
+			{
+				value, ok := string_to_bool (line);
+				if !ok
+				{
+					log_error ("Config", "Could not read member '%'.", member.name);
+
+					continue member;
+				}
+
+				memcpy (cast (*u8) *config + member.offset_in_bytes, *value, member.type.runtime_size);
 			}
 			else if member.type == type_info (Vec4)
 			{

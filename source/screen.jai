@@ -637,7 +637,6 @@ draw_text_view :: (using view : *Text_View, is_active : bool)
 		draw_text (*default_font, to_string (line_number_builder), config.buffer_font_height, line_number_position, config.buffer_line_numbers_text_color, line_bar);
 	}
 
-	// @Todo (stefan): Now that we've lexed the whole buffer, find a way to use the result for coloring
 	if language == .JAI
 	{
 		buffer_str    := clone_to_string (input.buffer, temp_allocator);
@@ -682,7 +681,7 @@ draw_text_view :: (using view : *Text_View, is_active : bool)
 		immediate_clip (text_area);
 		{
 			profile ("draw text input");
-			draw_text_input (*input, config.buffer_font_height, text_position, color_ranges, text_area, draw_cursor = is_active);
+			draw_text_input (*input, config.buffer_font_height, text_position, color_ranges, text_area, draw_cursor = is_active, render_whitespace = config.buffer_render_whitespace, whitespace_dimming = config.buffer_rendered_whitespace_dimming);
 		}
 	}
 	else
@@ -691,7 +690,7 @@ draw_text_view :: (using view : *Text_View, is_active : bool)
 		immediate_clip (text_area);
 		{
 			profile ("draw text input");
-			draw_text_input (*input, config.buffer_font_height, text_position, NOT_QUITE_WHITE, text_area, draw_cursor = is_active);
+			draw_text_input (*input, config.buffer_font_height, text_position, NOT_QUITE_WHITE, text_area, draw_cursor = is_active, render_whitespace = config.buffer_render_whitespace, whitespace_dimming = config.buffer_rendered_whitespace_dimming);
 		}
 	}
 
