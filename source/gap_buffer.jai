@@ -115,6 +115,17 @@ grow_gap_buffer :: (using buffer : *Gap_Buffer, factor : s64)
 	gap   = new_gap;
 }
 
+stitch_front_and_back_together :: (buffer : Gap_Buffer, allocator : Allocator, allocator_data := null) -> []u32 #must
+{
+	front := get_front_part (buffer);
+	back  := get_back_part (buffer);
+	result := alloc_array (u32, front.count + back.count, allocator, allocator_data);
+	memcpy (result.data, front.data, front.count * size_of (u32));
+	memcpy (result.data + front.count, back.data, back.count * size_of (u32));
+
+	return result;
+}
+
 clone_to_string :: (buffer : Gap_Buffer, allocator : Allocator, allocator_data := null) -> string #must
 {
 	front := get_front_part (buffer);
