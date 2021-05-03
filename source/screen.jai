@@ -567,8 +567,10 @@ draw_text_view :: (using view : *Text_View, is_active : bool)
 		profile ("calculate_drawn_text_bounds for scrolling");
 		text_max = calculate_drawn_text_bounds (*input, config.buffer_font_height);
 	}
-	max_scrolling := vec2 (ceil (text_max.x / buffer_page.space_advance), ceil (text_max.y / text_line_height));
+	max_scrolling  := vec2 (ceil (text_max.x / buffer_page.space_advance), ceil (text_max.y / text_line_height));
 	max_scrolling.x = max (max_scrolling.x - 2, 0);		// Add padding
+	if text_max.x < xx (text_area.x2 - text_area.x1) then max_scrolling.x = 0;
+	if text_max.y < xx (text_area.y2 - text_area.y1) then max_scrolling.y = 0;
 	max_scrolling.y = max (max_scrolling.y - 2, 0);		// Add padding
 	if scrolling.x > max_scrolling.x then scrolling.x = max_scrolling.x;
 	if scrolling.y > max_scrolling.y then scrolling.y = max_scrolling.y;
