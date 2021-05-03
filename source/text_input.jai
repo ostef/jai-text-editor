@@ -407,7 +407,7 @@ draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, co
 		
 		glyph_position := vec2 (pen.x + glyph.bitmap_bearing_x, pen.y - glyph.bitmap_bearing_y);
 
-		if codepoint != #char " "
+		if !is_control (codepoint)
 		{
 			immediate_texture (glyph.texture);
 			immediate_quad (glyph_position.x, glyph_position.y, glyph_position.x + glyph.bitmap_width, glyph_position.y + glyph.bitmap_height, color,
