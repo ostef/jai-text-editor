@@ -81,19 +81,20 @@ jai_read_next_token :: (using lexer : *Lexer) -> Jai_Token #must
 			advance (lexer);
 
 		set_token_end (lexer, *result);
-		control_kw := find_first_occurence (JAI_CONTROL_KEYWORDS, result.str);
+		token_str := utf8_runes_to_string (result.utf32, temp_allocator);
+		control_kw := find_first_occurence (JAI_CONTROL_KEYWORDS, token_str);
 		if control_kw != -1 { result.kind = .CONTROL_KEYWORD; return result; }
 
-		storage_type_kw := find_first_occurence (JAI_STORAGE_TYPE_KEYWORDS, result.str);
+		storage_type_kw := find_first_occurence (JAI_STORAGE_TYPE_KEYWORDS, token_str);
 		if storage_type_kw != -1 { result.kind = .STORAGE_TYPE_KEYWORD; return result; }
 		
-		type_kw := find_first_occurence (JAI_TYPE_KEYWORDS, result.str);
+		type_kw := find_first_occurence (JAI_TYPE_KEYWORDS, token_str);
 		if type_kw != -1 { result.kind = .TYPE_KEYWORD; return result; }
 		
-		function_kw := find_first_occurence (JAI_FUNCTION_KEYWORDS, result.str);
+		function_kw := find_first_occurence (JAI_FUNCTION_KEYWORDS, token_str);
 		if function_kw != -1 { result.kind = .FUNCTION_KEYWORD; return result; }
 
-		other_kw := find_first_occurence (JAI_OTHER_KEYWORDS, result.str);
+		other_kw := find_first_occurence (JAI_OTHER_KEYWORDS, token_str);
 		if other_kw != -1 { result.kind = .OTHER_KEYWORD; return result; }
 	
 		result.kind = .IDENTIFIER;
@@ -185,7 +186,8 @@ jai_read_next_token :: (using lexer : *Lexer) -> Jai_Token #must
 			advance (lexer);
 		
 		set_token_end (lexer, *result);
-		compiler_directive := find_first_occurence (JAI_COMPILER_DIRECTIVES, skip_spaces (advance (result.str)));
+		token_str := utf8_runes_to_string (result.utf32, temp_allocator);
+		compiler_directive := find_first_occurence (JAI_COMPILER_DIRECTIVES, skip_spaces (advance (token_str)));
 		if compiler_directive == -1 then result.kind = .INVALID_COMPILER_DIRECTIVE;
 		else result.kind = .COMPILER_DIRECTIVE;
 	}
@@ -215,20 +217,4 @@ jai_read_next_token :: (using lexer : *Lexer) -> Jai_Token #must
 	}
 
 	return result;
-}
-
-set_token_start :: inline (using lexer : *Lexer, token : *Jai_Token)
-{
-	token.start = curr;
-	token.l0    = l0;
-	token.c0    = c0;
-}
-
-set_token_end :: inline (using lexer : *Lexer, token : *Jai_Token)
-{
-	token.end = curr;
-	token.l1  = l0;
-	token.c1  = c0;
-	token.str.data  = token.start;
-	token.str.count = token.end - token.start;
 }

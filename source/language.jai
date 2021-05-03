@@ -1,17 +1,33 @@
 Lexer :: struct
 {
 	filename : string;
-	start, end, curr : *u8;
+	start, end, curr : *u32;
 	l0, c0 : s64;
 }
 
 Token :: struct (Kind : Type)
 {
 	kind   : Kind;
-	str    : string;
-	start, end : *u8;
+	utf32  : []u32;
+	start, end : *u32;
 	l0, c0 : s64;
 	l1, c1 : s64;
+}
+
+set_token_start :: inline (using lexer : *Lexer, token : *Jai_Token)
+{
+	token.start = curr;
+	token.l0    = l0;
+	token.c0    = c0;
+}
+
+set_token_end :: inline (using lexer : *Lexer, token : *Jai_Token)
+{
+	token.end = curr;
+	token.l1  = l0;
+	token.c1  = c0;
+	token.utf32.data  = token.start;
+	token.utf32.count = token.end - token.start;
 }
 
 Language :: enum
@@ -20,7 +36,7 @@ Language :: enum
 	JAI;
 }
 
-make_lexer :: (contents : string) -> Lexer #must
+make_lexer :: (contents : []u32) -> Lexer #must
 {
 	result : Lexer = ---;
 	result.filename = "";
@@ -33,7 +49,7 @@ make_lexer :: (contents : string) -> Lexer #must
 	return result;
 }
 
-make_lexer :: (filename : string, contents : string) -> Lexer #must
+make_lexer :: (filename : string, contents : []u32) -> Lexer #must
 {
 	result : Lexer = ---;
 	result.filename = filename;
@@ -114,10 +130,12 @@ advance_if_matches :: (lexer : *Lexer, str : string) -> bool #must
 
 matches :: (using lexer : *Lexer, str : string) -> bool #must
 {
-	if end - curr < str.count then return false;
-	for i : 0..str.count - 1
+	utf32 := utf8_string_to_runes (str, temp_allocator);
+
+	if end - curr < utf32.count then return false;
+	for i : 0..utf32.count - 1
 	{
-		if curr[i] != str[i] then return false;
+		if curr[i] != utf32[i] then return false;
 	}
 
 	return true;
@@ -138,9 +156,10 @@ skip_spaces :: (using lexer : *Lexer) -> int
 read_s64 :: (using lexer : *Lexer) -> value : s64, ok : bool
 {
 	skip_spaces (lexer);
-	str : string = ---;
-	str.data  = curr;
-	str.count = end - curr;
+	utf32 : []u32 = ---;
+	utf32.data  = curr;
+	utf32.count = end - curr;
+	str := utf8_runes_to_string (utf32, temp_allocator);
 	value, ok, remainder := string_to_s64 (str);
 
 	if ok
@@ -156,9 +175,10 @@ read_s64 :: (using lexer : *Lexer) -> value : s64, ok : bool
 read_u64 :: (using lexer : *Lexer) -> value : u64, ok : bool
 {
 	skip_spaces (lexer);
-	str : string = ---;
-	str.data  = curr;
-	str.count = end - curr;
+	utf32 : []u32 = ---;
+	utf32.data  = curr;
+	utf32.count = end - curr;
+	str := utf8_runes_to_string (utf32, temp_allocator);
 	value, ok, remainder := string_to_u64 (str);
 	
 	if ok
@@ -174,9 +194,10 @@ read_u64 :: (using lexer : *Lexer) -> value : u64, ok : bool
 read_f64 :: (using lexer : *Lexer) -> value : f64, ok : bool
 {
 	skip_spaces (lexer);
-	str : string = ---;
-	str.data  = curr;
-	str.count = end - curr;
+	utf32 : []u32 = ---;
+	utf32.data  = curr;
+	utf32.count = end - curr;
+	str := utf8_runes_to_string (utf32, temp_allocator);
 	value, ok, remainder := string_to_f64 (str);
 	
 	if ok
@@ -192,9 +213,10 @@ read_f64 :: (using lexer : *Lexer) -> value : f64, ok : bool
 read_bool :: (using lexer : *Lexer) -> value : bool, ok : bool
 {
 	skip_spaces (lexer);
-	str : string = ---;
-	str.data  = curr;
-	str.count = end - curr;
+	utf32 : []u32 = ---;
+	utf32.data  = curr;
+	utf32.count = end - curr;
+	str := utf8_runes_to_string (utf32, temp_allocator);
 	value, ok, remainder := string_to_bool (str);
 	
 	if ok
@@ -216,9 +238,10 @@ read_identifier :: (using lexer : *Lexer) -> ident : string, ok : bool
 		advance (lexer);
 	str_end := curr;
 
-	result : string = ---;
-	result.data  = str_start;
-	result.count = str_end - str_start;
+	utf32 : []u32 = ---;
+	utf32.data  = str_start;
+	utf32.count = str_end - str_start;
+	result := utf8_runes_to_string (utf32, temp_allocator);
 
 	return result, true;
 }
@@ -236,9 +259,10 @@ read_maybe_quoted_string :: (using lexer : *Lexer) -> value : string, ok : bool
 	if quoted && curr == end then return "", false;
 	if quoted then advance (lexer);
 
-	result : string = ---;
-	result.data  = str_start;
-	result.count = str_end - str_start;
+	utf32 : []u32 = ---;
+	utf32.data  = str_start;
+	utf32.count = str_end - str_start;
+	result := utf8_runes_to_string (utf32, temp_allocator);
 
 	return result, true;
 }
