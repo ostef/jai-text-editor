@@ -136,8 +136,19 @@ jai_read_next_token :: (using lexer : *Lexer) -> Jai_Token #must
 			}
 			else if is_alpha_num (<<curr)
 			{
-				if (is_float_hex || is_int_hex) && !is_hex_digit (<<curr) then valid = false;
-				if is_int_bin && !is_bin_digit (<<curr) then valid = false;
+				if (is_float_hex || is_int_hex)
+				{
+					if !is_hex_digit (<<curr) then valid = false;
+				}
+				else if is_int_bin
+				{
+					if !is_bin_digit (<<curr) then valid = false;
+				}
+				else if !is_digit (<<curr)
+				{
+					valid = false;
+				}
+				
 				if <<curr == #char "_" && last_was_exponent then valid = false;
 
 				digit_count += 1;
