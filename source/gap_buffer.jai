@@ -734,6 +734,7 @@ move_cursor_to_column :: (using buffer : *Gap_Buffer, column : s64, select := fa
 
 move_cursor_to_previous_line :: (using buffer : *Gap_Buffer, select := false) -> bool
 {
+	if selection != 0 && !select then selection = 0;
 	if line_index == 0 then return move_cursor_to_bol (buffer);
 
 	start_column_index := column_index;
@@ -747,6 +748,7 @@ move_cursor_to_previous_line :: (using buffer : *Gap_Buffer, select := false) ->
 
 move_cursor_to_next_line :: (using buffer : *Gap_Buffer, select := false) -> bool
 {
+	if selection != 0 && !select then selection = 0;
 	if line_index == lines.count - 1 then return move_cursor_to_eol (buffer);
 	
 	start_column_index := column_index;
