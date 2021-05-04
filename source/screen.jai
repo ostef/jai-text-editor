@@ -733,7 +733,7 @@ draw_text_view :: (using view : *Text_View, is_active : bool)
 		immediate_clip (text_area);
 		{
 			profile ("draw text input");
-			draw_text_input (*input, config.buffer_font_height, text_position, color_ranges, text_area, draw_cursor = is_active, render_whitespace = config.buffer_render_whitespace, whitespace_dimming = config.buffer_rendered_whitespace_dimming);
+			draw_text_input (*input, config.buffer_font_height, text_position, color_ranges, text_area, active = is_active, render_whitespace = config.buffer_render_whitespace, whitespace_dimming = config.buffer_rendered_whitespace_dimming);
 		}
 	}
 	else
@@ -742,7 +742,7 @@ draw_text_view :: (using view : *Text_View, is_active : bool)
 		immediate_clip (text_area);
 		{
 			profile ("draw text input");
-			draw_text_input (*input, config.buffer_font_height, text_position, NOT_QUITE_WHITE, text_area, draw_cursor = is_active, render_whitespace = config.buffer_render_whitespace, whitespace_dimming = config.buffer_rendered_whitespace_dimming);
+			draw_text_input (*input, config.buffer_font_height, text_position, NOT_QUITE_WHITE, text_area, active = is_active, render_whitespace = config.buffer_render_whitespace, whitespace_dimming = config.buffer_rendered_whitespace_dimming);
 		}
 	}
 

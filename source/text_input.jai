@@ -307,7 +307,7 @@ Text_Color_Range :: struct
 	color : Vec4;
 }
 
-draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, color : Vec4, clip_rect : Clip_Rect, draw_cursor := true, render_whitespace := false, whitespace_dimming := 0.7)
+draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, color : Vec4, clip_rect : Clip_Rect, active := true, render_whitespace := false, whitespace_dimming := 0.7)
 {
 	whole_range : Text_Color_Range;
 	whole_range.l0 = 1;
@@ -320,10 +320,10 @@ draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, co
 	colors.data  = *whole_range;
 	colors.count = 1;
 
-	inline draw_text_input (input, height, position, colors, clip_rect, draw_cursor, render_whitespace, whitespace_dimming);
+	inline draw_text_input (input, height, position, colors, clip_rect, active, render_whitespace, whitespace_dimming);
 }
 
-draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, colors : []Text_Color_Range, clip_rect : Clip_Rect, draw_cursor := true, render_whitespace := false, whitespace_dimming := 0.7)
+draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, colors : []Text_Color_Range, clip_rect : Clip_Rect, active := true, render_whitespace := false, whitespace_dimming := 0.7)
 {
 	page := get_font_page (*loaded_font, height);
 	cursor_position : Vec2;
@@ -365,7 +365,7 @@ draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, co
 			buffer.selection  < 0 && i >= buffer.cursor + buffer.selection && i < buffer.cursor)
 		{
 			immediate_texture (0);
-			immediate_quad (pen.x, pen.y - page.ascender, pen.x + glyph.advance >> 6, pen.y - page.descender, config.text_input_selection_color);
+			immediate_quad (pen.x, pen.y - page.ascender, pen.x + glyph.advance >> 6, pen.y - page.descender, ifx active then config.text_input_selection_color else config.inactive_text_input_selection_color);
 		}
 
 		if i == buffer.cursor
@@ -421,7 +421,7 @@ draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, co
 	immediate_texture (0);
 	immediate_shader (0);
 	
-	if draw_cursor
+	if active
 	{
 		cursor_alpha := cast (f32) range_map (cos (Basic.get_time () * 5), -1, 1, 0, 1);
 		immediate_quad (cursor_position.x, cursor_position.y - page.ascender,

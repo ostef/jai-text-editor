@@ -13,6 +13,7 @@ Config :: struct
 	buffer_info_background_color         := LIGHT_GRAY;
 	buffer_info_text_color               := VERY_DARK_GRAY;
 	text_input_selection_color           := Vec4.{ 0.3, 0.5, 0.9, 0.7 };
+	inactive_text_input_selection_color  := Vec4.{ 0.5, 0.5, 0.5, 0.5 };
 
 	// Visuals
 	font : string;	// @Note (stefan): Don't give it a default value, because when we'll try to free it, it will crash!
