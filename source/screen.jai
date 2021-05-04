@@ -15,6 +15,7 @@ Screen :: struct
 	text_views    : Bucket_Array (Text_View, 10);
 	visible_views : [..]*Screen_View;
 	active_view_index : s64;
+	render_timer_id   : u32;
 }
 
 Screen_View :: struct
@@ -65,10 +66,41 @@ loaded_font : Font;
 
 screen_handle_event :: (using screen : *Screen, event : Event)
 {
-	context.immediate_state = main_context_immediate_state;
+	context.immediate_state   = main_context_immediate_state;
+	context.temporary_storage = main_temporary_storage;
 
 	if event.type ==
 	{
+	case .TIMER;
+		if event.timer_event.id == render_timer_id
+		{
+			reset_temporary_storage ();
+			frame_start := get_time ();
+			viewport_w, viewport_h := get_window_framebuffer_size (*window);
+			glViewport (0, 0, xx viewport_w, xx viewport_h);
+			glClear (GL_COLOR_BUFFER_BIT);
+			
+			immediate_begin ();
+			draw_screen (screen);
+			immediate_end ();
+
+			swap_window_buffers (*window);
+			frame_end := get_time ();
+			frame_response_ms := cast (u32) ((frame_end - frame_start) * 1000);
+			//println ("\n\tEvent response took % ms.\n", frame_response_ms);
+			next_timer : u32 = 16;
+			if frame_response_ms < next_timer then next_timer -= frame_response_ms;
+			// Oof, rendering took a long time and we have to schedule a render as soon as possible to keep up
+			else next_timer = 0;
+			schedule_timer_event (event.window, render_timer_id, next_timer);
+		}
+	
+	case .WINDOW_FOCUS;
+		schedule_timer_event (event.window, render_timer_id, 0);
+	
+	case .WINDOW_UNFOCUS;
+		cancel_timer_event (event.window, render_timer_id);
+
 	case .WINDOW_RESIZE;
 		resize_screen (screen, xx event.window_resize_event.w, xx event.window_resize_event.h);
 
@@ -203,6 +235,7 @@ init_screen :: (screen : *Screen, width : u32, height : u32)
 	init_bucket_array (*screen.text_views, 10, heap_allocator);
 	init_array (*screen.visible_views, 10, heap_allocator);
 	screen.active_view_index = -1;
+	screen.render_timer_id = schedule_timer_event (*window, 1, 0);
 }
 
 resize_screen :: (using screen : *Screen, new_width : u32, new_height : u32)

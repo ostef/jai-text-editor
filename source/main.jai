@@ -28,6 +28,7 @@ screen : Screen;
 // and since the context is made up because it originates from the WndProc on windows (#c_call), context.immediate_state will be null.
 // If the font procedures we called need to render to the font atlas then the program will crash.
 main_context_immediate_state : *Immediate_State;
+main_temporary_storage       : *Temporary_Storage;
 
 handle_window_event :: (using event : Event)
 {
@@ -42,6 +43,7 @@ handle_window_event :: (using event : Event)
 
 main :: ()
 {
+	main_temporary_storage = context.temporary_storage;
 	context.allocator = heap_allocator;
 	context.logger    = console_logger;
 	linalg_register_print_procedures ();
@@ -76,24 +78,8 @@ main :: ()
 	running = true;
 	while running
 	{
-		reset_temporary_storage ();
-		poll_window_events (*window);
-
-		if is_window_focused (*window)
-		{
-			frame_start := get_time ();
-			viewport_w, viewport_h := get_window_framebuffer_size (*window);
-			glViewport (0, 0, xx viewport_w, xx viewport_h);
-			glClear (GL_COLOR_BUFFER_BIT);
-			
-			immediate_begin ();
-			draw_screen (*screen);
-			immediate_end ();
-
-			swap_window_buffers (*window);
-			frame_end := get_time ();
-			//println ("\n\tEvent response took % s.\n", frame_end - frame_start);
-		}
+		// Rendering is done in an TIMER event callback, the first one of these was scheduled when we called init_screen.
+		wait_for_window_events (*window);
 	}
 }
 
