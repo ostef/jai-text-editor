@@ -27,6 +27,8 @@ Config :: struct
 	buffer_font_height : u32 = 16;
 	buffer_info_font_height : u32 = 16;
 
+	word_skipping_stops_at_word_separators := true;
+
 	// Key bindings
 	key_toggle_command_input := Key_Binding.{ Mods.NONE, .ESCAPE };
 	key_previous_view := Key_Binding.{ Mods.CONTROL, .W };

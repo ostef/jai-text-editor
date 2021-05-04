@@ -48,11 +48,11 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> modifie
 		}
 		else if matches_key_binding (event, config.key_skip_left)
 		{
-			if skip_word_backward (*buffer) then modified = true;
+			if skip_word_backward (*buffer, stop_at_word_separators = config.word_skipping_stops_at_word_separators) then modified = true;
 		}
 		else if matches_key_binding (event, config.key_select_skip_left)
 		{
-			if skip_word_backward (*buffer, select = true) then modified = true;
+			if skip_word_backward (*buffer, select = true, stop_at_word_separators = config.word_skipping_stops_at_word_separators) then modified = true;
 		}
 		// Right
 		else if matches_key_binding (event, config.key_move_right)
@@ -65,11 +65,11 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> modifie
 		}
 		else if matches_key_binding (event, config.key_skip_right)
 		{
-			if skip_word_forward (*buffer) then modified = true;
+			if skip_word_forward (*buffer, stop_at_word_separators = config.word_skipping_stops_at_word_separators) then modified = true;
 		}
 		else if matches_key_binding (event, config.key_select_skip_right)
 		{
-			if skip_word_forward (*buffer, select = true) then modified = true;
+			if skip_word_forward (*buffer, select = true, stop_at_word_separators = config.word_skipping_stops_at_word_separators) then modified = true;
 		}
 		// Move line up and down
 		else if matches_key_binding (event, config.key_move_line_up)

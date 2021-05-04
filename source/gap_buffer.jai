@@ -543,16 +543,17 @@ move_cursor_backward :: (using buffer : *Gap_Buffer, clear_selection := true, $s
 	return false, 0;
 }
 
-skip_word_forward :: (using buffer : *Gap_Buffer, select := false) -> bool
+skip_word_forward :: (using buffer : *Gap_Buffer, select := false, stop_at_word_separators := true) -> bool
 {
 	if cursor < gap_buffer_count (buffer)
 	{
-		codepoint := data[cursor + gap];
-		if select then select_forward (buffer);
-		else move_cursor_forward (buffer);
+		start := data[cursor + gap];
 
-		if is_space (codepoint)
+		if is_space (start)
 		{
+			if select then select_forward (buffer);
+			else move_cursor_forward (buffer);
+
 			while cursor < gap_buffer_count (buffer) && is_space (data[cursor + gap])
 			{
 				if select then select_forward (buffer);
@@ -560,10 +561,19 @@ skip_word_forward :: (using buffer : *Gap_Buffer, select := false) -> bool
 			}
 		}
 
+		start = data[cursor + gap];
+		bow   := is_upper (start) || start == #char "_";
+		first := true;
 		while cursor < gap_buffer_count (buffer) && !is_space (data[cursor + gap])
 		{
+			previous := data[cursor + gap];
 			if select then select_forward (buffer);
 			else move_cursor_forward (buffer);
+			current  := data[cursor + gap];
+
+			if is_alpha_num (start) != is_alpha_num (data[cursor + gap]) then break;
+			if stop_at_word_separators && !(first && bow) && (current == #char "_" || start != #char "_" && is_lower (previous) != is_lower (current)) then break;
+			first = false;
 		}
 
 		return true;
@@ -572,27 +582,36 @@ skip_word_forward :: (using buffer : *Gap_Buffer, select := false) -> bool
 	return false;
 }
 
-skip_word_backward :: (using buffer : *Gap_Buffer, select := false) -> bool
+skip_word_backward :: (using buffer : *Gap_Buffer, select := false, stop_at_word_separators := true) -> bool
 {
 	if cursor > 0
 	{
-		codepoint := data[cursor];
+		start := data[cursor];
 		if select then select_backward (buffer);
 		else move_cursor_backward (buffer);
 		
-		if is_space (codepoint)
+		if is_space (start)
 		{
-			while cursor > 0 && is_space (data[cursor])
+			while column_index > 0 && is_space (data[cursor])
 			{
 				if select then select_backward (buffer);
 				else move_cursor_backward (buffer);
 			}
 		}
 
-		while cursor > 0 && !is_space (data[cursor])
+		start = data[cursor];
+		bow   := is_upper (start) || start == #char "_";
+		first := true;
+		while column_index > 0 && !is_space (data[cursor - 1])
 		{
+			previous := data[cursor];
 			if select then select_backward (buffer);
 			else move_cursor_backward (buffer);
+			current  := data[cursor];
+
+			if is_alpha_num (start) != is_alpha_num (data[cursor - 1]) then break;
+			if stop_at_word_separators && !(first && bow) && (current == #char "_" || data[cursor - 1] != #char "_" && is_lower (previous) != is_lower (current)) then break;
+			first = false;
 		}
 
 		return true;
