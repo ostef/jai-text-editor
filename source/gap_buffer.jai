@@ -359,6 +359,8 @@ backspace_selection :: (using buffer : *Gap_Buffer, buffer_operation := true, $b
 				op.codepoint = (<<accumulator)[0];
 			push_undo_operation (buffer, op);
 		}
+
+		return true;
 	}
 
 	return false;
