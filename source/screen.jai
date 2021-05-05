@@ -52,6 +52,7 @@ Text_View :: struct
 	language : Language;
 
 	visual_scrolling : Vec2;
+	scrollbar_alpha  : f32;
 }
 
 NOT_QUITE_BLACK :: Vec4.{ 0.1, 0.1, 0.1, 1 };
@@ -483,8 +484,12 @@ draw_screen :: (using screen : *Screen)
 		if i ==
 		{
 		case 0;
-			immediate_line (center - vec2 (1, 1) * LENGTH, center + vec2 (1, 1) * LENGTH, foreground_color, 1);
-			immediate_line (center - vec2 (1, -1) * LENGTH, center + vec2 (1, -1) * LENGTH, foreground_color, 1);
+			x1 := round (center.x - LENGTH);
+			x2 := round (center.x + LENGTH);
+			y1 := round (center.y - LENGTH);
+			y2 := round (center.y + LENGTH);
+			immediate_line (vec2 (x1, y1), vec2 (x2, y2), foreground_color, 1);
+			immediate_line (vec2 (x1, y2), vec2 (x2, y1), foreground_color, 1);
 
 		case 1;
 			immediate_quad_outline (center.x - LENGTH, center.y - LENGTH, center.x + LENGTH, center.y + LENGTH, foreground_color, 1);
@@ -785,6 +790,22 @@ draw_text_view :: (using view : *Text_View, is_active : bool)
 		}
 	}
 
+	if config.buffer_show_scrollbar
+	{
+		SCROLLBAR_WIDTH  :: 15;
+		SCROLLBAR_HEIGHT :: 25;
+		x1 := cast (f32) text_area.x2 - SCROLLBAR_WIDTH;
+		x2 := cast (f32) text_area.x2;
+		y1 := cast (f32) text_area.y1;
+		y2 := cast (f32) text_area.y2;
+		
+		mouse_x, mouse_y := get_cursor_position (*window);
+		hovered := xx mouse_x >= x1 && xx mouse_x < x2 && xx mouse_y >= y1 && xx mouse_y < y2;
+		scrollbar_alpha = lerp (scrollbar_alpha, ifx hovered then 0.6 else 0.3, 0.3);
+		immediate_line (vec2 (x1, y1), vec2 (x1, y2), vec4 (0.3, 0.3, 0.3, scrollbar_alpha), 1);
+		// @Todo
+	}
+
 	immediate_clip (info_bar);
 	// Info bar background
 	immediate_quad (cast (f32) info_bar.x1, cast (f32) info_bar.y1, cast (f32) info_bar.x2, cast (f32) info_bar.y2, config.buffer_info_background_color);
@@ -792,7 +813,7 @@ draw_text_view :: (using view : *Text_View, is_active : bool)
 	// Draw info text
 	info_text_position.x = cast (f32) info_bar.x1 + config.buffer_info_padding;
 	info_text_position.y = cast (f32) info_bar.y1 + config.buffer_info_padding;
-	view_name := "UNNAMED";
+	view_name := "**UNNAMED**";
 	if filename
 	{
 		if is_dirty then view_name = fstring (temp_allocator, "%*", filename);

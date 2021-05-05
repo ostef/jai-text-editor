@@ -27,6 +27,7 @@ buffer_font_height 16
 buffer_info_font_height 16
 
 word_skipping_stops_at_word_separators true
+buffer_show_scrollbar true
 
 # Key bindings
 key_toggle_command_input ESCAPE
