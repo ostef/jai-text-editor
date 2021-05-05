@@ -308,9 +308,9 @@ draw_text :: (using font : *Font, text : []u32, height : u32, position : Vec2, c
 	for i : 0..text.count - 1
 	{
 		codepoint := text[i];
-		if pen.y < xx clip_rect.y1 && codepoint != #char "\n" then continue;
-		if pen.y > xx clip_rect.y2 then break;
-
+		if pen.y - page.descender < xx clip_rect.y1 && codepoint != #char "\n" then continue;
+		if pen.y - page.ascender > xx clip_rect.y2 then break;
+		
 		if codepoint == #char "\n"
 		{
 			pen.x = position.x;

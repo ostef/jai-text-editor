@@ -339,8 +339,8 @@ draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, co
 	color_index := 0;
 	for codepoint, i : buffer
 	{
-		if pen.y < xx clip_rect.y1 && codepoint != #char "\n" then continue;
-		if pen.y > xx clip_rect.y2 then break;
+		if pen.y - page.descender < xx clip_rect.y1 && codepoint != #char "\n" then continue;
+		if pen.y - page.ascender > xx clip_rect.y2 then break;
 		
 		color := NOT_QUITE_WHITE;
 		if render_whitespace && (codepoint == #char " " || codepoint == #char "\t")
@@ -358,7 +358,7 @@ draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, co
 		
 		glyph := load_glyph (page, codepoint);
 		if !glyph then continue;
-		
+
 		// @Speed
 		if buffer.selection != 0 &&
 			(buffer.selection > 0 && i >= buffer.cursor && i < buffer.cursor + buffer.selection ||
