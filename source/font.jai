@@ -273,6 +273,15 @@ add_font_page :: (using font : *Font, height : u32) -> *Font_Page #must
 	return page;
 }
 
+draw_text :: (using font : *Font, text : string, height : u32, position : Vec2, color : Vec4)
+{
+	framebuffer_w, framebuffer_h := get_window_framebuffer_size (*window);
+	clip_rect : Clip_Rect;
+	clip_rect.x2 = xx framebuffer_w;
+	clip_rect.y2 = xx framebuffer_h;
+	inline draw_text (font, text, height, position, color, clip_rect);
+}
+
 draw_text :: (using font : *Font, text : string, height : u32, position : Vec2, color : Vec4, clip_rect : Clip_Rect)
 {
 	codepoints := utf8_string_to_runes  (text, temp_allocator);
