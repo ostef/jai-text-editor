@@ -48,7 +48,8 @@ main :: ()
 	context.logger    = console_logger;
 	linalg_register_print_procedures ();
 
-	init_window (*window, "Edit", 100, 100, 1280, 720, null, handle_window_event);
+	init_window (*window, "Edit", 100, 100, 1280, 720, handle_window_event, flags = Window_Flags.CUSTOM_BORDER);
+	window.borders = DEFAULT_WINDOW_BORDERS;
 	make_window_context_current (*window);
 	gl_load (*gl, get_gl_proc_address);
 	show_window (*window);
@@ -72,6 +73,7 @@ main :: ()
 	args = advance (args);
 	for filename : args
 		split_active_view_into_text_view (*screen, filename);
+	toggle_command_input (*screen);
 
 	glClearColor (config.inactive_background_color.r, config.inactive_background_color.g, config.inactive_background_color.b, 1);
 

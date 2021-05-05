@@ -245,7 +245,7 @@ resize_screen :: (using screen : *Screen, new_width : u32, new_height : u32)
 	width  = new_width;
 	height = new_height;
 	w_ratio := width  / cast (f32) old_width;
-	h_ratio := (height - bottom_bar_height ()) / cast (f32) (old_height - bottom_bar_height ());
+	h_ratio := (height - window.borders.caption_height - bottom_bar_height ()) / cast (f32) (old_height - window.borders.caption_height - bottom_bar_height ());
 
 	// Resize text views
 	for visible_views
@@ -253,19 +253,19 @@ resize_screen :: (using screen : *Screen, new_width : u32, new_height : u32)
 		it.position.x *= w_ratio;
 		it.size.x     *= w_ratio;
 	
-		it.position.y *= h_ratio;
+		it.position.y = (it.position.y - window.borders.caption_height) * h_ratio + window.borders.caption_height;
 		it.size.y     *= h_ratio;
 	}
 }
 
 update_screen_from_config_reload :: (using screen : *Screen, previous_bottom_bar_height : f32)
 {
-	h_ratio := (height - bottom_bar_height ()) / cast (f32) (height - previous_bottom_bar_height);
+	h_ratio := (height - window.borders.caption_height - bottom_bar_height ()) / cast (f32) (height - window.borders.caption_height - previous_bottom_bar_height);
 
 	// Resize text views
 	for visible_views
 	{
-		it.position.y *= h_ratio;
+		it.position.y = (it.position.y - window.borders.caption_height) * h_ratio + window.borders.caption_height;
 		it.size.y     *= h_ratio;
 	}
 }
@@ -306,8 +306,8 @@ split_active_view :: (using screen : *Screen, new_view_kind : Screen_View.Kind) 
 	size     : Vec2 = ---;
 	if visible_views.count == 0
 	{
-		position = VEC2_ZERO;
-		size     = vec2 (xx width, height - bottom_bar_height ());
+		position = vec2 (0, xx window.borders.caption_height);
+		size     = vec2 (xx width, height - xx window.borders.caption_height - bottom_bar_height ());
 	}
 	else
 	{
@@ -442,19 +442,60 @@ draw_screen :: (using screen : *Screen)
 	{
 		bottom_bar.x1 = 0;
 		bottom_bar.x2 = xx width;
-		bottom_bar.y1 = xx (height - 2 * config.bottom_io_padding - xx (page.ascender - page.descender));
+		bottom_bar.y1 = xx (height - bottom_bar_height ());
 		bottom_bar.y2 = xx height;
 	}
 
 	{
 		views_area.x1 = 0;
 		views_area.x2 = xx width;
-		views_area.y1 = 0;
+		views_area.y1 = xx window.borders.caption_height;
 		views_area.y2 = bottom_bar.y1;
 	}
 
 	immediate_push_state ();
 	defer immediate_pop_state ();
+
+	// Draw the caption bar
+	immediate_quad (0.0, 0.0, cast (f32) width, cast (f32) window.borders.caption_height, config.window_caption_background_color);
+	caption_size := calculate_drawn_text_bounds (*loaded_font, "Text Editor", 16);
+	draw_text (*loaded_font, "Text Editor", 16, vec2 (width * 0.5 - caption_size.x * 0.5, window.borders.caption_height * 0.5 - caption_size.y * 0.5), NOT_QUITE_WHITE);
+
+	for i : 0..2
+	{
+		x1 := cast (f32) width - (i + 1) * window.borders.caption_buttons_width;
+		y1 := 0.0;
+		x2 := cast (f32) width - i * window.borders.caption_buttons_width;
+		y2 := cast (f32) window.borders.caption_height;
+		center := vec2 (x2 + x1, y2 + y1) * 0.5;
+		LENGTH :: 5.0;
+		background_color := vec4 (1, 1, 1, 0.1);
+		foreground_color := LIGHT_GRAY;
+		if i == 0 then background_color = vec4 (0.8, 0.2, 0.3, 1);
+
+		mouse_x, mouse_y := get_cursor_position (*window);
+		if xx mouse_x >= x1 && xx mouse_x < x2 && xx mouse_y >= y1 && xx mouse_y < y2
+		{
+			immediate_quad (x1, y1, x2, y2, background_color);
+			foreground_color = NOT_QUITE_WHITE;
+		}
+
+		if i ==
+		{
+		case 0;
+			immediate_line (center - vec2 (1, 1) * LENGTH, center + vec2 (1, 1) * LENGTH, foreground_color, 1);
+			immediate_line (center - vec2 (1, -1) * LENGTH, center + vec2 (1, -1) * LENGTH, foreground_color, 1);
+
+		case 1;
+			immediate_quad_outline (center.x - LENGTH, center.y - LENGTH, center.x + LENGTH, center.y + LENGTH, foreground_color, 1);
+
+		case 2;
+			immediate_line (center - vec2 (LENGTH, 0), center + vec2 (LENGTH, 0), foreground_color, 1);
+		}
+	}
+
+	immediate_line (vec2 (0.0, xx window.borders.caption_height - 1.0), vec2 (xx width, xx window.borders.caption_height - 1.0), config.view_separation_color, 1);
+
 	immediate_clip (views_area);
 
 	if visible_views.count == 0
@@ -480,20 +521,18 @@ draw_screen :: (using screen : *Screen)
 	// Draw visible view separations
 	for visible_views
 	{
+		if it_index == visible_views.count - 1 then break;
+
 		if it.x + it.w < xx width
 			immediate_line (vec2 (it.x + it.w, it.y), vec2 (it.x + it.w, it.y + it.h), config.view_separation_color, 1);
 		
-		if it.y + it.h < xx height
-			immediate_line (vec2 (it.x, it.y + it.h), vec2 (it.x + it.w, it.y + it.h), config.view_separation_color, 1);
+		//if it.y + it.h < xx height
+		//	immediate_line (vec2 (it.x, it.y + it.h), vec2 (it.x + it.w, it.y + it.h), config.view_separation_color, 1);
 	}
 
-	// @Fix (stefan): Clipping does not work!
-	//immediate_clip (bottom_bar);
-	immediate_noclip ();
-
 	// Draw the bottom bar
-	immediate_quad (0, cast (f32) height - (page.ascender - page.descender) - 2.0 * config.bottom_io_padding,
-		cast (f32) width, cast (f32) height, config.bottom_io_background_color);
+	immediate_clip (bottom_bar);
+	immediate_quad (cast (f32) bottom_bar.x1, cast (f32) bottom_bar.y1, cast (f32) bottom_bar.x2, cast (f32) bottom_bar.y2, config.bottom_io_background_color);
 
 	// Draw the command/message buffer
 	if is_inputting_command
@@ -603,7 +642,7 @@ draw_text_view :: (using view : *Text_View, is_active : bool)
 		line_bar.x1 = view_area.x1;
 		line_bar.x2 = line_bar.x1 + cast (s32) (line_info_text_end.x + 2 * config.buffer_line_numbers_padding);
 		line_bar.y1 = view_area.y1;
-		line_bar.y2 = line_bar.y1 + cast (s32) h - (info_bar.y2 - info_bar.y1);
+		line_bar.y2 = info_bar.y1;
 	}
 
 	{
@@ -746,10 +785,7 @@ draw_text_view :: (using view : *Text_View, is_active : bool)
 		}
 	}
 
-	// @Fix (stefan): For some reason the clipping does not work and nothing gets rendered
-	// if I use info_bar as a clipping rect. Fix this!
-	//immediate_clip (info_bar);
-	immediate_clip (view_area);
+	immediate_clip (info_bar);
 	// Info bar background
 	immediate_quad (cast (f32) info_bar.x1, cast (f32) info_bar.y1, cast (f32) info_bar.x2, cast (f32) info_bar.y2, config.buffer_info_background_color);
 	

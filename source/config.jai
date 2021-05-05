@@ -1,6 +1,7 @@
 Config :: struct
 {
 	// Colors
+	window_caption_background_color     := NOT_QUITE_BLACK;
 	inactive_background_color            := Vec4.{ 0.2, 0.2, 0.2, 1 };
 	inactive_stripes_color               := DARK_GRAY;
 	bottom_io_background_color           := NOT_QUITE_BLACK;

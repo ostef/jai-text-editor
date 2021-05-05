@@ -1,4 +1,5 @@
 # Colors
+window_caption_background_color 0.1 0.1 0.1 1
 inactive_background_color 0.2 0.2 0.2 1
 inactive_stripes_color 0.4 0.4 0.4 1
 bottom_io_background_color 0.1 0.1 0.1 1
