@@ -56,10 +56,9 @@ profile :: (name : string) #expand
 
 main :: ()
 {
-	args := get_command_line_arguments ();
-	executable_path = get_full_path (args[0], heap_allocator);
+	executable_path = get_executable_path (heap_allocator);
 	executable_dir  = strip_filename_from_path (executable_path);
-	
+
 	main_temporary_storage = context.temporary_storage;
 	context.allocator = heap_allocator;
 	context.logger    = console_logger;
@@ -91,6 +90,7 @@ main :: ()
 	viewport_w, viewport_h := get_window_framebuffer_size (*window);
 	init_screen (*screen, xx viewport_w, xx viewport_h);
 
+	args := get_command_line_arguments ();
 	args = advance (args);
 	for filename : args
 		open_new_tab (*screen, filename);
