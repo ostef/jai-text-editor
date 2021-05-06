@@ -503,12 +503,10 @@ draw_screen :: (using screen : *Screen)
 
 		TAB_TITLE_FONT_HEIGHT : u32 : 14;
 		page := get_font_page (*loaded_font, TAB_TITLE_FONT_HEIGHT);
-		x1 := xoffset;
+		x1 := cast (f32) i * TAB_CAPTION_WIDTH;
 		x2 := x1 + TAB_CAPTION_WIDTH;
 		y1 := 0.0;
 		y2 := cast (f32) window.borders.caption_height;
-		xoffset = x2;
-
 		background_color := ifx i == active_tab_index then config.tab_caption_background_color else config.tab_caption_inactive_background_color;
 		immediate_quad (x1, y1, x2, y2, background_color);
 
@@ -519,7 +517,8 @@ draw_screen :: (using screen : *Screen)
 		clip_rect.x2 = cast (s32) (x2 - xx page.space_advance);
 		clip_rect.y2 = xx y2;
 		tab_title := calculate_drawn_text_bounds (*loaded_font, tab_name, TAB_TITLE_FONT_HEIGHT);
-		if x1 + tab_title.x < x2 then x1 = round ((TAB_CAPTION_WIDTH - tab_title.x) * 0.5);
+		// Center tab title if it fits
+		if x1 + tab_title.x < x2 then x1 = cast (f32) i * TAB_CAPTION_WIDTH + round ((TAB_CAPTION_WIDTH - tab_title.x) * 0.5);
 		y1 = round ((window.borders.caption_height - tab_title.y) * 0.5);
 		immediate_clip (clip_rect);
 		draw_text (*loaded_font, tab_name, TAB_TITLE_FONT_HEIGHT, vec2 (x1, y1), foreground_color, clip_rect);
