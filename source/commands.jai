@@ -13,7 +13,8 @@ read_shortcuts_from_file :: (filename : string) -> bool
 		return trim (str, curr.count), curr;
 	}
 
-	curr, ok := read_entire_file (filename, temp_allocator);
+	full_path := make_path (temp_allocator, executable_dir, "/", filename);
+	curr, ok := read_entire_file (full_path, temp_allocator);
 	if !ok then return log_error ("Shortcut", "Could not read file '%'.", filename);
 	
 	while curr.count > 0
@@ -500,5 +501,59 @@ command_lang :: (using screen : *Screen, language : string)
 	}
 
 	print_to_screen (screen, "Set active text view's language to '%'.", language);
+}
+@Command
+
+command_pwd :: (using screen : *Screen)
+{
+	print_to_screen (screen, "Current working directory is: '%'.", get_working_directory (temp_allocator));
+}
+@Command
+
+command_cd :: (using screen : *Screen, dir : string)
+{
+	ok := set_working_directory (dir);
+	if ok then print_to_screen (screen, "Set working directory to '%'.", get_working_directory (temp_allocator));
+	else print_to_screen (screen, "Path '%' does not exist or is not a directory.", dir);
+}
+@Command
+
+command_mkdir :: (using screen : *Screen, dir : string)
+{
+	ok := create_directory_tree (dir);
+	if ok then print_to_screen (screen, "Created directory '%'.", dir);
+	else print_to_screen (screen, "Could not create directory '%'.", dir);
+}
+@Command
+
+command_rmdir :: (using screen : *Screen, dir : string)
+{
+	ok := delete_directory (dir);
+	if ok then print_to_screen (screen, "Deleted directory '%'.", dir);
+	else print_to_screen (screen, "Could not delete directory '%'.", dir);
+}
+@Command
+
+command_touch :: (using screen : *Screen, filename : string)
+{
+	if file_exists (filename)
+	{
+		print_to_screen (screen, "File '%' already exists.", filename);
+
+		return;
+	}
+
+	file, ok := create_file (filename, File_Flags.READ);
+	close_file (file);
+	if ok then print_to_screen (screen, "Created file '%'.", filename);
+	else print_to_screen (screen, "Could not create file '%'.", filename);
+}
+@Command
+
+command_rm :: (using screen : *Screen, filename : string)
+{
+	ok := delete_file (filename);
+	if ok then print_to_screen (screen, "Deleted file '%'.", filename);
+	else print_to_screen (screen, "Could not delete file '%'.", filename);
 }
 @Command
