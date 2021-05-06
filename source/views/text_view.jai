@@ -110,13 +110,18 @@ load_file_into_active_text_view :: (using tab : *Screen_Tab, filename : string) 
 	}
 
 	clear_text_view (view);
-	ok := load_file_into_buffer (*view.input, filename);
+	view_filename := get_full_path (filename, heap_allocator);
+	ok := load_file_into_buffer (*view.input, view_filename);
 	if ok
 	{
-		view.filename = clone_string (filename, heap_allocator);
+		view.filename = view_filename;
 		set_cursor (*view.input.buffer, 0);
 		view.scroll_to_cursor = true;
 		detect_language (view);
+	}
+	else
+	{
+		free (view_filename, heap_allocator);
 	}
 
 	return ok;

@@ -116,7 +116,9 @@ config : Config;
 
 read_config_from_file :: (filename := "config.edit") -> bool
 {
-	file_contents, ok := read_entire_file (filename, temp_allocator, null_terminate = false);
+	full_path := make_path (temp_allocator, executable_dir, "/", filename);
+	println (full_path);
+	file_contents, ok := read_entire_file (full_path, temp_allocator, null_terminate = false);
 	if !ok then return false;
 	free (config.font, heap_allocator);
 
@@ -260,7 +262,7 @@ read_config_from_file :: (filename := "config.edit") -> bool
 		}
 	}
 
-	font_filename := join (temp_allocator, "fonts/", config.font);
+	font_filename := make_path (temp_allocator, executable_dir, "/fonts/", config.font);
 	if loaded_font.filename != font_filename then try_reloading_font (*loaded_font, font_filename);
 
 	return true;

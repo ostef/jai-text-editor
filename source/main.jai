@@ -26,6 +26,8 @@ Debug :: #import "Debug";
 // Languages
 #load "languages/jai.jai";
 
+executable_path : string;
+executable_dir  : string;
 running := false;
 window : Window;
 screen : Screen;
@@ -54,6 +56,10 @@ profile :: (name : string) #expand
 
 main :: ()
 {
+	args := get_command_line_arguments ();
+	executable_path = get_full_path (args[0], heap_allocator);
+	executable_dir  = strip_filename_from_path (executable_path);
+	
 	main_temporary_storage = context.temporary_storage;
 	context.allocator = heap_allocator;
 	context.logger    = console_logger;
@@ -66,7 +72,13 @@ main :: ()
 	show_window (*window);
 	init_fonts ();
 	register_all_commands ();
-	read_config_from_file ();
+	read_config := read_config_from_file ();
+	if !read_config
+	{
+		open_error_message_box (*window, "Edit", "Could not read config file.");
+
+		return;
+	}
 	if !loaded_font.loaded
 	{
 		open_error_message_box (*window, "Edit", fstring (temp_allocator, "Could not load font '%'. Make sure the font specified in 'config.edit' exists in the 'fonts' folder.", config.font));
@@ -79,7 +91,6 @@ main :: ()
 	viewport_w, viewport_h := get_window_framebuffer_size (*window);
 	init_screen (*screen, xx viewport_w, xx viewport_h);
 
-	args := get_command_line_arguments ();
 	args = advance (args);
 	for filename : args
 		open_new_tab (*screen, filename);

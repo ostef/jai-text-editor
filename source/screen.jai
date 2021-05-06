@@ -288,7 +288,6 @@ update_screen_from_config_reload :: (using screen : *Screen, previous_bottom_bar
 	}
 }
 
-
 toggle_command_input :: inline (using screen : *Screen)
 {
 	is_inputting_command = !is_inputting_command;
