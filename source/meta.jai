@@ -274,14 +274,25 @@ build :: ()
 	debugging      := false;
 	deploy_assets  := false;
 	args           := Compiler.compiler_get_command_line_arguments ();
+	is_program := false;
+	program_args := make_array (string, 10, temp_allocator);
+	push_to_array (*program_args, OUTPUT_NAME, " ");
 	for args
 	{
-		if it ==
+		if !is_program
 		{
-		case "run";    run_on_success = true;
-		case "debug";  debugging      = true;
-		case "deploy"; deploy_assets  = true;
-		case;          println ("Unknown argument: '%'", it);
+			if it ==
+			{
+			case "run";    run_on_success = true;
+			case "debug";  debugging      = true;
+			case "deploy"; deploy_assets  = true;
+			case "---";    is_program = true;
+			case;          println ("Unknown argument: '%'", it);
+			}
+		}
+		else
+		{
+			push_to_array (*program_args, it);
 		}
 	}
 
@@ -342,7 +353,9 @@ build :: ()
 		if run_on_success
 		{
 			set_working_directory (BUILD_DIR);
-			os_run_command (OUTPUT_NAME);
+			cmd := join (temp_allocator, ..program_args);
+			println ("Running: %", cmd);
+			os_run_command (cmd);
 		}
 	}
 
