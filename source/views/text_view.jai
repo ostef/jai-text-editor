@@ -57,8 +57,20 @@ init_text_view :: (using view : *Text_View)
 
 reset_text_view :: (using view : *Text_View)
 {
-	if filename then free (filename, heap_allocator);
+	clear_text_view (view);
 	reset_text_input (*input);
+}
+
+clear_text_view :: (using view : *Text_View)
+{
+	if filename then free (filename, heap_allocator);
+	clear_gap_buffer (*input.buffer);
+	scrolling = VEC2_ZERO;
+	scroll_to_cursor = false;
+	is_dirty = false;
+	language = .NONE;
+	visual_scrolling = VEC2_ZERO;
+	scrollbar_alpha = 0;
 }
 
 detect_language :: (using view : *Text_View)
@@ -77,7 +89,6 @@ detect_language :: (using view : *Text_View)
 load_file_into_active_text_view :: (using tab : *Screen_Tab, filename : string) -> bool
 {
 	if visible_views.count == 0 then return false;
-	assert (visible_views[active_view_index].kind == .TEXT, "Active view is not a text view.");
 	if !filename then return false;
 
 	for * view, i : text_views
@@ -91,16 +102,20 @@ load_file_into_active_text_view :: (using tab : *Screen_Tab, filename : string) 
 	}
 
 	view := cast (*Text_View) visible_views[active_view_index];
+	if view.kind != .TEXT
+	{
+		print_to_screen (screen, "Active view is not a text view.");
+
+		return false;
+	}
+
+	clear_text_view (view);
 	ok := load_file_into_buffer (*view.input, filename);
 	if ok
 	{
+		view.filename = clone_string (filename, heap_allocator);
 		set_cursor (*view.input.buffer, 0);
 		view.scroll_to_cursor = true;
-	}
-
-	if ok
-	{
-		view.filename = clone_string (filename, heap_allocator);
 		detect_language (view);
 	}
 

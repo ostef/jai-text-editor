@@ -81,6 +81,21 @@ execute_command :: (using screen : *Screen, str : string)
 	else print_to_screen (screen, "Command '%' does not exist.", name);
 }
 
+text_view_barebones :: () #expand
+{
+	`tab := get_tab (`screen);
+	if !tab then `return;
+	if tab.text_views.count == 0 then `return;
+
+	`view := cast (*Text_View) tab.visible_views[tab.active_view_index];
+	if view.kind != .TEXT
+	{
+		print_to_screen (`screen, "Active view is not a text view.");
+
+		`return;
+	}
+}
+
 // Split the active view horizontally
 command_split :: (using screen : *Screen, filename := "")
 {
@@ -113,17 +128,7 @@ command_open :: (using screen : *Screen, filename : string)
 
 command_save :: (using screen : *Screen)
 {
-	tab := get_tab (screen);
-	if !tab then return;
-	if tab.text_views.count == 0 then return;
-
-	view := cast (*Text_View) tab.visible_views[tab.active_view_index];
-	if view.kind != .TEXT
-	{
-		print_to_screen (screen, "Active view is not a text view.");
-
-		return;
-	}
+	text_view_barebones ();
 
 	if !view.filename
 	{
@@ -147,17 +152,7 @@ command_save :: (using screen : *Screen)
 
 command_save_as :: (using screen : *Screen, filename : string)
 {
-	tab := get_tab (screen);
-	if !tab then return;
-	if tab.text_views.count == 0 then return;
-
-	view := cast (*Text_View) tab.visible_views[tab.active_view_index];
-	if view.kind != .TEXT
-	{
-		print_to_screen (screen, "Active view is not a text view.");
-
-		return;
-	}
+	text_view_barebones ();
 
 	if view.filename then free (view.filename, heap_allocator);
 	view.filename = clone_string (filename, heap_allocator);
@@ -410,17 +405,7 @@ command_reload_config :: (using screen : *Screen, filename := "")
 
 command_line :: (using screen : *Screen, line : s64)
 {
-	tab := get_tab (screen);
-	if !tab then return;
-	if tab.text_views.count == 0 then return;
-
-	view := cast (*Text_View) tab.visible_views[tab.active_view_index];
-	if view.kind != .TEXT
-	{
-		print_to_screen (screen, "Active view is not a text view.");
-
-		return;
-	}
+	text_view_barebones ();
 	
 	buffer := *view.input.buffer;
 	if line < 0 then line = 1;
@@ -441,17 +426,7 @@ command_line :: (using screen : *Screen, line : s64)
 
 command_to_crlf :: (using screen : *Screen)
 {
-	tab := get_tab (screen);
-	if !tab then return;
-	if tab.text_views.count == 0 then return;
-
-	view := cast (*Text_View) tab.visible_views[tab.active_view_index];
-	if view.kind != .TEXT
-	{
-		print_to_screen (screen, "Active view is not a text view.");
-
-		return;
-	}
+	text_view_barebones ();
 
 	buffer := *view.input.buffer;
 	if view.input.buffer.eol_sequence == .CRLF
@@ -479,17 +454,7 @@ command_to_crlf :: (using screen : *Screen)
 
 command_to_lf :: (using screen : *Screen)
 {
-	tab := get_tab (screen);
-	if !tab then return;
-	if tab.text_views.count == 0 then return;
-
-	view := cast (*Text_View) tab.visible_views[tab.active_view_index];
-	if view.kind != .TEXT
-	{
-		print_to_screen (screen, "Active view is not a text view.");
-
-		return;
-	}
+	text_view_barebones ();
 
 	buffer := *view.input.buffer;
 	if view.input.buffer.eol_sequence == .LF
@@ -516,5 +481,24 @@ command_to_lf :: (using screen : *Screen)
 	clear_redo_stack (buffer);
 
 	print_to_screen (screen, "Converted buffer line endings to LF.");
+}
+@Command
+
+command_lang :: (using screen : *Screen, language : string)
+{
+	text_view_barebones ();
+
+	if language ==
+	{
+	case "jai";
+		view.language = .JAI;
+
+	case;
+		print_to_screen (screen, "Unkown language '%'.", language);
+	
+		return;
+	}
+
+	print_to_screen (screen, "Set active text view's language to '%'.", language);
 }
 @Command
