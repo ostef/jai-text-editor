@@ -51,11 +51,15 @@ Config :: struct
 	// @Todo (stefan): Unify move and select
 	key_move_up    := Key_Binding.{ Mods.NONE, .UP };
 	key_move_down  := Key_Binding.{ Mods.NONE, .DOWN };
+	key_move_page_up   := Key_Binding.{ Mods.NONE, .PAGE_UP };
+	key_move_page_down := Key_Binding.{ Mods.NONE, .PAGE_DOWN };
 	key_move_left  := Key_Binding.{ Mods.NONE, .LEFT };
 	key_move_right := Key_Binding.{ Mods.NONE, .RIGHT };
 
 	key_select_up    := Key_Binding.{ Mods.SHIFT, .UP };
 	key_select_down  := Key_Binding.{ Mods.SHIFT, .DOWN };
+	key_select_page_up   := Key_Binding.{ Mods.SHIFT, .PAGE_UP };
+	key_select_page_down := Key_Binding.{ Mods.SHIFT, .PAGE_DOWN };
 	key_select_left  := Key_Binding.{ Mods.SHIFT, .LEFT };
 	key_select_right := Key_Binding.{ Mods.SHIFT, .RIGHT };
 	
@@ -69,6 +73,8 @@ Config :: struct
 
 	key_scroll_up   := Key_Binding.{ Mods.CONTROL, .UP };
 	key_scroll_down := Key_Binding.{ Mods.CONTROL, .DOWN };
+	key_scroll_page_up   := Key_Binding.{ Mods.CONTROL, .PAGE_UP };
+	key_scroll_page_down := Key_Binding.{ Mods.CONTROL, .PAGE_DOWN };
 
 	key_select_all := Key_Binding.{ Mods.CONTROL, .A };
 }

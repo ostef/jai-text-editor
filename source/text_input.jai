@@ -18,6 +18,7 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> modifie
 	{
 	case .KEY_PRESS; #through;
 	case .KEY_REPEAT;
+		MOVE_PAGE_COUNT :: 30;
 		// Move cursor and select
 		// Up
 		if matches_key_binding (event, config.key_move_up)
@@ -28,6 +29,22 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> modifie
 		{
 			if move_cursor_to_previous_line (*buffer, select = true) then modified = true;
 		}
+		else if matches_key_binding (event, config.key_move_page_up)
+		{
+			for 0..MOVE_PAGE_COUNT - 1
+			{
+				if !move_cursor_to_previous_line (*buffer) then break;
+				modified = true;
+			}
+		}
+		else if matches_key_binding (event, config.key_select_page_up)
+		{
+			for 0..MOVE_PAGE_COUNT - 1
+			{
+				if !move_cursor_to_previous_line (*buffer, select = true) then break;
+				modified = true;
+			}
+		}
 		// Down
 		else if matches_key_binding (event, config.key_move_down)
 		{
@@ -36,6 +53,22 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> modifie
 		else if matches_key_binding (event, config.key_select_down)
 		{
 			if move_cursor_to_next_line (*buffer, select = true) then modified = true;
+		}
+		else if matches_key_binding (event, config.key_move_page_down)
+		{
+			for 0..MOVE_PAGE_COUNT - 1
+			{
+				if !move_cursor_to_next_line (*buffer) then break;
+				modified = true;
+			}
+		}
+		else if matches_key_binding (event, config.key_select_page_down)
+		{
+			for 0..MOVE_PAGE_COUNT - 1
+			{
+				if !move_cursor_to_next_line (*buffer, select = true) then break;
+				modified = true;
+			}
 		}
 		// Left
 		else if matches_key_binding (event, config.key_move_left)

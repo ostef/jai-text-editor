@@ -12,13 +12,18 @@ Debug :: #import "Debug";
 #run compiler_set_type_info_flags (GL_Procedures, .NO_SIZE_COMPLAINT);
 
 #load "font.jai";
-#load "screen.jai";
 #load "gap_buffer.jai";
 #load "text_input.jai";
-#load "commands.jai";
 #load "clipboard.jai";
 #load "config.jai";
+
+#load "screen.jai";
+#load "commands.jai";
+// Views
+#load "views/text_view.jai";
+
 #load "language.jai";
+// Languages
 #load "languages/jai.jai";
 
 running := false;

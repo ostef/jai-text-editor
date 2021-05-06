@@ -46,10 +46,14 @@ key_undo CTRL+Z
 key_redo CTRL+SHIFT+Z
 key_move_up UP
 key_move_down DOWN
+key_move_page_up PAGE_UP
+key_move_page_down PAGE_DOWN
 key_move_left LEFT
 key_move_right RIGHT
 key_select_up SHIFT+UP
 key_select_down SHIFT+DOWN
+key_select_page_up SHIFT+PAGE_UP
+key_select_page_down SHIFT+PAGE_DOWN
 key_select_left SHIFT+LEFT
 key_select_right SHIFT+RIGHT
 key_skip_left CTRL+LEFT
@@ -60,4 +64,6 @@ key_move_line_up ALT+UP
 key_move_line_down ALT+DOWN
 key_scroll_up CTRL+UP
 key_scroll_down CTRL+DOWN
+key_scroll_page_up CTRL+PAGE_UP
+key_scroll_page_down CTRL+PAGE_DOWN
 key_select_all CTRL+A
