@@ -41,6 +41,12 @@ handle_window_event :: (using event : Event)
 	if running then screen_handle_event (*screen, event);
 }
 
+profile :: (name : string) #expand
+{
+	//`profile_start := get_time ();
+	//`defer { profile_end := get_time (); println ("% took % s.", name, profile_end - profile_start); }
+}
+
 main :: ()
 {
 	main_temporary_storage = context.temporary_storage;
@@ -68,11 +74,10 @@ main :: ()
 	viewport_w, viewport_h := get_window_framebuffer_size (*window);
 	init_screen (*screen, xx viewport_w, xx viewport_h);
 
-	split_active_view_into_text_view (*screen, "../../source/screen.jai");
 	args := get_command_line_arguments ();
 	args = advance (args);
 	for filename : args
-		split_active_view_into_text_view (*screen, filename);
+		open_new_tab (*screen, filename);
 	toggle_command_input (*screen);
 
 	glClearColor (config.inactive_background_color.r, config.inactive_background_color.g, config.inactive_background_color.b, 1);

@@ -1,5 +1,8 @@
 # Colors
-window_caption_background_color 0.1 0.1 0.1 1
+window_caption_background_color 0.15 0.15 0.15 1
+tab_background_color 0.1 0.1 0.1 1
+tab_caption_background_color 0.1 0.1 0.1 1
+tab_caption_inactive_background_color 0.2 0.2 0.2 1
 inactive_background_color 0.2 0.2 0.2 1
 inactive_stripes_color 0.4 0.4 0.4 1
 bottom_io_background_color 0.1 0.1 0.1 1
@@ -31,6 +34,8 @@ buffer_show_scrollbar true
 
 # Key bindings
 key_toggle_command_input ESCAPE
+key_previous_tab CTRL+SHIFT+W
+key_next_tab CTRL+SHIFT+E
 key_previous_view CTRL+W
 key_next_view CTRL+E
 key_close_view CTRL+Q

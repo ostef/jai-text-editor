@@ -2,6 +2,11 @@
 
 // Acrylic window background: https://stackoverflow.com/questions/43931709/acrylic-material-in-win32-app
 
+// @Note (stefan): Right now, I was taking the direction to make any kind of views opened,
+// but since this is a text editor, I believe we should make it so that only text views are
+// opened, and utilities such as search & replace, file system view, can only be opened on top
+// of the current text view, and are closed automatically once the operation is done.
+
 Screen :: struct
 {
 	width, height : u32;
@@ -12,10 +17,17 @@ Screen :: struct
 	message_buffer : String_Builder;
 
 	// Views
-	text_views    : Bucket_Array (Text_View, 10);
-	visible_views : [..]*Screen_View;
+	tabs             : [..]Screen_Tab;
+	active_tab_index : s64;
+	render_timer_id  : u32;
+}
+
+Screen_Tab :: struct
+{
+	screen : *Screen;
+	text_views        : Bucket_Array (Text_View, 10);
+	visible_views     : [..]*Screen_View;
 	active_view_index : s64;
-	render_timer_id   : u32;
 }
 
 Screen_View :: struct
@@ -155,27 +167,44 @@ screen_handle_event :: (using screen : *Screen, event : Event)
 				return;
 			}
 		}
+		else if matches_key_binding (event, config.key_previous_tab)
+		{
+			if tabs.count > 0 then active_tab_index = wrap (active_tab_index - 1, 0, tabs.count);
+		}
+		else if matches_key_binding (event, config.key_next_tab)
+		{
+			if tabs.count > 0 then active_tab_index = wrap (active_tab_index + 1, 0, tabs.count);
+		}
 		else if matches_key_binding (event, config.key_previous_view)
 		{
-			active_view_index = wrap (active_view_index - 1, 0, text_views.count);
+			tab := get_tab (screen);
+			if tab && tab.visible_views.count > 0
+			{
+				tab.active_view_index = wrap (tab.active_view_index - 1, 0, tab.visible_views.count);
+			}
 		}
 		else if matches_key_binding (event, config.key_next_view)
 		{
-			active_view_index = wrap (active_view_index + 1, 0, text_views.count);
+			tab := get_tab (screen);
+			if tab && tab.visible_views.count > 0
+			{
+				tab.active_view_index = wrap (tab.active_view_index + 1, 0, tab.visible_views.count);
+			}
 		}
 
 	case .MOUSE_BUTTON_PRESS;
 		// Select text view with mouse
-		if !is_inputting_command && text_views.count != 0 && event.mouse_button_event.button == .LEFT
+		if !is_inputting_command && tabs.count != 0 && event.mouse_button_event.button == .LEFT
 		{
+			tab := get_tab (screen);
 			mx := cast (f32) event.mouse_button_event.mouse_x;
 			my := cast (f32) event.mouse_button_event.mouse_y;
 			// Find the view we clicked on and select it
-			for view, i : text_views
+			for view, i : tab.visible_views
 			{
 				if mx > view.x && mx < view.x + view.w && my > view.y && my < view.y + view.w
 				{
-					active_view_index = i;
+					tab.active_view_index = i;
 
 					break;
 				}
@@ -187,12 +216,16 @@ screen_handle_event :: (using screen : *Screen, event : Event)
 	{
 		text_input_handle_event (*command_input, event);
 	}
-	else if visible_views.count != 0
+	else if tabs.count != 0
 	{
-		view := visible_views[active_view_index];
-		if view.kind ==
+		tab := get_tab (screen);
+		if tab.visible_views.count != 0
 		{
-		case .TEXT;  text_view_handle_event (cast (*Text_View) view, event);
+			view := tab.visible_views[tab.active_view_index];
+			if #complete view.kind ==
+			{
+			case .TEXT;  text_view_handle_event (cast (*Text_View) view, event);
+			}
 		}
 	}
 }
@@ -232,10 +265,9 @@ init_screen :: (screen : *Screen, width : u32, height : u32)
 	// Bottom IO
 	init_text_input (*screen.command_input, Text_Input.Flags.SINGLE_LINE | .DISALLOW_TABS);
 	screen.message_buffer = make_string_builder (100, heap_allocator);
-	// Views
-	init_bucket_array (*screen.text_views, 10, heap_allocator);
-	init_array (*screen.visible_views, 10, heap_allocator);
-	screen.active_view_index = -1;
+	// Tabs and views
+	init_array (*screen.tabs, 10, heap_allocator);
+	screen.active_tab_index = -1;
 	screen.render_timer_id = schedule_timer_event (*window, 1, 0);
 }
 
@@ -248,14 +280,17 @@ resize_screen :: (using screen : *Screen, new_width : u32, new_height : u32)
 	w_ratio := width  / cast (f32) old_width;
 	h_ratio := (height - window.borders.caption_height - bottom_bar_height ()) / cast (f32) (old_height - window.borders.caption_height - bottom_bar_height ());
 
-	// Resize text views
-	for visible_views
+	// Resize all views
+	for * tab, i : tabs
 	{
-		it.position.x *= w_ratio;
-		it.size.x     *= w_ratio;
-	
-		it.position.y = (it.position.y - window.borders.caption_height) * h_ratio + window.borders.caption_height;
-		it.size.y     *= h_ratio;
+		for tab.visible_views
+		{
+			it.position.x *= w_ratio;
+			it.size.x     *= w_ratio;
+		
+			it.position.y = (it.position.y - window.borders.caption_height) * h_ratio + window.borders.caption_height;
+			it.size.y     *= h_ratio;
+		}
 	}
 }
 
@@ -263,11 +298,14 @@ update_screen_from_config_reload :: (using screen : *Screen, previous_bottom_bar
 {
 	h_ratio := (height - window.borders.caption_height - bottom_bar_height ()) / cast (f32) (height - window.borders.caption_height - previous_bottom_bar_height);
 
-	// Resize text views
-	for visible_views
+	// Resize views
+	for * tab, i : tabs
 	{
-		it.position.y = (it.position.y - window.borders.caption_height) * h_ratio + window.borders.caption_height;
-		it.size.y     *= h_ratio;
+		for tab.visible_views
+		{
+			it.position.y = (it.position.y - window.borders.caption_height) * h_ratio + window.borders.caption_height;
+			it.size.y     *= h_ratio;
+		}
 	}
 }
 
@@ -301,14 +339,61 @@ print_to_screen :: (using screen : *Screen, fmt : string, args : ..Any)
 	print_to_builder (*message_buffer, fmt, ..args);
 }
 
-split_active_view :: (using screen : *Screen, new_view_kind : Screen_View.Kind) -> *Screen_View
+open_new_tab :: (using screen : *Screen, filename := "") -> *Screen_Tab
+{
+	tab := push_to_array (*tabs);
+	init_tab (tab);
+	tab.screen = screen;
+	active_tab_index = tabs.count - 1;
+	split_active_view_into_text_view (tab, filename);
+
+	return tab;
+}
+
+close_current_tab :: (using screen : *Screen)
+{
+	if tabs.count == 0 then return;
+	tab := get_tab (screen);
+	reset_tab (tab);
+	sorted_remove_from_array (*tabs, active_tab_index);
+	if active_tab_index == tabs.count then active_tab_index -= 1;
+}
+
+get_or_add_tab :: (using screen : *Screen, filename := "") -> *Screen_Tab #must
+{
+	if tabs.count == 0 then return open_new_tab (screen, filename);
+
+	return *tabs[active_tab_index];
+}
+
+get_tab :: (using screen : *Screen) -> *Screen_Tab #must
+{
+	if tabs.count == 0 then return null;
+
+	return *tabs[active_tab_index];
+}
+
+init_tab :: (using tab : *Screen_Tab)
+{
+	init_array (*visible_views, 10, heap_allocator);
+	init_bucket_array (*text_views, 10, heap_allocator);
+	active_view_index = -1;
+}
+
+reset_tab :: (using tab : *Screen_Tab)
+{
+	reset_array (*visible_views);
+	reset_bucket_array (*text_views);
+}
+
+split_active_view :: (using tab : *Screen_Tab, new_view_kind : Screen_View.Kind) -> *Screen_View
 {
 	position : Vec2 = ---;
 	size     : Vec2 = ---;
 	if visible_views.count == 0
 	{
 		position = vec2 (0, xx window.borders.caption_height);
-		size     = vec2 (xx width, height - xx window.borders.caption_height - bottom_bar_height ());
+		size     = vec2 (xx screen.width, screen.height - xx window.borders.caption_height - bottom_bar_height ());
 	}
 	else
 	{
@@ -339,12 +424,12 @@ split_active_view :: (using screen : *Screen, new_view_kind : Screen_View.Kind) 
 	return view;
 }
 
-split_active_view_into_text_view :: (using screen : *Screen, filename := "")
+split_active_view_into_text_view :: (using tab : *Screen_Tab, filename := "")
 {
-	split_active_view (screen, .TEXT);
+	split_active_view (tab, .TEXT);
 
 	if filename
-		load_file_into_active_text_view (screen, filename);
+		load_file_into_active_text_view (tab, filename);
 }
 
 detect_language :: (using view : *Text_View)
@@ -360,7 +445,7 @@ detect_language :: (using view : *Text_View)
 	}
 }
 
-load_file_into_active_text_view :: (using screen : *Screen, filename : string) -> bool
+load_file_into_active_text_view :: (using tab : *Screen_Tab, filename : string) -> bool
 {
 	if visible_views.count == 0 then return false;
 	assert (visible_views[active_view_index].kind == .TEXT, "Active view is not a text view.");
@@ -393,17 +478,17 @@ load_file_into_active_text_view :: (using screen : *Screen, filename : string) -
 	return ok;
 }
 
-close_active_view :: (using screen : *Screen)
+close_active_view :: (using tab : *Screen_Tab)
 {
 	if visible_views.count == 0 then return;
 
 	view := visible_views[active_view_index];
-	if view.kind ==
+	if #complete view.kind ==
 	{
 	case .TEXT; reset_text_view (cast (*Text_View) view);
 	}
 
-	if active_view_index > 0 && active_view_index < text_views.count - 1
+	if active_view_index > 0 && active_view_index < visible_views.count - 1
 	{
 		previous_view := visible_views[active_view_index - 1];
 		next_view     := visible_views[active_view_index + 1];
@@ -418,7 +503,7 @@ close_active_view :: (using screen : *Screen)
 		previous_view   := visible_views[active_view_index - 1];
 		previous_view.w += view.w;
 	}
-	else if active_view_index < text_views.count - 1
+	else if active_view_index < visible_views.count - 1
 	{
 		next_view   := visible_views[active_view_index + 1];
 		next_view.x  = view.x;
@@ -426,20 +511,19 @@ close_active_view :: (using screen : *Screen)
 	}
 
 	sorted_remove_from_array (*visible_views, active_view_index);
-	if view.kind ==
+	if #complete view.kind ==
 	{
 	case .TEXT; remove_from_bucket_array (*text_views, view.index_in_bucket_array);
 	}
 
 	if active_view_index == visible_views.count then active_view_index -= 1;
+	if visible_views.count == 0 then close_current_tab (screen);
 }
 
 draw_screen :: (using screen : *Screen)
 {
-	bottom_bar : Clip_Rect;
-	views_area : Clip_Rect;
-
 	page := get_font_page (*loaded_font, config.bottom_io_font_height);
+	bottom_bar : Clip_Rect;
 	{
 		bottom_bar.x1 = 0;
 		bottom_bar.x2 = xx width;
@@ -447,9 +531,10 @@ draw_screen :: (using screen : *Screen)
 		bottom_bar.y2 = xx height;
 	}
 
+	views_area : Clip_Rect;
 	{
 		views_area.x1 = 0;
-		views_area.x2 = xx width;
+		views_area.x2 = xx screen.width;
 		views_area.y1 = xx window.borders.caption_height;
 		views_area.y2 = bottom_bar.y1;
 	}
@@ -459,8 +544,40 @@ draw_screen :: (using screen : *Screen)
 
 	// Draw the caption bar
 	immediate_quad (0.0, 0.0, cast (f32) width, cast (f32) window.borders.caption_height, config.window_caption_background_color);
-	caption_size := calculate_drawn_text_bounds (*loaded_font, "Text Editor", 16);
-	draw_text (*loaded_font, "Text Editor", 16, vec2 (width * 0.5 - caption_size.x * 0.5, window.borders.caption_height * 0.5 - caption_size.y * 0.5), NOT_QUITE_WHITE);
+	xoffset := 0.0;
+	for * tab, i : tabs
+	{
+		tab_name : string;
+		if tab.visible_views.count != 0
+		{
+			view := tab.visible_views[tab.active_view_index];
+			if #complete view.kind ==
+			{
+			case .TEXT;
+				text_view := cast (*Text_View) view;
+				tab_name = fstring (temp_allocator, " % ", ifx text_view.filename then get_filename_from_path (text_view.filename) else "**UNNAMED**");
+			}
+		}
+		else
+		{
+			tab_name = fstring (temp_allocator, " Tab % ", i + 1);
+		}
+
+		TAB_TITLE_FONT_HEIGHT : u32 : 14;
+		tab_title := calculate_drawn_text_bounds (*loaded_font, tab_name, TAB_TITLE_FONT_HEIGHT);
+		x1 := xoffset;
+		x2 := x1 + tab_title.x;
+		y1 := 0.0;
+		y2 := cast (f32) window.borders.caption_height;
+		xoffset = x2;
+
+		background_color := ifx i == active_tab_index then config.tab_caption_background_color else config.tab_caption_inactive_background_color;
+		immediate_quad (x1, y1, x2, y2, background_color);
+		y1 = round ((window.borders.caption_height - tab_title.y) * 0.5);
+		draw_text (*loaded_font, tab_name, TAB_TITLE_FONT_HEIGHT, vec2 (x1, y1), NOT_QUITE_WHITE);
+	}
+	// Update the window move area so we can't move the window when hovering tab captions
+	window.borders.caption_left = xx xoffset;
 
 	for i : 0..2
 	{
@@ -499,12 +616,10 @@ draw_screen :: (using screen : *Screen)
 		}
 	}
 
-	immediate_line (vec2 (0.0, xx window.borders.caption_height - 1.0), vec2 (xx width, xx window.borders.caption_height - 1.0), config.view_separation_color, 1);
 
-	immediate_clip (views_area);
-
-	if visible_views.count == 0
+	if tabs.count == 0
 	{
+		immediate_clip (views_area);
 		// Draw lines crossing the screen if no text view is opened
 		LINE_THICKNESS :: 6.0;
 		i := 0.0;
@@ -514,25 +629,9 @@ draw_screen :: (using screen : *Screen)
 			i += 50;
 		}
 	}
-
-	// Draw text views
-	for * text_views
+	else
 	{
-		profile ("draw text view");
-		active := !is_inputting_command && it.index_in_views_array == active_view_index;
-		draw_text_view (it, active);
-	}
-
-	// Draw visible view separations
-	for visible_views
-	{
-		if it_index == visible_views.count - 1 then break;
-
-		if it.x + it.w < xx width
-			immediate_line (vec2 (it.x + it.w, it.y), vec2 (it.x + it.w, it.y + it.h), config.view_separation_color, 1);
-		
-		//if it.y + it.h < xx height
-		//	immediate_line (vec2 (it.x, it.y + it.h), vec2 (it.x + it.w, it.y + it.h), config.view_separation_color, 1);
+		draw_tab (get_tab (screen));
 	}
 
 	// Draw the bottom bar
@@ -571,10 +670,38 @@ draw_screen :: (using screen : *Screen)
 	}
 }
 
-profile :: (name : string) #expand
+draw_tab :: (using tab : *Screen_Tab)
 {
-	//`profile_start := get_time ();
-	//`defer { profile_end := get_time (); println ("% took % s.", name, profile_end - profile_start); }
+	immediate_noclip ();
+	if visible_views.count == 0
+	{
+		x1 := 0.0;
+		x2 := cast (f32) screen.width;
+		y1 := cast (f32) window.borders.caption_height;
+		y2 := cast (f32) screen.height - bottom_bar_height ();
+		immediate_quad (x1, y1, x2, y2, config.tab_background_color);
+	}
+
+	// Draw views
+	for visible_views
+	{
+		if it.kind ==
+		{
+		case .TEXT;
+			profile ("draw text view");
+			active := !screen.is_inputting_command && it.index_in_views_array == active_view_index;
+			draw_text_view (cast (*Text_View) it, active);
+		}
+	}
+
+	// Draw visible view separations
+	for visible_views
+	{
+		if it_index == visible_views.count - 1 then break;
+
+		if it.x + it.w < xx screen.width
+			immediate_line (vec2 (it.x + it.w, it.y), vec2 (it.x + it.w, it.y + it.h), config.view_separation_color, 1);
+	}
 }
 
 draw_text_view :: (using view : *Text_View, is_active : bool)
@@ -816,8 +943,8 @@ draw_text_view :: (using view : *Text_View, is_active : bool)
 	view_name := "**UNNAMED**";
 	if filename
 	{
-		if is_dirty then view_name = fstring (temp_allocator, "%*", filename);
-		else view_name = filename;
+		if is_dirty then view_name = fstring (temp_allocator, "%*", get_filename_from_path (filename));
+		else view_name = get_filename_from_path (filename);
 	}
 	info_str : string;
 	if language != .NONE

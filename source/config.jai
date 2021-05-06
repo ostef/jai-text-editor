@@ -1,7 +1,10 @@
 Config :: struct
 {
 	// Colors
-	window_caption_background_color     := NOT_QUITE_BLACK;
+	window_caption_background_color      := NOT_QUITE_BLACK;
+	tab_background_color                 := NOT_QUITE_BLACK;
+	tab_caption_background_color         := NOT_QUITE_BLACK;
+	tab_caption_inactive_background_color := NOT_QUITE_BLACK;
 	inactive_background_color            := Vec4.{ 0.2, 0.2, 0.2, 1 };
 	inactive_stripes_color               := DARK_GRAY;
 	bottom_io_background_color           := NOT_QUITE_BLACK;
@@ -33,6 +36,8 @@ Config :: struct
 
 	// Key bindings
 	key_toggle_command_input := Key_Binding.{ Mods.NONE, .ESCAPE };
+	key_previous_tab  := Key_Binding.{ Mods.CONTROL | .SHIFT, .W };
+	key_next_tab      := Key_Binding.{ Mods.CONTROL | .SHIFT, .E };
 	key_previous_view := Key_Binding.{ Mods.CONTROL, .W };
 	key_next_view     := Key_Binding.{ Mods.CONTROL, .E };
 	key_close_view    := Key_Binding.{ Mods.CONTROL, .Q };

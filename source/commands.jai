@@ -84,26 +84,28 @@ execute_command :: (using screen : *Screen, str : string)
 // Split the active view horizontally
 command_split :: (using screen : *Screen, filename := "")
 {
-	split_active_view_into_text_view (screen);
-
-	if filename
-	{
-		ok := load_file_into_active_text_view (screen, filename);
-		if ok then print_to_screen (screen, "Opened file '%' into active view.", filename);
-		else print_to_screen (screen, "Could not open file '%' into active view.", filename);
-	}
+	if tabs.count == 0
+		open_new_tab (screen, filename);
 	else
-	{
-		print_to_screen (screen, "Split active text view.");
-	}
+		split_active_view_into_text_view (get_tab (screen), filename);
+		
+	print_to_screen (screen, "Split active text view.");
+}
+@Command
+
+command_new_tab :: (using screen : *Screen, filename := "")
+{
+	open_new_tab (screen, filename);
+	print_to_screen (screen, "Opened a new tab.");
 }
 @Command
 
 // Open the specified file into the active text view. If the file does not exist, create a new file on disk when it is saved for the first time.
 command_open :: (using screen : *Screen, filename : string)
 {
-	if text_views.count == 0 then split_active_view_into_text_view (screen);
-	ok := load_file_into_active_text_view (screen, filename);
+	tab := get_or_add_tab (screen);
+	if tab.text_views.count == 0 then split_active_view_into_text_view (tab);
+	ok := load_file_into_active_text_view (tab, filename);
 	if ok then print_to_screen (screen, "Opened file '%' into active view.", filename);
 	else print_to_screen (screen, "Could not open file '%' into active view.", filename);
 }
@@ -111,9 +113,11 @@ command_open :: (using screen : *Screen, filename : string)
 
 command_save :: (using screen : *Screen)
 {
-	if text_views.count == 0 then return;
+	tab := get_tab (screen);
+	if !tab then return;
+	if tab.text_views.count == 0 then return;
 
-	view := cast (*Text_View) visible_views[active_view_index];
+	view := cast (*Text_View) tab.visible_views[tab.active_view_index];
 	if view.kind != .TEXT
 	{
 		print_to_screen (screen, "Active view is not a text view.");
@@ -143,9 +147,11 @@ command_save :: (using screen : *Screen)
 
 command_save_as :: (using screen : *Screen, filename : string)
 {
-	if text_views.count == 0 then return;
+	tab := get_tab (screen);
+	if !tab then return;
+	if tab.text_views.count == 0 then return;
 
-	view := cast (*Text_View) visible_views[active_view_index];
+	view := cast (*Text_View) tab.visible_views[tab.active_view_index];
 	if view.kind != .TEXT
 	{
 		print_to_screen (screen, "Active view is not a text view.");
@@ -172,25 +178,88 @@ command_save_as :: (using screen : *Screen, filename : string)
 
 command_save_all :: (using screen : *Screen)
 {
-	// @Todo
-	print_to_screen (screen, "Saved all buffers.");
+	saved   := 0;
+	failed  := 0;
+	no_file := 0;
+	for * tab, i : tabs
+	{
+		for * text_view, ti : tab.text_views
+		{
+			if !text_view.filename
+			{
+				failed  += 1;
+				no_file += 1;
+				
+				continue;
+			}
+
+			ok := write_buffer_to_file (*text_view.input, text_view.filename);
+			if ok then saved += 1;
+			else failed += 1;
+		}
+	}
+
+	print_to_screen (screen, "Successfully saved % buffers, could not save %, % because they were not bound to a file.", saved, failed, no_file);
 }
 @Command
 
 // Close the active text view
 command_close :: (using screen : *Screen)
 {
-	close_active_view (screen);
-	print_to_screen (screen, "Closed active view.");
+	tab := get_tab (screen);
+	if !tab then return;
+	if tab.visible_views.count == 0
+	{
+		close_current_tab (screen);
+		print_to_screen (screen, "Closed current tab.");
+	}
+	else
+	{
+		close_active_view (tab);
+		print_to_screen (screen, "Closed active view.");
+	}
 }
 @Command
 
 // Close all text views
 command_close_all :: (using screen : *Screen)
 {
-	while visible_views.count != 0
-		close_active_view (screen);
-	print_to_screen (screen, "Closed all views.");
+	tab := get_tab (screen);
+	if !tab then return;
+	if tab.visible_views.count == 0
+	{
+		close_current_tab (screen);
+		print_to_screen (screen, "Closed current tab.");
+	}
+	else
+	{
+		while tab.visible_views.count != 0
+			close_active_view (tab);
+		
+		print_to_screen (screen, "Closed all views.");
+	}
+}
+@Command
+
+command_close_tab :: (using screen : *Screen)
+{
+	if tabs.count == 0 then return;
+	tab := get_tab (screen);
+	while tab.visible_views.count != 0
+		close_active_view (tab);
+	print_to_screen (screen, "Closed current tab.");
+}
+@Command
+
+command_close_all_tabs :: (using screen : *Screen)
+{
+	while tabs.count > 0
+	{
+		tab := get_tab (screen);
+		while tab.visible_views.count != 0
+			close_active_view (tab);
+	}
+	print_to_screen (screen, "Closed all tabs.");
 }
 @Command
 
@@ -198,7 +267,6 @@ command_close_all :: (using screen : *Screen)
 command_quit :: (using screen : *Screen)
 {
 	running = false;
-	print_to_screen (screen, "Quit.");
 }
 @Command
 
@@ -212,7 +280,7 @@ command_scratch :: (using screen : *Screen)
 
 #scope_file
 
-resize_helper :: (using screen : *Screen, amount : s64, left : bool) -> bool
+resize_helper :: (using tab : *Screen_Tab, amount : s64, left : bool) -> bool
 {
 	if visible_views.count <= 1 then return false;
 
@@ -266,39 +334,49 @@ resize_helper :: (using screen : *Screen, amount : s64, left : bool) -> bool
 
 command_lgrow :: (using screen : *Screen, amount : u64 = 1)
 {
+	tab := get_tab (screen);
+	if !tab then return;
 	if amount == 0 then amount = 1;
-	if resize_helper (screen, xx amount, true) then print_to_screen (screen, "Grew active view.");
+	if resize_helper (tab, xx amount, true) then print_to_screen (screen, "Grew active view.");
 }
 @Command
 
 command_rgrow :: (using screen : *Screen, amount : u64 = 1)
 {
+	tab := get_tab (screen);
+	if !tab then return;
 	if amount == 0 then amount = 1;
-	if resize_helper (screen, xx amount, false) then print_to_screen (screen, "Grew active view.");
+	if resize_helper (tab, xx amount, false) then print_to_screen (screen, "Grew active view.");
 }
 @Command
 
 command_lshrink :: (using screen : *Screen, amount : u64 = 1)
 {
+	tab := get_tab (screen);
+	if !tab then return;
 	if amount == 0 then amount = 1;
-	if resize_helper (screen, -cast (s64) amount, true) then print_to_screen (screen, "Shrank active view.");
+	if resize_helper (tab, -cast (s64) amount, true) then print_to_screen (screen, "Shrank active view.");
 }
 @Command
 
 command_rshrink :: (using screen : *Screen, amount : u64 = 1 )
 {
+	tab := get_tab (screen);
+	if !tab then return;
 	if amount == 0 then amount = 1;
-	if resize_helper (screen, -cast (s64) amount, false) then print_to_screen (screen, "Shrank active view.");
+	if resize_helper (tab, -cast (s64) amount, false) then print_to_screen (screen, "Shrank active view.");
 }
 @Command
 
 // Make all text views have the same width
 command_equalize :: (using screen : *Screen)
 {
-	if visible_views.count <= 1 then return;
+	tab := get_tab (screen);
+	if !tab then return;
+	if tab.visible_views.count <= 1 then return;
 
-	view_width := width / cast (f32) visible_views.count;
-	for view, i : visible_views
+	view_width := width / cast (f32) tab.visible_views.count;
+	for view, i : tab.visible_views
 	{
 		view.x = i * view_width;
 		view.w = view_width;
@@ -332,9 +410,11 @@ command_reload_config :: (using screen : *Screen, filename := "")
 
 command_line :: (using screen : *Screen, line : s64)
 {
-	if text_views.count == 0 then return;
+	tab := get_tab (screen);
+	if !tab then return;
+	if tab.text_views.count == 0 then return;
 
-	view := cast (*Text_View) visible_views[active_view_index];
+	view := cast (*Text_View) tab.visible_views[tab.active_view_index];
 	if view.kind != .TEXT
 	{
 		print_to_screen (screen, "Active view is not a text view.");
@@ -361,9 +441,11 @@ command_line :: (using screen : *Screen, line : s64)
 
 command_to_crlf :: (using screen : *Screen)
 {
-	if text_views.count == 0 then return;
+	tab := get_tab (screen);
+	if !tab then return;
+	if tab.text_views.count == 0 then return;
 
-	view := cast (*Text_View) visible_views[active_view_index];
+	view := cast (*Text_View) tab.visible_views[tab.active_view_index];
 	if view.kind != .TEXT
 	{
 		print_to_screen (screen, "Active view is not a text view.");
@@ -397,9 +479,11 @@ command_to_crlf :: (using screen : *Screen)
 
 command_to_lf :: (using screen : *Screen)
 {
-	if text_views.count == 0 then return;
+	tab := get_tab (screen);
+	if !tab then return;
+	if tab.text_views.count == 0 then return;
 
-	view := cast (*Text_View) visible_views[active_view_index];
+	view := cast (*Text_View) tab.visible_views[tab.active_view_index];
 	if view.kind != .TEXT
 	{
 		print_to_screen (screen, "Active view is not a text view.");
