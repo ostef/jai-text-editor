@@ -260,16 +260,15 @@ insert_at_cursor :: (using buffer : *Gap_Buffer, codepoint : u32, buffer_operati
 {
 		// Scan current line for leading tabs and insert the same number of tabs at the beginning of the new line
 		move_cursor_to_previous_line (buffer);
-		leading_tabs := 0;
+		tab_str := make_string_builder (10, temp_allocator);
 		for :bol_to_eol codepoint, i : buffer
 		{
-			if codepoint == #char "\t" then leading_tabs += 1;
+			if codepoint == #char "\t" then print_to_builder (*tab_str, "\t");
 			else break;
 		}
 
 		move_cursor_to_next_line (buffer);
-		for i : 0..leading_tabs - 1
-			insert_at_cursor (buffer, #char "\t", buffer_operation);
+		insert_at_cursor (buffer, to_string (tab_str), buffer_operation);
 }
 	}
 }

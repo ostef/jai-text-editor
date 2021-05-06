@@ -181,9 +181,23 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> modifie
 			if (flags & .SINGLE_LINE) != .SINGLE_LINE
 			{
 				ctrl_shift := event.key_event.mods == Mods.CONTROL | .SHIFT;
-				if ctrl_shift then move_cursor_to_bol (*buffer);
-				insert_eol_at_cursor (*buffer, auto_tab = true);
-				if ctrl_shift then move_cursor_to_previous_line (*buffer);
+				if ctrl_shift 
+				{
+					tab_str := make_string_builder (10, temp_allocator);
+					for :bol_to_eol codepoint, i : buffer
+					{
+						if codepoint == #char "\t" then print_to_builder (*tab_str, "\t");
+						else break;
+					}
+					move_cursor_to_bol (*buffer);
+					insert_eol_at_cursor (*buffer, auto_tab = false);
+					move_cursor_to_previous_line (*buffer);
+					insert_at_cursor (*buffer, to_string (tab_str));
+				}
+				else
+				{
+					insert_eol_at_cursor (*buffer, auto_tab = true);
+				}
 
 				modified = true;
 				dirty    = true;
