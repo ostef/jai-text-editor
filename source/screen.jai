@@ -146,7 +146,6 @@ screen_handle_event :: (using screen : *Screen, event : Event)
 			if event.key_event.key_code ==
 			{
 			case .RETURN;
-
 				if gap_buffer_count (command_input.buffer) == 0
 				{
 					toggle_command_input (screen);
