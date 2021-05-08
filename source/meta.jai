@@ -352,7 +352,7 @@ build :: ()
 
 		if run_on_success
 		{
-			set_working_directory (BUILD_DIR);
+			//set_working_directory (BUILD_DIR);
 			cmd := join (temp_allocator, ..program_args);
 			println ("Running: %", cmd);
 			os_run_command (cmd);
