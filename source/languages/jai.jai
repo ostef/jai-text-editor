@@ -40,7 +40,8 @@ JAI_COMPILER_DIRECTIVES :: string.[
 	"complete", "string", "no_reset", "dump", "code", "caller_location", "c_call", "c_callback", "module_parameters", "elsewhere", "placeholder", "intrinsic",
 	"compiler", "symmetric", "modify", "cpp_return_type_is_non_pod", "cpp_method", "add_context", "dynamic_specialize", "specified", "filepath", "file", "line",
 	"poke_name", "program_export", "procedure_of_call", "location", "type_info_none", "type_info_procedures_are_void_pointers", "type_info_no_size_complaint",
-	"no_alias", "type", "deprecated", "align" ];
+	"no_alias", "type", "deprecated", "align"
+];
 
 jai_read_next_token :: (using lexer : *Lexer) -> Jai_Token #must
 {
@@ -138,13 +139,13 @@ jai_read_next_token :: (using lexer : *Lexer) -> Jai_Token #must
 			{
 				if (is_float_hex || is_int_hex)
 				{
-					if !is_hex_digit (<<curr) then valid = false;
+					if !is_hex_digit (<<curr) && <<curr != #char "_" then valid = false;
 				}
 				else if is_int_bin
 				{
-					if !is_bin_digit (<<curr) then valid = false;
+					if !is_bin_digit (<<curr) && <<curr != #char "_" then valid = false;
 				}
-				else if !is_digit (<<curr)
+				else if !is_digit (<<curr) && <<curr != #char "_"
 				{
 					valid = false;
 				}
