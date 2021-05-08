@@ -276,7 +276,7 @@ build :: ()
 	args           := Compiler.compiler_get_command_line_arguments ();
 	is_program := false;
 	program_args := make_array (string, 10, temp_allocator);
-	push_to_array (*program_args, OUTPUT_NAME, " ");
+	push_to_array (*program_args, BUILD_DIR, OUTPUT_NAME, " ");
 	for args
 	{
 		if !is_program
