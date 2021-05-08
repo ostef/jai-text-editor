@@ -115,7 +115,7 @@ load_file_into_active_text_view :: (using tab : *Screen_Tab, filename : string) 
 	if ok
 	{
 		view.filename = view_filename;
-		set_cursor (*view.input.buffer, 0);
+		move_cursor (*view.input.buffer, 0);
 		view.scroll_to_cursor = true;
 		detect_language (view);
 	}
@@ -372,9 +372,9 @@ draw_text_view :: (using view : *Text_View, is_active : bool)
 	info_str : string;
 	if language != .NONE
 		info_str = fstring (temp_allocator, "% - Ln %, Col % - % line(s) - UTF8 - % - %",
-		view_name, input.buffer.line_index + 1, input.buffer.column_index + 1, input.buffer.lines.count, input.buffer.eol_sequence, language);
+		view_name, input.buffer.line_index + 1, input.buffer.column_index + 1, input.buffer.lines.count, input.eol_sequence, language);
 	else
 		info_str = fstring (temp_allocator, "% - Ln %, Col % - % line(s) - UTF8 - %",
-		view_name, input.buffer.line_index + 1, input.buffer.column_index + 1, input.buffer.lines.count, input.buffer.eol_sequence);
+		view_name, input.buffer.line_index + 1, input.buffer.column_index + 1, input.buffer.lines.count, input.eol_sequence);
 	draw_text (*loaded_font, info_str, config.buffer_info_font_height, info_text_position, config.buffer_info_text_color, view_area);
 }

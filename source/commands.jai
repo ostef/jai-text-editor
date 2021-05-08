@@ -429,26 +429,15 @@ command_to_crlf :: (using screen : *Screen)
 {
 	text_view_barebones ();
 
-	buffer := *view.input.buffer;
-	if view.input.buffer.eol_sequence == .CRLF
+	if view.input.eol_sequence == .CRLF
 	{
 		print_to_screen (screen, "Buffer is already CRLF.");
 
 		return;
 	}
 
-	set_cursor (buffer, 0);
-	while buffer.cursor < gap_buffer_count (buffer)
-	{
-		if buffer.data[buffer.cursor + buffer.gap] == #char "\n"
-			insert_at_cursor (buffer, #char "\r");
-		move_cursor_forward (buffer);
-	}
-	view.input.buffer.eol_sequence = .CRLF;
-	view.scroll_to_cursor = true;
-	clear_undo_stack (buffer);
-	clear_redo_stack (buffer);
-
+	view.input.eol_sequence = .CRLF;
+	
 	print_to_screen (screen, "Converted buffer line endings to CRLF.");
 }
 @Command
@@ -457,29 +446,14 @@ command_to_lf :: (using screen : *Screen)
 {
 	text_view_barebones ();
 
-	buffer := *view.input.buffer;
-	if view.input.buffer.eol_sequence == .LF
+	if view.input.eol_sequence == .LF
 	{
 		print_to_screen (screen, "Buffer is already LF.");
 
 		return;
 	}
 
-	set_cursor (buffer, 0);
-	while buffer.cursor < gap_buffer_count (buffer)
-	{
-		if buffer.data[buffer.cursor + buffer.gap] == #char "\r"
-		{
-			delete_selection (buffer, buffer_operation = false, delete_crlf = false);
-
-			continue;
-		}
-		move_cursor_forward (buffer);
-	}
-	view.input.buffer.eol_sequence = .LF;
-	view.scroll_to_cursor = true;
-	clear_undo_stack (buffer);
-	clear_redo_stack (buffer);
+	view.input.eol_sequence = .LF;
 
 	print_to_screen (screen, "Converted buffer line endings to LF.");
 }

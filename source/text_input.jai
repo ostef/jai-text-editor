@@ -7,7 +7,14 @@ Text_Input :: struct
 	}
 
 	flags  : Flags;
+	eol_sequence : EOL_Sequence;
 	buffer : Gap_Buffer;
+}
+
+EOL_Sequence :: enum
+{
+	LF;
+	CRLF;
 }
 
 text_input_handle_event :: (using input : *Text_Input, event : Event) -> modified : bool, dirty : bool
@@ -77,7 +84,7 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> modifie
 		}
 		else if matches_key_binding (event, config.key_select_left)
 		{
-			if select_backward (*buffer) then modified = true;
+			if move_cursor_backward (*buffer, select = true) then modified = true;
 		}
 		else if matches_key_binding (event, config.key_skip_left)
 		{
@@ -94,7 +101,7 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> modifie
 		}
 		else if matches_key_binding (event, config.key_select_right)
 		{
-			if select_forward (*buffer) then modified = true;
+			if move_cursor_forward (*buffer, select = true) then modified = true;
 		}
 		else if matches_key_binding (event, config.key_skip_right)
 		{
@@ -116,20 +123,20 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> modifie
 		// Select all
 		else if matches_key_binding (event, config.key_select_all)
 		{
-			set_cursor (*buffer, 0);
+			move_cursor (*buffer, 0);
 			while buffer.cursor < gap_buffer_count (buffer)
-				select_forward (*buffer);
+				move_cursor_forward (*buffer, select = true);
 			modified = true;
 		}
 		// Undo
 		else if matches_key_binding (event, config.key_undo)
 		{
-			if undo_operation (*buffer) then { modified = true; dirty = true; }
+			if undo_last_operation (*buffer) then { modified = true; dirty = true; }
 		}
 		// Redo
 		else if matches_key_binding (event, config.key_redo)
 		{
-			if redo_operation (*buffer) then { modified = true; dirty = true; }
+			if redo_undone_operation (*buffer) then { modified = true; dirty = true; }
 		}
 		// Copy, cut, paste
 		else if matches_key_binding (event, config.key_copy) || matches_key_binding (event, config.key_cut)
@@ -190,13 +197,13 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> modifie
 						else break;
 					}
 					move_cursor_to_bol (*buffer);
-					insert_eol_at_cursor (*buffer, auto_tab = false);
+					insert_at_cursor (*buffer, #char "\n", auto_tab = false);
 					move_cursor_to_previous_line (*buffer);
 					insert_at_cursor (*buffer, to_string (tab_str));
 				}
 				else
 				{
-					insert_eol_at_cursor (*buffer, auto_tab = true);
+					insert_at_cursor (*buffer, #char "\n", auto_tab = true);
 				}
 
 				modified = true;
@@ -228,7 +235,7 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> modifie
 init_text_input :: (input : *Text_Input, flags : Text_Input.Flags)
 {
 	input.flags = flags;
-	init_gap_buffer (*input.buffer, 5000, heap_allocator);
+	init_gap_buffer (*input.buffer, 5000, 5000, heap_allocator);
 }
 
 reset_text_input :: (using input : *Text_Input)
@@ -242,8 +249,9 @@ load_file_into_buffer :: (using input : *Text_Input, filename : string) -> bool
 	if !ok then return false;
 	
 	clear_gap_buffer (*buffer);
-	insert_at_cursor (*buffer, file_contents, buffer_operation = false, auto_tab = false);
-	eol, correct := detect_eol_sequence (*buffer);
+	insert_at_cursor (*buffer, file_contents, undo_buffering = .NONE, auto_tab = false);
+	correct : bool;
+	eol_sequence, correct = detect_eol_sequence (file_contents);
 
 	return true;
 }
@@ -252,10 +260,51 @@ write_buffer_to_file :: (using input : *Text_Input, filename : string) -> writte
 {
 	// @Note (stefan): We want to do only one call to write_to_file, unlike what VSCode does, because
 	// it can block another program to open the file otherwise when hot reloading it for example.
-	str := clone_to_string (buffer, temp_allocator);
+	str := clone_to_string (buffer, eol_sequence, temp_allocator);
 	written, ok := write_to_file (filename, str);
 
 	return written, ok;
+}
+
+detect_eol_sequence :: (str : string) -> EOL_Sequence, correct : bool
+{
+	line := 1;
+	previous_char_was_cr := false;
+	correct := true;
+	eol_sequence : EOL_Sequence;
+	for i : 0..str.count - 1
+	{
+		char := str[i];
+		if char == #char "\r"
+		{
+			if line != 1 && eol_sequence != .CRLF
+			{
+				println ("Inconsistent line endings at line %.", line);
+				correct = false;
+			}
+				
+			eol_sequence = .CRLF;
+			previous_char_was_cr = true;
+		}
+		else if char == #char "\n"
+		{
+			if eol_sequence == .CRLF && !previous_char_was_cr
+			{
+				println ("Inconsistent line endings at line %.", line);
+				correct = false;
+			}
+
+			line += 1;
+		}
+		else if previous_char_was_cr
+		{
+			println ("Lonely CR character at line %.", line);
+		}
+
+		if char != #char "\r" then previous_char_was_cr = false;
+	}
+
+	return eol_sequence, correct;
 }
 
 calculate_drawn_cursor_position :: (using input : *Text_Input, height : u32, position : Vec2) -> Vec2 #must

@@ -153,7 +153,7 @@ screen_handle_event :: (using screen : *Screen, event : Event)
 					return;
 				}
 
-				command := clone_to_string (command_input.buffer, temp_allocator);
+				command := clone_to_string (command_input.buffer, .LF, temp_allocator);
 				execute_command (screen, command);
 				toggle_command_input (screen);
 
@@ -570,7 +570,8 @@ draw_screen :: (using screen : *Screen)
 		// Draw lines crossing the screen if no text view is opened
 		LINE_THICKNESS :: 6.0;
 		i := 0.0;
-		while i < width * 2.0
+		count := max (width, height);
+		while i < count * 2.0
 		{
 			immediate_line (vec2 (i, -LINE_THICKNESS), vec2 (-LINE_THICKNESS, i), config.inactive_stripes_color, LINE_THICKNESS);
 			i += 50;
