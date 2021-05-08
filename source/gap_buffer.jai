@@ -6,12 +6,17 @@ EOL_Sequence :: enum
 	CRLF;
 }
 
+// @Note (stefan): Should we care about EOL sequences or nah ? Maybe we can have it be LN
+// all the time, and the EOL sequence is decided when writing the buffer to a file ?
+// It would be way easier to not have to handle CRLF, but I am not sure if the performance
+// penalty of having to insert CRs for each line when saving is negligeable, or if it's gonna
+// be noticeable. We should try it out sometime soon @Todo
 Gap_Buffer :: struct
 {
 	// @Note (stefan): We used to store the data as UTF8, but it ended up being a pain in the ass
 	// to handle multibyte characters. We now use UTF32, which means that most text files being
 	// code and having mostly ASCII characters, they will take 4 times as much memory as if we
-	// were using UTF8. On the other hand, a source file is most not that big.
+	// were using UTF8. On the other hand, a source file is most of the time not that big.
 	data   : *u32;
 	count  : s64;
 	cursor : s64;
@@ -304,7 +309,7 @@ insert_at_cursor :: inline (using buffer : *Gap_Buffer, str : string, buffer_ope
 }
 
 // @Cleanup (stefan): Get rid of the ugly accumulator thing and find a more elegant solution.
-backspace_selection :: (using buffer : *Gap_Buffer, buffer_operation := true, $backspace_crlf := true, accumulator : *[..]u32 = null) -> bool
+backspace_selection :: (using buffer : *Gap_Buffer, buffer_operation := true, $backspace_crlf := true) -> bool
 {
 	if selection != 0 then return delete_selection (buffer, buffer_operation);
 
@@ -313,13 +318,6 @@ backspace_selection :: (using buffer : *Gap_Buffer, buffer_operation := true, $b
 		start_cursor     := cursor;
 		start_line_index := line_index;
 		codepoint := data[cursor - 1];
-
-		backspaced_chars : [..]u32;
-		if buffer_operation && !accumulator
-		{
-			accumulator = *backspaced_chars;
-			backspaced_chars = make_array (u32, 5, temp_allocator);
-		}
 
 		// Update line cache
 		lines[line_index] -= 1;
@@ -338,12 +336,9 @@ backspace_selection :: (using buffer : *Gap_Buffer, buffer_operation := true, $b
 			merge_current_line_with_next_one (buffer);
 #if backspace_crlf
 {
-			if cursor > 0 && data[cursor - 1] == #char "\r" then backspace_selection (buffer, buffer_operation = false, accumulator = accumulator);
+			if cursor > 0 && data[cursor - 1] == #char "\r" then backspace_selection (buffer, buffer_operation = false);
 }
 		}
-
-		if accumulator
-			push_to_array (accumulator, codepoint);
 
 		if buffer_operation
 		{
@@ -352,10 +347,15 @@ backspace_selection :: (using buffer : *Gap_Buffer, buffer_operation := true, $b
 			op.kind       = .BACKSPACE;
 			op.cursor     = start_cursor;
 			op.line_index = start_line_index;
-			if accumulator.count > 1
-				op.buffer = clone_array (<<accumulator, heap_allocator);
+			if start_cursor - cursor > 1
+			{
+				op.buffer = alloc_array (u32, (start_cursor - cursor), heap_allocator);
+				memcpy (op.buffer.data, data + cursor, start_cursor - cursor);
+			}
 			else
-				op.codepoint = (<<accumulator)[0];
+			{
+				op.codepoint = data[cursor];
+			}
 			push_undo_operation (buffer, op);
 		}
 
@@ -366,14 +366,11 @@ backspace_selection :: (using buffer : *Gap_Buffer, buffer_operation := true, $b
 }
 
 // @Cleanup (stefan): Get rid of the ugly accumulator thing and find a more elegant solution.
-delete_at_cursor :: (using buffer : *Gap_Buffer, buffer_operation := true, $delete_crlf := true, accumulator : *[..]u32 = null) -> bool
+delete_at_cursor :: (using buffer : *Gap_Buffer, buffer_operation := true, $delete_crlf := true) -> bool
 {
-	delete_helper :: inline (using buffer : *Gap_Buffer, $delete_crlf : bool, accumulator : *[..]u32)
+	delete_helper :: inline (using buffer : *Gap_Buffer, $delete_crlf : bool)
 	{
 		deleted_char := data[cursor + gap];
-		if accumulator
-			push_to_array (accumulator, deleted_char);
-
 		gap += 1;
 
 		// Update line cache
@@ -384,7 +381,7 @@ delete_at_cursor :: (using buffer : *Gap_Buffer, buffer_operation := true, $dele
 #if delete_crlf
 {
 		if deleted_char == #char "\r"	// Handle CRLF
-			delete_at_cursor (buffer, false, delete_crlf, accumulator);
+			delete_at_cursor (buffer, false, delete_crlf);
 }
 	}
 
@@ -392,21 +389,17 @@ delete_at_cursor :: (using buffer : *Gap_Buffer, buffer_operation := true, $dele
 	{
 		start_cursor     := cursor;
 		start_line_index := line_index;
-		deleted_characters : [..]u32;
-		if !accumulator && buffer_operation
-		{
-			accumulator = *deleted_characters;
-			deleted_characters = make_array (u32, 2, temp_allocator);
-		}
-		
+		start_gap        := gap; 
+		deleted_char := data[cursor + gap];
+
 		if selection <= 0
 		{
-			delete_helper (buffer, delete_crlf, accumulator);
+			delete_helper (buffer, delete_crlf);
 		}
 		else if selection > 0
 		{
 			selection -= 1;
-			delete_helper (buffer, delete_crlf, accumulator);
+			delete_helper (buffer, delete_crlf);
 		}
 
 		if buffer_operation
@@ -416,10 +409,15 @@ delete_at_cursor :: (using buffer : *Gap_Buffer, buffer_operation := true, $dele
 			op.kind       = .DELETE;
 			op.cursor     = start_cursor;
 			op.line_index = line_index;
-			if accumulator.count > 1
-				op.buffer = clone_array (<<accumulator, heap_allocator);
+			if gap - start_gap > 1
+			{
+				op.buffer = alloc_array (u32, gap - start_gap, heap_allocator);
+				memcpy (op.buffer.data, data + start_cursor + start_gap, gap - start_gap);
+			}
 			else
-				op.codepoint = (<<accumulator)[0];
+			{
+				op.codepoint = deleted_char;
+			}
 			push_undo_operation (buffer, op);
 		}
 
@@ -456,12 +454,12 @@ delete_selection :: (using buffer : *Gap_Buffer, buffer_operation := true, $dele
 			while selection < 0
 			{
 				select_backward (buffer);
-				delete_at_cursor (buffer, false, delete_crlf, null);
+				delete_at_cursor (buffer, false, delete_crlf);
 			}
 
 			while selection > 0
 			{
-				delete_at_cursor (buffer, false, delete_crlf, null);
+				delete_at_cursor (buffer, false, delete_crlf);
 			}
 		}
 
