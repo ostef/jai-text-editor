@@ -377,7 +377,6 @@ skip_word_forward :: (using buffer : *Gap_Buffer, select := false, stop_at_word_
 	return modified;
 }
 
-
 skip_word_backward :: (using buffer : *Gap_Buffer, select := false, stop_at_word_separators := true) -> bool
 {
 	if cursor == 0 then return false;
@@ -549,7 +548,6 @@ delete_selection :: (using buffer : *Gap_Buffer, undo_buffering := Undo_Bufferin
 	delete_helper :: inline (using buffer : *Gap_Buffer, undo_buffering : Undo_Buffering)
 	{
 		deleted_char := data[cursor + gap];
-		if undo_buffering == .PUSH_CHARACTERS then push_to_array (*undo_redo_buffer, deleted_char);
 		gap += 1;
 		lines[line_index] -= 1;
 		if deleted_char == #char "\n"
@@ -568,18 +566,32 @@ delete_selection :: (using buffer : *Gap_Buffer, undo_buffering := Undo_Bufferin
 		}
 
 		if selection == 0
-			delete_helper (buffer, undo_buffering);
-
-		while selection < 0
 		{
-			move_cursor_backward (buffer, select = true);
+			deleted_char := data[cursor + gap];
 			delete_helper (buffer, undo_buffering);
+			if undo_buffering == .PUSH_CHARACTERS then push_to_array (*undo_redo_buffer, deleted_char);
 		}
-
-		while selection > 0
+		else
 		{
-			selection -= 1;
-			delete_helper (buffer, undo_buffering);
+			if undo_buffering == .PUSH_CHARACTERS
+			{
+				for :selected_chars codepoint, i : buffer
+				{
+					push_to_array (*undo_redo_buffer, codepoint);
+				}
+			}
+
+			while selection < 0
+			{
+				move_cursor_backward (buffer, select = true);
+				delete_helper (buffer, undo_buffering);
+			}
+
+			while selection > 0
+			{
+				selection -= 1;
+				delete_helper (buffer, undo_buffering);
+			}
 		}
 
 		return true;
