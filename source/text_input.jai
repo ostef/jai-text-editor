@@ -197,9 +197,14 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> modifie
 						else break;
 					}
 					move_cursor_to_bol (*buffer);
-					insert_at_cursor (*buffer, #char "\n", auto_tab = false);
+					undo_buffering := Undo_Buffering.PUSH_OPERATION;
+					if tab_str.count > 0
+					{
+						insert_at_cursor (*buffer, to_string (tab_str));
+						undo_buffering = .PUSH_CHARACTERS;
+					}
+					insert_at_cursor (*buffer, #char "\n", undo_buffering);
 					move_cursor_to_previous_line (*buffer);
-					insert_at_cursor (*buffer, to_string (tab_str));
 				}
 				else
 				{
