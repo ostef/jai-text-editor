@@ -353,15 +353,55 @@ move_cursor_to_line :: inline (using buffer : *Gap_Buffer, line : s64, select :=
 
 skip_word_forward :: (using buffer : *Gap_Buffer, select := false, stop_at_word_separators := true) -> bool
 {
-	// @Todo
-	return move_cursor_forward (buffer, select);
+	if cursor == gap_buffer_count (buffer) then return false;
+
+	modified := false;
+	while is_space (data[cursor + gap])
+	{
+		if move_cursor_forward (buffer, select) then modified = true;
+		if is_at_eol (buffer) then return modified;
+	}
+
+	first := data[cursor + gap];
+	if move_cursor_forward (buffer, select) then modified = true;
+	while !is_space (data[cursor + gap])
+	{
+		if is_alpha_num (first)  && !is_alpha_num (data[cursor + gap]) then break;
+		if !is_alpha_num (first) &&  is_alpha_num (data[cursor + gap]) then break;
+		if data[cursor + gap] == #char "_" then break;
+		if is_at_eol (buffer) then break;
+
+		if move_cursor_forward (buffer, select) then modified = true;
+	}
+
+	return modified;
 }
 
 
 skip_word_backward :: (using buffer : *Gap_Buffer, select := false, stop_at_word_separators := true) -> bool
 {
-	// @Todo
-	return move_cursor_backward (buffer, select);
+	if cursor == 0 then return false;
+
+	modified := false;
+	while is_space (data[cursor - 1])
+	{
+		if move_cursor_backward (buffer, select) then modified = true;
+		if column_index == 0 then return modified;
+	}
+
+	first := data[cursor - 1];
+	if move_cursor_backward (buffer, select) then modified = true;
+	while !is_space (data[cursor - 1])
+	{
+		if is_alpha_num (first)  && !is_alpha_num (data[cursor - 1]) then break;
+		if !is_alpha_num (first) &&  is_alpha_num (data[cursor - 1]) then break;
+		if data[cursor + gap] == #char "_" then break;
+		if is_at_eol (buffer) then break;
+		
+		if move_cursor_backward (buffer, select) then modified = true;
+	}
+
+	return modified;
 }
 
 #scope_file
