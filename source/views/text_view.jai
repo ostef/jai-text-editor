@@ -64,6 +64,8 @@ reset_text_view :: (using view : *Text_View)
 clear_text_view :: (using view : *Text_View)
 {
 	if filename then free (filename, heap_allocator);
+	filename = "";
+	input.eol_sequence = .LF;
 	clear_gap_buffer (*input.buffer);
 	scrolling = VEC2_ZERO;
 	scroll_to_cursor = false;
@@ -112,6 +114,14 @@ load_file_into_active_text_view :: (using tab : *Screen_Tab, filename : string) 
 	clear_text_view (view);
 	view_filename := get_full_path (filename, heap_allocator);
 	ok := load_file_into_buffer (*view.input, view_filename);
+	// If we could not load the file into the buffer, try relative to the executable dir
+	if !ok
+	{
+		free (view_filename, heap_allocator);
+		view_filename = make_path (heap_allocator, executable_dir, "/", filename);
+		ok = load_file_into_buffer (*view.input, view_filename);
+	}
+
 	if ok
 	{
 		view.filename = view_filename;
