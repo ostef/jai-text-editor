@@ -383,20 +383,18 @@ skip_word_backward :: (using buffer : *Gap_Buffer, select := false, stop_at_word
 	if cursor == 0 then return false;
 
 	modified := false;
-	while is_space (data[cursor - 1])
+	while column_index > 0 && is_space (data[cursor - 1])
 	{
 		if move_cursor_backward (buffer, select) then modified = true;
-		if column_index == 0 then return modified;
 	}
 
 	first := data[cursor - 1];
 	if move_cursor_backward (buffer, select) then modified = true;
-	while !is_space (data[cursor - 1])
+	while column_index > 0 && !is_space (data[cursor - 1])
 	{
 		if is_alpha_num (first)  && !is_alpha_num (data[cursor - 1]) then break;
 		if !is_alpha_num (first) &&  is_alpha_num (data[cursor - 1]) then break;
 		if data[cursor + gap] == #char "_" then break;
-		if is_at_eol (buffer) then break;
 		
 		if move_cursor_backward (buffer, select) then modified = true;
 	}
