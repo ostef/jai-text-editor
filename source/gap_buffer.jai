@@ -353,7 +353,6 @@ move_cursor_to_line :: inline (using buffer : *Gap_Buffer, line : s64, select :=
 
 skip_word_forward :: (using buffer : *Gap_Buffer, select := false, stop_at_word_separators := true) -> bool
 {
-	println ("skip_word_forward");
 	// @Todo
 	return move_cursor_forward (buffer, select);
 }
