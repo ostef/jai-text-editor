@@ -102,11 +102,11 @@ jai_read_next_token :: (using lexer : *Lexer) -> Jai_Token #must
 	}
 	else if is_digit (<<curr)
 	{
-		is_float_hex := advance_if_matches (lexer, "0h");
+		is_float_hex := advance_if_matches (lexer, "0h") || advance_if_matches (lexer, "0H");
 		is_int_hex   := false;
-		if !is_float_hex then is_int_hex = advance_if_matches (lexer, "0x");
+		if !is_float_hex then is_int_hex = advance_if_matches (lexer, "0x") || advance_if_matches (lexer, "0X");
 		is_int_bin   := false;
-		if !is_float_hex && !is_int_hex then is_int_bin = advance_if_matches (lexer, "0b");
+		if !is_float_hex && !is_int_hex then is_int_bin = advance_if_matches (lexer, "0b") || advance_if_matches (lexer, "0B");
 
 		valid := true;
 		found_decimal     := false;
