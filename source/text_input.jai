@@ -163,9 +163,29 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> modifie
 		{
 			// @Todo (stefan): Handle EOL and tabs when they're not allowed
 			pasted_text := clone_clipboard_text (*window, temp_allocator);
-			if pasted_text.count != 0
+			utf32 := utf8_string_to_runes (pasted_text, temp_allocator);
+			if utf32.count != 0
 			{
-				insert_at_cursor (*buffer, pasted_text);
+				clear_redo (*buffer);
+				op := make_text_operation (*buffer, .INSERT);
+				push_to_array (*buffer.undo_stack, op);
+			
+				for codepoint, i : utf32
+				{
+					if codepoint ==
+					{
+					case #char "\n";
+						if (flags & .SINGLE_LINE) == .SINGLE_LINE then continue codepoint;
+						insert_at_cursor (*buffer, codepoint, undo_buffering = .PUSH_CHARACTERS);
+						
+					case #char "\t";
+						if (flags & .DISALLOW_TABS) == .DISALLOW_TABS then continue codepoint;
+						insert_at_cursor (*buffer, codepoint, undo_buffering = .PUSH_CHARACTERS);
+						
+					case;
+						insert_at_cursor (*buffer, codepoint, undo_buffering = .PUSH_CHARACTERS);
+					}
+				}
 				modified = true;
 				dirty    = true;
 			}
