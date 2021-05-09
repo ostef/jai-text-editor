@@ -205,6 +205,7 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> modifie
 					}
 					insert_at_cursor (*buffer, #char "\n", undo_buffering);
 					move_cursor_to_previous_line (*buffer);
+					move_cursor_to_eol (*buffer);
 				}
 				else
 				{
