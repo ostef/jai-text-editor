@@ -447,22 +447,22 @@ draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, co
 
 draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, colors : []Text_Color_Range, clip_rect : Clip_Rect, active := true, render_whitespace := false, whitespace_dimming := 0.7)
 {
+	immediate_push_state ();
+	defer immediate_pop_state ();
+	immediate_shader (text_spo);
+	
 	page := get_font_page (*loaded_font, height);
 	cursor_position : Vec2;
 	cursor_advance  := page.space_advance;
 
 	pen := position;
 	pen.y += page.ascender;
-	immediate_push_state ();
-	defer immediate_pop_state ();
-	
-	immediate_shader (text_spo);
 
 	color_index := 0;
 	for codepoint, i : buffer
 	{
 		if pen.y - page.descender < xx clip_rect.y1 && codepoint != #char "\n" then continue;
-		if pen.y - page.ascender > xx clip_rect.y2 then break;
+		if pen.y - page.ascender  > xx clip_rect.y2 then break;
 		
 		color := NOT_QUITE_WHITE;
 		if render_whitespace && (codepoint == #char " " || codepoint == #char "\t")
@@ -473,7 +473,7 @@ draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, co
 		else
 		{
 			while color_index < colors.count && i >= colors[color_index].end
-			color_index += 1;
+				color_index += 1;
 		
 			if color_index < colors.count && i >= colors[color_index].start && i < colors[color_index].end then color = colors[color_index].color;
 		}

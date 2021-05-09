@@ -577,7 +577,6 @@ draw_screen :: (using screen : *Screen)
 		}
 	}
 
-
 	if tabs.count == 0
 	{
 		immediate_clip (views_area);
@@ -662,7 +661,8 @@ draw_tab :: (using tab : *Screen_Tab)
 			}
 			// Draw the texture on a quad
 			immediate_texture (it.framebuffer.texture);
-			immediate_quad (it.x, it.y, it.x + it.w, it.y + it.h, vec4 (1, 1, 1, 1), vec2 (0, 1), vec2 (1, 1), vec2 (1, 0), vec2 (0, 0));
+			immediate_quad (round (it.x), round (it.y), round (it.x + it.w), round (it.y + it.h),
+				vec4 (1, 1, 1, 1), vec2 (0, 1), vec2 (1, 1), vec2 (1, 0), vec2 (0, 0));
 			immediate_texture (0);
 		}
 	}
