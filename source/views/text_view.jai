@@ -185,10 +185,10 @@ draw_text_view :: (using view : *Text_View, is_active : bool)
 	}
 
 	{
-		view_area.x1 = cast (s32) x;
-		view_area.x2 = view_area.x1 + cast (s32) w;
-		view_area.y1 = cast (s32) y;
-		view_area.y2 = view_area.y1 + cast (s32) h;
+		view_area.x1 = 0;
+		view_area.x2 = cast (s32) w;
+		view_area.y1 = 0;
+		view_area.y2 = cast (s32) h;
 	}
 
 	{

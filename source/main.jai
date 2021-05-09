@@ -16,9 +16,9 @@ Debug :: #import "Debug";
 #load "text_input.jai";
 #load "clipboard.jai";
 #load "config.jai";
-
-#load "screen.jai";
+#load "framebuffer.jai";
 #load "commands.jai";
+#load "screen.jai";
 // Views
 #load "views/text_view.jai";
 
