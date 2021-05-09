@@ -3,8 +3,10 @@
 #import "File";
 Compiler :: #import "Compiler";
 
-DATA_DIR    :: "d:/dev/edit/data/";
-BUILD_DIR   :: "d:/dev/edit/bin/win/";
+// @Note (stefan): Filepaths are relative to #filepath because we modify the working directory (why do we do that though ?).
+DATA_DIR    :: "../../data/";
+#if OS == .WINDOWS    BUILD_DIR :: "../../bin/win/";
+else #if OS == .LINUX BUILD_DIR :: "../../bin/linux/";
 OUTPUT_NAME :: "edit";
 
 IS_IN_METAPROGRAM :: true;
@@ -311,8 +313,16 @@ build :: ()
 	build_options.output_executable_name = OUTPUT_NAME;
 	build_options.output_path            = BUILD_DIR;
 	modules_search_path_array := make_array (string, 5, temp_allocator);
+#if OS == .WINDOWS
+{
 	push_to_array (*modules_search_path_array, "d:/dev/jai-modules/");		// We want to search in our own modules folder before the Jai one, because we override some modules.
 	push_to_array (*modules_search_path_array, "d:/dev/jai/modules/");
+}
+else #if OS == .LINUX
+{
+	push_to_array (*modules_search_path_array, "/media/stefan/hdd/dev/jai-modules/");		// We want to search in our own modules folder before the Jai one, because we override some modules.
+	push_to_array (*modules_search_path_array, "/media/stefan/hdd/dev/jai/modules/");
+}
 	build_options.import_path = modules_search_path_array;
 	build_options.backend = .LLVM;
 	//if debugging then build_options.backend = .LLVM;

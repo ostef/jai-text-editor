@@ -1,7 +1,8 @@
-#import "Win32";
 
 #if OS == .WINDOWS
 {
+	#import "Win32";
+
 	clear_clipboard :: (using window : *Window) -> bool #must
 	{
 		if OpenClipboard (hwnd)
