@@ -240,7 +240,7 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> modifie
 		{
 			if (flags & .DISALLOW_TABS) != .DISALLOW_TABS
 			{
-				insert_at_cursor (*buffer, "\t");
+				insert_at_cursor (*buffer, #char "\t");
 				modified = true;
 				dirty    = true;
 			}
