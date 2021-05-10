@@ -229,7 +229,18 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> modifie
 				}
 				else
 				{
-					insert_at_cursor (*buffer, #char "\n", auto_tab = true);
+					insert_at_cursor (*buffer, #char "\n");
+					// Insert auto tabs
+					move_cursor_to_previous_line (*buffer);
+					tab_count := 0;
+					for :bol_to_eol codepoint, i : buffer
+					{
+						if codepoint == #char "\t" then tab_count += 1;
+						else break;
+					}
+					move_cursor_to_next_line (*buffer);
+					for 1..tab_count
+						insert_at_cursor (*buffer, #char "\t", .PUSH_CHARACTERS);
 				}
 
 				modified = true;
@@ -275,7 +286,7 @@ load_file_into_buffer :: (using input : *Text_Input, filename : string) -> bool
 	if !ok then return false;
 	
 	clear_gap_buffer (*buffer);
-	insert_at_cursor (*buffer, file_contents, undo_buffering = .NONE, auto_tab = false);
+	insert_at_cursor (*buffer, file_contents, undo_buffering = .NONE);
 	correct : bool;
 	eol_sequence, correct = detect_eol_sequence (file_contents);
 

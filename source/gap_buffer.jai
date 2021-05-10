@@ -428,7 +428,7 @@ Undo_Buffering :: enum
 	PUSH_OPERATION;		// Push a new Text_Operation to the undo_stack AND push the characters to the undo_redo_buffer
 }
 
-insert_at_cursor :: (using buffer : *Gap_Buffer, codepoint : u32, undo_buffering := Undo_Buffering.PUSH_OPERATION, $auto_tab := false)
+insert_at_cursor :: (using buffer : *Gap_Buffer, codepoint : u32, undo_buffering := Undo_Buffering.PUSH_OPERATION)
 {
 	if codepoint == #char "\r" then return;
 	if selection != 0 then delete_selection (buffer, undo_buffering);
@@ -459,24 +459,10 @@ insert_at_cursor :: (using buffer : *Gap_Buffer, codepoint : u32, undo_buffering
 		split_current_line (buffer);
 		line_index += 1;
 		column_index = 0;
-
-#if auto_tab
-{
-		move_cursor_to_previous_line (buffer);
-		tab_count := 0;
-		for :bol_to_eol codepoint, i : buffer
-		{
-			if codepoint == #char "\t" then tab_count += 1;
-			else break;
-		}
-		move_cursor_to_next_line (buffer);
-		for 1..tab_count
-			insert_at_cursor (buffer, #char "\t", undo_buffering);
-}
 	}
 }
 
-insert_at_cursor :: inline (using buffer : *Gap_Buffer, utf32 : []u32, undo_buffering := Undo_Buffering.PUSH_OPERATION, $auto_tab := false)
+insert_at_cursor :: inline (using buffer : *Gap_Buffer, utf32 : []u32, undo_buffering := Undo_Buffering.PUSH_OPERATION)
 {
 	// @Todo (stefan): auto_tab
 	if utf32.count == 0 then return;
@@ -493,12 +479,12 @@ insert_at_cursor :: inline (using buffer : *Gap_Buffer, utf32 : []u32, undo_buff
 		insert_at_cursor (buffer, codepoint, undo_buffering);
 }
 
-insert_at_cursor :: inline (using buffer : *Gap_Buffer, str : string, undo_buffering := Undo_Buffering.PUSH_OPERATION, $auto_tab := false)
+insert_at_cursor :: inline (using buffer : *Gap_Buffer, str : string, undo_buffering := Undo_Buffering.PUSH_OPERATION)
 {
 	if str.count == 0 then return;
 	utf32, ok := utf8_string_to_runes (str, temp_allocator);
 	if !ok then log_warning ("Gap_Buffer", "insert_at_cursor: UTF8 string wasn't valid.");
-	insert_at_cursor (buffer, utf32, undo_buffering, auto_tab);
+	insert_at_cursor (buffer, utf32, undo_buffering);
 }
 
 backspace_selection :: (using buffer : *Gap_Buffer, undo_buffering := Undo_Buffering.PUSH_OPERATION) -> bool
