@@ -556,8 +556,7 @@ draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, co
 	
 	if active
 	{
-		cursor_alpha := cast (f32) range_map (cos (Basic.get_time () * 5), -1, 1, 0, 1);
 		immediate_quad (cursor_position.x, cursor_position.y - page.ascender,
-			cursor_position.x + cursor_advance, cursor_position.y - page.descender, vec4 (1, 1, 1, cursor_alpha));
+			cursor_position.x + cursor_advance, cursor_position.y - page.descender, vec4 (1, 1, 1, 1));
 	}
 }
