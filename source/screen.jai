@@ -165,18 +165,36 @@ screen_handle_event :: (using screen : *Screen, event : Event)
 		}
 		else if matches_key_binding (event, config.key_previous_tab)
 		{
-			if tabs.count > 0 then active_tab_index = wrap (active_tab_index - 1, 0, tabs.count);
+			if tabs.count > 0
+			{
+				active_tab_index = wrap (active_tab_index - 1, 0, tabs.count);
+				// Make sure we redraw everything when switching tabs
+				for tabs[active_tab_index].visible_views
+				{
+					it.needs_redraw = true;
+				}
+			}
 		}
 		else if matches_key_binding (event, config.key_next_tab)
 		{
-			if tabs.count > 0 then active_tab_index = wrap (active_tab_index + 1, 0, tabs.count);
+			if tabs.count > 0
+			{
+				active_tab_index = wrap (active_tab_index + 1, 0, tabs.count);
+				// Make sure we redraw everything when switching tabs
+				for tabs[active_tab_index].visible_views
+				{
+					it.needs_redraw = true;
+				}
+			}
 		}
 		else if matches_key_binding (event, config.key_previous_view)
 		{
 			tab := get_tab (screen);
 			if tab && tab.visible_views.count > 0
 			{
+				tab.visible_views[tab.active_view_index].needs_redraw = true;
 				tab.active_view_index = wrap (tab.active_view_index - 1, 0, tab.visible_views.count);
+				tab.visible_views[tab.active_view_index].needs_redraw = true;
 			}
 		}
 		else if matches_key_binding (event, config.key_next_view)
@@ -184,7 +202,9 @@ screen_handle_event :: (using screen : *Screen, event : Event)
 			tab := get_tab (screen);
 			if tab && tab.visible_views.count > 0
 			{
+				tab.visible_views[tab.active_view_index].needs_redraw = true;
 				tab.active_view_index = wrap (tab.active_view_index + 1, 0, tab.visible_views.count);
+				tab.visible_views[tab.active_view_index].needs_redraw = true;
 			}
 		}
 		else if !executed_command
@@ -197,6 +217,7 @@ screen_handle_event :: (using screen : *Screen, event : Event)
 		if !is_inputting_command && tabs.count != 0 && event.mouse_button_event.button == .LEFT
 		{
 			tab := get_tab (screen);
+			tab.visible_views[tab.active_view_index].needs_redraw = true;
 			mx := cast (f32) event.mouse_button_event.mouse_x;
 			my := cast (f32) event.mouse_button_event.mouse_y;
 			// Find the view we clicked on and select it
@@ -209,6 +230,7 @@ screen_handle_event :: (using screen : *Screen, event : Event)
 					break;
 				}
 			}
+			tab.visible_views[tab.active_view_index].needs_redraw = true;
 		}
 
 	case .TEXT_INPUT;
