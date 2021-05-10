@@ -374,6 +374,10 @@ else #if OS == .LINUX
 			os_run_command (cmd);
 		}
 	}
+	else
+	{
+		println ("Build failed.");
+	}
 
 	build_options = Compiler.get_build_options ();
 	build_options.output_type = .NO_OUTPUT;

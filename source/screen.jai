@@ -254,7 +254,7 @@ screen_handle_event :: (using screen : *Screen, event : Event)
 			view := tab.visible_views[tab.active_view_index];
 			if #complete view.kind ==
 			{
-			case .TEXT;  text_view_handle_event (cast (*Text_View) view, event);
+			case .TEXT; text_view_handle_event (cast (*Text_View) view, event);
 			}
 		}
 	}
