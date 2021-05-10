@@ -368,7 +368,8 @@ skip_word_forward :: (using buffer : *Gap_Buffer, select := false, stop_at_word_
 	{
 		if is_alpha_num (first)  && !is_alpha_num (data[cursor + gap]) then break;
 		if !is_alpha_num (first) &&  is_alpha_num (data[cursor + gap]) then break;
-		if data[cursor + gap] == #char "_" then break;
+		// @Todo (stefan): Handle case change
+		if data[cursor + gap] == #char "_" && stop_at_word_separators then break;
 		if is_at_eol (buffer) then break;
 
 		if move_cursor_forward (buffer, select) then modified = true;
@@ -393,7 +394,8 @@ skip_word_backward :: (using buffer : *Gap_Buffer, select := false, stop_at_word
 	{
 		if is_alpha_num (first)  && !is_alpha_num (data[cursor - 1]) then break;
 		if !is_alpha_num (first) &&  is_alpha_num (data[cursor - 1]) then break;
-		if data[cursor + gap] == #char "_" then break;
+		// @Todo (stefan): Handle case change
+		if data[cursor + gap] == #char "_" && stop_at_word_separators then break;
 		
 		if move_cursor_backward (buffer, select) then modified = true;
 	}
@@ -464,7 +466,6 @@ insert_at_cursor :: (using buffer : *Gap_Buffer, codepoint : u32, undo_buffering
 
 insert_at_cursor :: inline (using buffer : *Gap_Buffer, utf32 : []u32, undo_buffering := Undo_Buffering.PUSH_OPERATION)
 {
-	// @Todo (stefan): auto_tab
 	if utf32.count == 0 then return;
 	
 	if undo_buffering == .PUSH_OPERATION
