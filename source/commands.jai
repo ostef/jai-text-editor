@@ -298,7 +298,7 @@ resize_helper :: (using tab : *Screen_Tab, amount : s64, left : bool) -> bool
 				amount /= page.space_advance;
 			}
 			previous_view.w -= page.space_advance * amount;
-			resize_framebuffer (*previous_view.framebuffer, xx previous_view.w, xx previous_view.h);
+			resize_view (previous_view);
 			view.x -= page.space_advance * amount;
 			view.w += page.space_advance * amount;
 		}
@@ -321,11 +321,11 @@ resize_helper :: (using tab : *Screen_Tab, amount : s64, left : bool) -> bool
 			view.w += page.space_advance * amount;
 			next_view.x += page.space_advance * amount;
 			next_view.w -= page.space_advance * amount;
-			resize_framebuffer (*next_view.framebuffer, xx next_view.w, xx next_view.h);
+			resize_view (next_view);
 		}
 	}
 	
-	resize_framebuffer (*view.framebuffer, xx view.w, xx view.h);
+	resize_view (view);
 
 	return true;
 }
@@ -380,7 +380,7 @@ command_equalize :: (using screen : *Screen)
 	{
 		view.x = i * view_width;
 		view.w = view_width;
-		resize_framebuffer (*view.framebuffer, xx view.w, xx view.h);
+		resize_view (view);
 	}
 
 	print_to_screen (screen, "Equalized view widths.");

@@ -272,8 +272,7 @@ resize_screen :: (using screen : *Screen, new_width : u32, new_height : u32)
 			it.position.y = (it.position.y - window.borders.caption_height) * h_ratio + window.borders.caption_height;
 			it.size.y     *= h_ratio;
 			
-			if it.size.x > 0 && it.size.y > 0
-				resize_framebuffer (*it.framebuffer, xx it.size.x, xx it.size.y);
+			if it.size.x > 0 && it.size.y > 0 then resize_view (it);
 		}
 	}
 }
@@ -372,7 +371,7 @@ split_active_view :: (using tab : *Screen_Tab, new_view_kind : Screen_View.Kind)
 	{
 		active_view := visible_views[active_view_index];
 		active_view.size.x *= 0.5;
-		resize_framebuffer (*active_view.framebuffer, xx active_view.size.x, xx active_view.size.y);
+		resize_view (active_view);
 		position = active_view.position;
 		position.x += active_view.size.x;
 		size = active_view.size;
@@ -403,9 +402,7 @@ split_active_view :: (using tab : *Screen_Tab, new_view_kind : Screen_View.Kind)
 split_active_view_into_text_view :: (using tab : *Screen_Tab, filename := "")
 {
 	split_active_view (tab, .TEXT);
-
-	if filename
-		load_file_into_active_text_view (tab, filename);
+	if filename then load_file_into_active_text_view (tab, filename);
 }
 
 close_active_view :: (using tab : *Screen_Tab)
@@ -426,23 +423,23 @@ close_active_view :: (using tab : *Screen_Tab)
 		first_half  := view.w * 0.5;
 		second_half := view.w - first_half;
 		previous_view.w += first_half;
-		resize_framebuffer (*previous_view.framebuffer, xx previous_view.w, xx previous_view.h);
+		resize_view (previous_view);
 		next_view.x  = previous_view.x + previous_view.w;
 		next_view.w += second_half;
-		resize_framebuffer (*next_view.framebuffer, xx next_view.w, xx next_view.w);
+		resize_view (next_view);
 	}
 	else if active_view_index > 0
 	{
 		previous_view   := visible_views[active_view_index - 1];
 		previous_view.w += view.w;
-		resize_framebuffer (*previous_view.framebuffer, xx previous_view.w, xx previous_view.h);
+		resize_view (previous_view);
 	}
 	else if active_view_index < visible_views.count - 1
 	{
 		next_view   := visible_views[active_view_index + 1];
 		next_view.x  = view.x;
 		next_view.w += view.w;
-		resize_framebuffer (*next_view.framebuffer, xx next_view.w, xx next_view.h);
+		resize_view (next_view);
 	}
 
 	sorted_remove_from_array (*visible_views, active_view_index);
@@ -453,6 +450,12 @@ close_active_view :: (using tab : *Screen_Tab)
 
 	if active_view_index == visible_views.count then active_view_index -= 1;
 	if visible_views.count == 0 then close_current_tab (screen);
+}
+
+resize_view :: (using view : *Screen_View)
+{
+	resize_framebuffer (*framebuffer, xx w, xx h);
+	needs_redraw = true;
 }
 
 draw_screen :: (using screen : *Screen)
@@ -653,6 +656,7 @@ draw_tab :: (using tab : *Screen_Tab)
 			// Draw the view onto its associated framebuffer
 			if it.needs_redraw
 			{
+				it.needs_redraw = false;
 				active := !screen.is_inputting_command && it.index_in_views_array == active_view_index;
 				immediate_framebuffer (it.framebuffer.fbo);
 				immediate_framebuffer_viewport (0, 0, xx it.w, xx it.h);

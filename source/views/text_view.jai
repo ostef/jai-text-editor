@@ -33,6 +33,7 @@ text_view_handle_event :: (using view : *Text_View, event : Event)
 			scrolling.y -= SCROLL_PAGE_COUNT;
 		else if matches_key_binding (event, config.key_scroll_page_down)
 			scrolling.y += SCROLL_PAGE_COUNT;
+		needs_redraw = true;
 
 	case .MOUSE_WHEEL;
 		if event.mouse_wheel_event.x > 0 then scrolling.x -= SCROLL_SPEED;
@@ -40,6 +41,7 @@ text_view_handle_event :: (using view : *Text_View, event : Event)
 		// Vertical scroll
 		if event.mouse_wheel_event.y > 0 then scrolling.y -= SCROLL_SPEED;
 		else if event.mouse_wheel_event.y < 0 then scrolling.y += SCROLL_SPEED;
+		needs_redraw = true;
 	}
 
 	scrolling.x = max (scrolling.x, 0);
@@ -48,6 +50,7 @@ text_view_handle_event :: (using view : *Text_View, event : Event)
 	modified, dirty := text_input_handle_event (*input, event);
 	if modified then scroll_to_cursor = true;
 	if dirty then is_dirty = true;
+	if modified || dirty then needs_redraw = true;
 }
 
 init_text_view :: (using view : *Text_View)
@@ -133,6 +136,8 @@ load_file_into_active_text_view :: (using tab : *Screen_Tab, filename : string) 
 	{
 		free (view_filename, heap_allocator);
 	}
+	
+	view.needs_redraw = true;
 
 	return ok;
 }
@@ -274,9 +279,21 @@ draw_text_view :: (using view : *Text_View, is_active : bool)
 			text_offset.y      = -visual_scrolling.y * text_line_height;
 			text_position.y    = cast (f32) text_area.y1 + text_offset.y;
 		}
+		
+		// Reset the flag
+		scroll_to_cursor = false;
 	}
-	// Reset the flag
-	scroll_to_cursor = false;
+	
+	if !approx_equal (visual_scrolling.x, xx scrolling.x, 0.0001) || !approx_equal (visual_scrolling.y, xx scrolling.y, 0.0001)
+	{
+		// We are still scrolling, so redraw the whole view next time
+		needs_redraw = true;
+	}
+	else
+	{
+		visual_scrolling.x = xx scrolling.x;
+		visual_scrolling.y = xx scrolling.y;
+	}
 
 	immediate_clip (view_area);
 	// View background
