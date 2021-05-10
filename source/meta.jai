@@ -3,10 +3,16 @@
 #import "File";
 Compiler :: #import "Compiler";
 
-// @Note (stefan): Filepaths are relative to #filepath because we modify the working directory (why do we do that though ?).
-DATA_DIR    :: "../../data/";
-#if OS == .WINDOWS    BUILD_DIR :: "../../bin/win/";
-else #if OS == .LINUX BUILD_DIR :: "../../bin/linux/";
+#if OS == .WINDOWS
+{
+	DATA_DIR  :: "d:/dev/edit/data/";
+	BUILD_DIR :: "d:/dev/edit/bin/win/";
+}
+else #if OS == .LINUX
+{
+	DATA_DIR  :: "~/hdd/dev/edit/data/";
+	BUILD_DIR :: "~/hdd/dev/edit/bin/linux/";
+}
 OUTPUT_NAME :: "edit";
 
 IS_IN_METAPROGRAM :: true;
