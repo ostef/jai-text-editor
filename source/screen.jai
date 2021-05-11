@@ -681,13 +681,13 @@ draw_tab :: (using tab : *Screen_Tab)
 				it.needs_redraw = false;
 				active := !screen.is_inputting_command && it.index_in_views_array == active_view_index;
 				immediate_framebuffer (it.framebuffer.fbo);
-				immediate_framebuffer_viewport (0, 0, xx it.w, xx it.h);
+				immediate_framebuffer_viewport (0, 0, xx it.framebuffer.width, xx it.framebuffer.height);
 				draw_text_view (cast (*Text_View) it, active);
 				immediate_framebuffer (0);
 			}
 			// Draw the texture on a quad
 			immediate_texture (it.framebuffer.texture);
-			immediate_quad (round (it.x), round (it.y), round (it.x + it.w), round (it.y + it.h),
+			immediate_quad (round (it.x), round (it.y), round (it.x) + it.framebuffer.width, round (it.y) + it.framebuffer.height,
 				vec4 (1, 1, 1, 1), vec2 (0, 1), vec2 (1, 1), vec2 (1, 0), vec2 (0, 0));
 			immediate_texture (0);
 		}

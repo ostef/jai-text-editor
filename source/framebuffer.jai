@@ -8,6 +8,8 @@ Framebuffer :: struct
 create_framebuffer :: (width : u32, height : u32) -> Framebuffer #must
 {
 	result : Framebuffer;
+	result.width  = width;
+	result.height = height;
 	// Generate texture
 	glGenTextures (1, *result.texture);
 	glBindTexture (GL_TEXTURE_2D, result.texture);
