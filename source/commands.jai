@@ -203,8 +203,12 @@ command_save_all :: (using screen : *Screen)
 command_close :: (using screen : *Screen)
 {
 	tab := get_tab (screen);
-	if !tab then return;
-	if tab.visible_views.count == 0
+	if !tab
+	{
+		// Quit
+		running = false;
+	}
+	else if tab.visible_views.count == 0
 	{
 		close_current_tab (screen);
 		print_to_screen (screen, "Closed current tab.");
