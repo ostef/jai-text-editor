@@ -161,12 +161,12 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> modifie
 		}
 		else if matches_key_binding (event, config.key_paste)
 		{
-			// @Todo (stefan): Handle EOL and tabs when they're not allowed
 			pasted_text := clone_clipboard_text (*window, temp_allocator);
 			utf32 := utf8_string_to_runes (pasted_text, temp_allocator);
 			if utf32.count != 0
 			{
 				clear_redo (*buffer);
+				if buffer.selection != 0 then delete_selection (*buffer);
 				op := make_text_operation (*buffer, .INSERT);
 				push_to_array (*buffer.undo_stack, op);
 			
