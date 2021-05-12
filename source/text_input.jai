@@ -463,10 +463,7 @@ draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, co
 	immediate_shader (text_spo);
 	
 	page := get_font_page (*loaded_font, height);
-	cursor_position : Vec2;
-	cursor_advance  := page.space_advance;
-
-	pen := position;
+	pen   := position;
 	pen.y += page.ascender;
 
 	color_index := 0;
@@ -501,12 +498,6 @@ draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, co
 			immediate_quad (pen.x, pen.y - page.ascender, pen.x + glyph.advance >> 6, pen.y - page.descender, ifx active then config.text_input_selection_color else config.inactive_text_input_selection_color);
 		}
 
-		if i == buffer.cursor
-		{
-			cursor_position = pen;
-			cursor_advance  = glyph.advance >> 6;
-		}
-
 		if codepoint == #char "\n"
 		{
 			pen.x = position.x;
@@ -532,8 +523,6 @@ draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, co
 
 			pen.x += advance;
 			pen.x = position.x + ceil ((pen.x - position.x) / (page.space_advance * 4.0)) * page.space_advance * 4.0;
-			// Highlight the whole tab
-			if i == buffer.cursor then cursor_advance = xx (pen.x - cursor_position.x);
 
 			continue;
 		}
@@ -549,14 +538,23 @@ draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, co
 
 		pen.x += glyph.advance >> 6;
 	}
-	if buffer.cursor == gap_buffer_count (buffer) then cursor_position = pen;
 
 	immediate_texture (0);
 	immediate_shader (0);
+}
+
+draw_cursor :: (using input : *Text_Input, height : u32, position : Vec2, color : Vec4, current_cursor_position := VEC2_ZERO, cursor_position_smoothing := 0.0) -> current : Vec2, target : Vec2
+{
+	immediate_push_state ();
+	defer immediate_pop_state ();
+	immediate_texture (0);
+	immediate_shader (0);
 	
-	if active
-	{
-		immediate_quad (cursor_position.x, cursor_position.y - page.ascender,
-			cursor_position.x + cursor_advance, cursor_position.y - page.descender, vec4 (1, 1, 1, 1));
-	}
+	page := get_font_page (*loaded_font, height);
+	target_position := calculate_drawn_cursor_position (input, height, position);
+	current_position := lerp (current_cursor_position, target_position, 1 - cursor_position_smoothing);
+	cursor_advance := page.space_advance;
+	immediate_quad (current_position.x, current_position.y - page.ascender, current_position.x + cursor_advance, current_position.y - page.descender, color);
+
+	return current_position, target_position;
 }

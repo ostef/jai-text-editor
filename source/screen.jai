@@ -9,6 +9,7 @@ Screen :: struct
 	// Bottom IO
 	command_input : Text_Input;
 	is_inputting_command := true;
+	visual_cursor_position : Vec2;
 	message_buffer : String_Builder;
 
 	// Views
@@ -48,6 +49,7 @@ Screen_Tab :: struct
 	needs_redraw : bool;
 	language : Language;
 	visual_scrolling : Vec2;
+	visual_cursor_position : Vec2;
 	scrollbar_alpha : f32;
 }
 
@@ -814,6 +816,9 @@ draw_screen :: (using screen : *Screen)
 		// Clip so we don't draw over the '>'
 		immediate_clip (command_text_clip);
 		draw_text_input (*command_input, config.bottom_io_font_height, position, config.bottom_io_text_color, bottom_bar);
+		cursor_smoothing := clamp (config.visual_cursor_smoothing, 0, 0.95);
+		cursor_color := NOT_QUITE_WHITE;
+		visual_cursor_position = draw_cursor (*command_input, config.bottom_io_font_height, position, cursor_color, visual_cursor_position, cursor_smoothing);
 		immediate_noclip ();
 	}
 	else
@@ -1038,6 +1043,16 @@ draw_tab :: (using tab : *Screen_Tab, is_active : bool)
 			draw_text_input (*input, config.buffer_font_height, text_position, NOT_QUITE_WHITE, text_area, active = is_active, render_whitespace = config.buffer_render_whitespace, whitespace_dimming = config.buffer_rendered_whitespace_dimming);
 		}
 	}
+	cursor_smoothing := clamp (config.visual_cursor_smoothing, 0, 0.95);
+	cursor_color := NOT_QUITE_WHITE;
+	if !is_active then cursor_color.a = 0;
+	target_cursor_position : Vec2;
+	// Draw cursor
+	visual_cursor_position, target_cursor_position = draw_cursor (*input, config.buffer_font_height, text_position, cursor_color, visual_cursor_position, cursor_smoothing);
+	if !approx_equal (visual_cursor_position, target_cursor_position, 0.0001)
+		needs_redraw = true;
+	else
+		visual_cursor_position = target_cursor_position;
 
 	if config.buffer_show_scrollbar
 	{
