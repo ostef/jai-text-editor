@@ -389,6 +389,106 @@ calculate_drawn_text_bounds :: (using font : *Font, text : []u32, height : u32) 
 	return max;
 }
 
+Text_Iterator :: struct (Buffer : Type)
+{
+	Elem :: struct
+	{
+		codepoint : u32;
+		glyph     : *Font_Glyph;
+		pen       : Vec2;
+		position  : Vec2;
+		advance   : f32;
+	}
+	
+	text_buffer : Buffer;
+	page      : *Font_Page;
+	starting_position : Vec2;
+	clip      : bool;
+	clip_rect : Clip_Rect;
+	visible_whitespace : bool;
+}
+
+make_text_iterator :: (font : *Font, buffer : $Buffer, height : u32, position : Vec2, visible_whitespace : bool) -> Text_Iterator (Buffer) #must
+{
+	assert (font != null, "Font was null.");
+	result : Text_Iterator (Buffer);
+	result.text_buffer = buffer;
+	result.page     = get_font_page (font, height);
+	result.starting_position = position;
+	result.visible_whitespace = visible_whitespace;
+	
+	return result;
+}
+
+make_text_iterator :: (font : *Font, buffer : $Buffer, height : u32, position : Vec2, clip_rect : Clip_Rect, visible_whitespace : bool) -> Text_Iterator (Buffer) #must
+{
+	assert (font != null, "Font was null.");
+	result : Text_Iterator (Buffer);
+	result.text_buffer = buffer;
+	result.page      = get_font_page (font, height);
+	result.starting_position  = position;
+	result.clip      = true;
+	result.clip_rect = clip_rect;
+	result.visible_whitespace = visible_whitespace;
+	
+	return result;
+}
+
+for_expansion :: (using iterator : *Text_Iterator ($T), body : Code, flags : For_Flags) #expand
+{
+	by_pointer :: (flags & .POINTER) == .POINTER;
+	reverse    :: (flags & .REVERSE) == .REVERSE;
+	#assert !by_pointer "Cannot iterate by pointer.";
+	#assert !reverse "Cannot iterate in reverse.";
+	
+	pen   := starting_position;
+	pen.y += page.ascender;
+	for codepoint, i : text_buffer
+	{
+		if clip && pen.y - page.descender < xx clip_rect.y1 && codepoint != #char "\n" then continue;
+		if clip && pen.y - page.ascender  > xx clip_rect.y2 then break;
+
+		`it_index := i;
+		`it : Elem;
+		it.codepoint = codepoint;
+		if visible_whitespace
+		{
+			if it.codepoint ==
+			{
+			case #char " "; codepoint = #char "·";
+			case #char "\t"; codepoint = #char "→";
+			}
+		}
+		it.glyph     = load_glyph (page, codepoint);
+		it.pen       = pen;
+		it.position  = pen;
+		if it.glyph then it.position = vec2 (pen.x + it.glyph.bitmap_bearing_x, pen.y - it.glyph.bitmap_bearing_y);
+		it.advance   = xx page.space_advance;
+		if it.glyph then it.advance = xx (it.glyph.advance >> 6);
+		
+		if it.codepoint == #char "\n"
+		{
+			pen.x  = starting_position.x;
+			pen.y += (page.ascender - page.descender);
+		}
+		else if it.codepoint == #char "\t"
+		{
+			start_pen := pen;
+			advance := it.advance;
+			pen.x += it.advance;
+			pen.x = starting_position.x + ceil ((pen.x - starting_position.x) / (page.space_advance * 4.0)) * page.space_advance * 4.0;
+			it.advance = pen.x - start_pen.x;
+		}
+		else
+		{
+			pen.x += it.advance;
+		}
+		
+		#insert body;
+	}
+}
+
+
 text_spo : GLuint;
 
 #scope_file

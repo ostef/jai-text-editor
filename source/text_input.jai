@@ -456,27 +456,20 @@ draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, co
 	inline draw_text_input (input, height, position, colors, clip_rect, active, render_whitespace, whitespace_dimming);
 }
 
-draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, colors : []Text_Color_Range, clip_rect : Clip_Rect, active := true, render_whitespace := false, whitespace_dimming := 0.7)
+draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, colors : []Text_Color_Range, clipping_rect : Clip_Rect, active := true, render_whitespace := false, whitespace_dimming := 0.7)
 {
 	immediate_push_state ();
 	defer immediate_pop_state ();
 	immediate_shader (text_spo);
 	
-	page := get_font_page (*loaded_font, height);
-	pen   := position;
-	pen.y += page.ascender;
-
 	color_index := 0;
-	for codepoint, i : buffer
+	iterator := make_text_iterator (*loaded_font, buffer, height, position, clipping_rect, render_whitespace);
+	for it, i : iterator
 	{
-		if pen.y - page.descender < xx clip_rect.y1 && codepoint != #char "\n" then continue;
-		if pen.y - page.ascender  > xx clip_rect.y2 then break;
-		
 		color := NOT_QUITE_WHITE;
-		if render_whitespace && (codepoint == #char " " || codepoint == #char "\t")
+		if it.codepoint == #char " " || it.codepoint == #char "\t"
 		{
 			color.a = 1 - whitespace_dimming;
-			if codepoint == #char " " then codepoint = #char "·";
 		}
 		else
 		{
@@ -486,61 +479,22 @@ draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, co
 			if color_index < colors.count && i >= colors[color_index].start && i < colors[color_index].end then color = colors[color_index].color;
 		}
 		
-		glyph := load_glyph (page, codepoint);
-		if !glyph then continue;
-
 		// @Speed
 		if buffer.selection != 0 &&
 			(buffer.selection > 0 && i >= buffer.cursor && i < buffer.cursor + buffer.selection ||
 			buffer.selection  < 0 && i >= buffer.cursor + buffer.selection && i < buffer.cursor)
 		{
 			immediate_texture (0);
-			immediate_quad (pen.x, pen.y - page.ascender, pen.x + glyph.advance >> 6, pen.y - page.descender, ifx active then config.text_input_selection_color else config.inactive_text_input_selection_color);
+			immediate_quad (it.pen.x, it.pen.y - iterator.page.ascender, it.pen.x + it.advance, it.pen.y - iterator.page.descender, ifx active then config.text_input_selection_color else config.inactive_text_input_selection_color);
 		}
 
-		if codepoint == #char "\n"
+		if !is_control (it.glyph.codepoint)
 		{
-			pen.x = position.x;
-			pen.y += (page.ascender - page.descender);
-
-			continue;
+			immediate_texture (it.glyph.texture);
+			immediate_quad (it.position.x, it.position.y, it.position.x + it.glyph.bitmap_width, it.position.y + it.glyph.bitmap_height, color,
+				it.glyph.uv0, vec2 (it.glyph.uv1.x, it.glyph.uv0.y), it.glyph.uv1, vec2 (it.glyph.uv0.x, it.glyph.uv1.y));
 		}
-		else if codepoint == #char "\t"
-		{
-			advance := page.space_advance;
-			if render_whitespace
-			{
-				tab_glyph := load_glyph (page, #char "→");
-				if tab_glyph
-				{
-					advance = tab_glyph.advance >> 6;
-					glyph_position := vec2 (pen.x + tab_glyph.bitmap_bearing_x, pen.y - tab_glyph.bitmap_bearing_y);
-					immediate_texture (tab_glyph.texture);
-					immediate_quad (glyph_position.x, glyph_position.y, glyph_position.x + tab_glyph.bitmap_width, glyph_position.y + tab_glyph.bitmap_height, color,
-						tab_glyph.uv0, vec2 (tab_glyph.uv1.x, tab_glyph.uv0.y), tab_glyph.uv1, vec2 (tab_glyph.uv0.x, tab_glyph.uv1.y));
-				}
-			}
-
-			pen.x += advance;
-			pen.x = position.x + ceil ((pen.x - position.x) / (page.space_advance * 4.0)) * page.space_advance * 4.0;
-
-			continue;
-		}
-		
-		glyph_position := vec2 (pen.x + glyph.bitmap_bearing_x, pen.y - glyph.bitmap_bearing_y);
-
-		if !is_control (codepoint)
-		{
-			immediate_texture (glyph.texture);
-			immediate_quad (glyph_position.x, glyph_position.y, glyph_position.x + glyph.bitmap_width, glyph_position.y + glyph.bitmap_height, color,
-				glyph.uv0, vec2 (glyph.uv1.x, glyph.uv0.y), glyph.uv1, vec2 (glyph.uv0.x, glyph.uv1.y));
-		}
-
-		pen.x += glyph.advance >> 6;
 	}
-
-	immediate_texture (0);
-	immediate_shader (0);
 }
 
 draw_cursor :: (using input : *Text_Input, height : u32, position : Vec2, color : Vec4, current_cursor_position := VEC2_ZERO, cursor_position_smoothing := 0.0) -> current : Vec2, target : Vec2
