@@ -218,23 +218,21 @@ screen_handle_event :: (using screen : *Screen, event : Event)
 		// Select text view with mouse
 		if !is_inputting_command && splits.count != 0 && event.mouse_button_event.button == .LEFT
 		{
-			split := active_split (screen);
-			split.tabs[split.active_tab_index].needs_redraw = true;
+			active_tab (screen).needs_redraw = true;
 			mx := cast (f32) event.mouse_button_event.mouse_x;
 			my := cast (f32) event.mouse_button_event.mouse_y;
 			// Find the view we clicked on and select it
-			for tab, i : split.tabs
+			for split, i : splits
 			{
-				if mx > split.x && mx < split.x + split.w && my > split.y && my < split.y + split.w
+				if mx > split.x && mx < split.x + split.w && my > split.y && my < split.y + split.h
 				{
-					split.active_tab_index = i;
+					active_split_index = i;
 
 					break;
 				}
 			}
-			split.tabs[split.active_tab_index].needs_redraw = true;
-		}
-
+			active_tab (screen).needs_redraw = true;
+			
 	case .TEXT_INPUT;
 		if ignore_next_text_input_message
 		{
