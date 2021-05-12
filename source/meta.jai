@@ -210,10 +210,34 @@ generate_init_commands_proc :: () -> string #must
 	return to_string (builder);
 }
 
+generate_commands_help_string :: () -> string
+{
+	builder := make_string_builder (5000, temp_allocator);
+	pr :: print_to_builder;
+	ln :: print_line_to_builder;
+	nl :: print_newline_to_builder;
+	for decl, i : command_decls
+	{
+		pr (*builder, "* %", advance (decl.name, "command_".count));
+		header := cast (*Compiler.Code_Procedure_Header) decl.root_expression;
+		for arg, i : header.arguments
+		{
+			if i == 0 then continue;
+			is_optional := arg.root_expression != null;
+			if is_optional then pr (*builder, " [%]", arg.name);
+			else pr (*builder, " %", arg.name);
+		}
+		nl (*builder);
+	}
+
+	return to_string (builder);
+}
+
 commands_to_register : [..]string;
 command_decls        : [..]*Compiler.Code_Declaration;
 command_infos        : [..]*Type_Info_Procedure;
 command_register_proc_generated : bool;
+run_when_all_typechecked : [..]string;
 
 handle_compiler_message :: (message : *Compiler.Message)
 {
@@ -246,6 +270,12 @@ handle_compiler_message :: (message : *Compiler.Message)
 						push_to_array (*command_decls, decl);
 						push_to_array (*command_infos, cast (*Type_Info_Procedure) decl.type);
 					}
+
+				case "Run_When_All_Typechecked";
+					if decl.root_expression.kind != .PROCEDURE_HEADER
+						Compiler.compiler_report (Compiler.get_filename (note), note.l0, note.c0, fstring (temp_allocator, "Found a 'Run_When_All_Typechecked' note on non-procedure declaration '%'.", decl.name));
+					else
+						push_to_array (*run_when_all_typechecked, decl.name);
 				}
 			}
 		}
@@ -262,6 +292,8 @@ handle_compiler_message :: (message : *Compiler.Message)
 					Compiler.add_build_string (build_str, message.workspace);
 				}
 
+				commands_help := generate_commands_help_string ();
+				Compiler.add_build_string (fstring (temp_allocator, "COMMANDS_HELP :: #string END\n%END", commands_help), message.workspace);
 				build_str := generate_init_commands_proc ();
 				Compiler.add_build_string (build_str, message.workspace);
 				command_register_proc_generated = true;
@@ -269,6 +301,12 @@ handle_compiler_message :: (message : *Compiler.Message)
 				clear_array (*command_decls);
 				clear_array (*command_infos);
 			}
+
+			for run_when_all_typechecked
+			{
+				Compiler.add_build_string (fstring (temp_allocator, "#run % ();", it), message.workspace);
+			}
+			clear_array (*run_when_all_typechecked);
 		}
 	}
 }
@@ -344,6 +382,7 @@ else #if OS == .LINUX
 	init_array (*commands_to_register, 50, temp_allocator);
 	init_array (*command_decls, 50, temp_allocator);
 	init_array (*command_infos, 50, temp_allocator);
+	init_array (*run_when_all_typechecked, 50, temp_allocator);
 	build_success := false;
 	while true
 	{

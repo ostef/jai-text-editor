@@ -87,6 +87,15 @@ execute_command :: (using screen : *Screen, str : string)
 	else print_to_screen (screen, "Command '%' does not exist.", name);
 }
 
+command_help :: (using screen : *Screen)
+{
+	command_new_tab (screen);
+	tab := active_tab (screen);
+	insert_at_cursor (*tab.input.buffer, COMMANDS_HELP, undo_buffering = .NONE);
+	print_to_screen (screen, "Opened new buffer with command help.");
+}
+@Command
+
 command_split :: (using screen : *Screen)
 {
 	ok := move_active_tab_to_a_new_split (screen);
@@ -123,13 +132,15 @@ command_new_tab :: (using screen : *Screen, filename := "")
 	if !split
 	{
 		ok := new_split (screen, filename);
-		if ok then print_to_screen (screen, "Opened file '%' in a new tab.", filename);
+		if ok && filename then print_to_screen (screen, "Opened file '%' in a new tab.", filename);
+		else if ok then print_to_screen (screen, "New tab.");
 		else print_to_screen (screen, "Could not open file '%'.", filename);
 	}
 	else
 	{
 		ok := open_new_tab (split, filename);
-		if ok then print_to_screen (screen, "Opened file '%' in a new tab.", filename);
+		if ok && filename then print_to_screen (screen, "Opened file '%' in a new tab.", filename);
+		else if ok then print_to_screen (screen, "New tab.");
 		else print_to_screen (screen, "Could not open file '%'.", filename);
 	}
 }
