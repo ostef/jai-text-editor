@@ -7,7 +7,7 @@ inactive_background_color 0.2 0.2 0.2 1
 inactive_stripes_color 0.4 0.4 0.4 1
 bottom_io_background_color 0.1 0.1 0.1 1
 bottom_io_text_color 0.9 0.9 0.9 1
-view_separation_color 0.6 0.6 0.6 1
+split_separation_color 0.6 0.6 0.6 1
 buffer_background_color 0.1 0.1 0.1 1
 buffer_text_color 0.9 0.9 0.9 1
 buffer_line_numbers_text_color 0.6 0.6 0.6 1
@@ -34,11 +34,10 @@ buffer_show_scrollbar true
 
 # Key bindings
 key_toggle_command_input ESCAPE
+key_previous_split CTRL+W
+key_next_split CTRL+E
 key_previous_tab CTRL+SHIFT+W
 key_next_tab CTRL+SHIFT+E
-key_previous_view CTRL+W
-key_next_view CTRL+E
-key_close_view CTRL+Q
 key_copy CTRL+C
 key_cut CTRL+X
 key_paste CTRL+V

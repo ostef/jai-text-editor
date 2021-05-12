@@ -1,5 +1,7 @@
+new_tab CTRL+N
+new_split CTRL+SHIFT+N
 split CTRL+H
-new_tab CTRL+T
+unsplit CTRL+SHIFT+H
 open CTRL+O
 save CTRL+S
 save_as CTRL+ALT+S

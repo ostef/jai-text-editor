@@ -19,11 +19,7 @@ Debug :: #import "Debug";
 #load "framebuffer.jai";
 #load "commands.jai";
 #load "screen.jai";
-// Views
-#load "views/text_view.jai";
-
 #load "language.jai";
-// Languages
 #load "languages/jai.jai";
 
 executable_path : string;
@@ -35,6 +31,7 @@ screen : Screen;
 // and since the context is made up because it originates from the WndProc on windows (#c_call), context.immediate_state will be null.
 // If the font procedures we called need to render to the font atlas then the program will crash.
 main_context_immediate_state : *Immediate_State;
+// Same thing for the temporary storage: it will be null and calling reset_temporary_storage will do nothing and temporary memory will never get freed.
 main_temporary_storage       : *Temporary_Storage;
 
 handle_window_event :: (using event : Event)
@@ -90,10 +87,12 @@ main :: ()
 	viewport_w, viewport_h := get_window_framebuffer_size (*window);
 	init_screen (*screen, xx viewport_w, xx viewport_h);
 
-	args := get_command_line_arguments ();
-	args = advance (args);
-	for filename : args
-		open_new_tab (*screen, filename);
+	{
+		args := get_command_line_arguments ();
+		args = advance (args);
+		for filename : args
+			open_new_tab (*screen, filename);
+	}
 	toggle_command_input (*screen);
 
 	glClearColor (config.inactive_background_color.r, config.inactive_background_color.g, config.inactive_background_color.b, 1);
@@ -101,7 +100,7 @@ main :: ()
 	running = true;
 	while running
 	{
-		// Rendering is done in an TIMER event callback, the first one of these was scheduled when we called init_screen.
+		// Rendering is done in a TIMER event callback, the first one of these was scheduled when we called init_screen.
 		wait_for_window_events (*window);
 	}
 }

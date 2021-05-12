@@ -2,11 +2,6 @@
 
 // Acrylic window background: https://stackoverflow.com/questions/43931709/acrylic-material-in-win32-app
 
-// @Note (stefan): Right now, I was taking the direction to make any kind of views openable in a standalone way,
-// but since this is a text editor, I believe we should make it so that only text views can be opened like this,
-// and utilities such as search & replace, file system view, etc.. can only be opened on top
-// of the current text view, and are closed automatically once the operation is done.
-
 Screen :: struct
 {
 	width, height : u32;
@@ -17,8 +12,8 @@ Screen :: struct
 	message_buffer : String_Builder;
 
 	// Views
-	tabs             : [..]Screen_Tab;
-	active_tab_index : s64;
+	splits : [..]Screen_Split;
+	active_split_index : s64;
 
 	render_timer_id  : u32;
 	ignore_next_text_input_message : bool;
@@ -26,33 +21,34 @@ Screen :: struct
 
 TAB_CAPTION_WIDTH :: 125.0;
 
-Screen_Tab :: struct
+Screen_Split :: struct
 {
 	screen : *Screen;
-	text_views        : Bucket_Array (Text_View, 10);
-	visible_views     : [..]*Screen_View;
-	active_view_index : s64;
-}
-
-Screen_View :: struct
-{
-	Kind :: enum
-	{
-		TEXT;
-	}
-
-	kind : Kind;
-	index_in_bucket_array : Bucket_Array_Index;
-	index_in_views_array  : s64;
+	tabs : [..]Screen_Tab;
+	active_tab_index : s64;
 	position : Vec2;
 	#place position;
 	x, y : f32;
-	size     : Vec2;
+	size : Vec2;
 	#place size;
 	w, h : f32;
+	framebuffer : Framebuffer;
+}
 
-	framebuffer  : Framebuffer;
+Screen_Tab :: struct
+{
+	SCROLL_SPEED :: 3;
+
+	split : *Screen_Split;
+	input : Text_Input;
+	filename : string;
+	scrolling : Vec2;
+	scroll_to_cursor : bool;
+	is_dirty : bool;
 	needs_redraw : bool;
+	language : Language;
+	visual_scrolling : Vec2;
+	scrollbar_alpha : f32;
 }
 
 NOT_QUITE_BLACK :: Vec4.{ 0.1, 0.1, 0.1, 1 };
@@ -163,48 +159,54 @@ screen_handle_event :: (using screen : *Screen, event : Event)
 				return;
 			}
 		}
+		else if matches_key_binding (event, config.key_previous_split)
+		{
+			if splits.count > 0
+			{
+				active_split_index = wrap (active_split_index - 1, 0, splits.count);
+				// Make sure we redraw everything when switching tabs
+				for * split, i : splits
+				{
+					for * tab, ti : split.tabs
+					{
+						tab.needs_redraw = true;
+					}
+				}
+			}
+		}
+		else if matches_key_binding (event, config.key_next_split)
+		{
+			if splits.count > 0
+			{
+				active_split_index = wrap (active_split_index + 1, 0, splits.count);
+				// Make sure we redraw everything when switching tabs
+				for * split, i : splits
+				{
+					for * tab, ti : split.tabs
+					{
+						tab.needs_redraw = true;
+					}
+				}
+			}
+		}
 		else if matches_key_binding (event, config.key_previous_tab)
 		{
-			if tabs.count > 0
+			split := active_split (screen);
+			if split && split.tabs.count > 0
 			{
-				active_tab_index = wrap (active_tab_index - 1, 0, tabs.count);
-				// Make sure we redraw everything when switching tabs
-				for tabs[active_tab_index].visible_views
-				{
-					it.needs_redraw = true;
-				}
+				split.tabs[split.active_tab_index].needs_redraw = true;
+				split.active_tab_index = wrap (split.active_tab_index - 1, 0, split.tabs.count);
+				split.tabs[split.active_tab_index].needs_redraw = true;
 			}
 		}
 		else if matches_key_binding (event, config.key_next_tab)
 		{
-			if tabs.count > 0
+			split := active_split (screen);
+			if split && split.tabs.count > 0
 			{
-				active_tab_index = wrap (active_tab_index + 1, 0, tabs.count);
-				// Make sure we redraw everything when switching tabs
-				for tabs[active_tab_index].visible_views
-				{
-					it.needs_redraw = true;
-				}
-			}
-		}
-		else if matches_key_binding (event, config.key_previous_view)
-		{
-			tab := get_tab (screen);
-			if tab && tab.visible_views.count > 0
-			{
-				tab.visible_views[tab.active_view_index].needs_redraw = true;
-				tab.active_view_index = wrap (tab.active_view_index - 1, 0, tab.visible_views.count);
-				tab.visible_views[tab.active_view_index].needs_redraw = true;
-			}
-		}
-		else if matches_key_binding (event, config.key_next_view)
-		{
-			tab := get_tab (screen);
-			if tab && tab.visible_views.count > 0
-			{
-				tab.visible_views[tab.active_view_index].needs_redraw = true;
-				tab.active_view_index = wrap (tab.active_view_index + 1, 0, tab.visible_views.count);
-				tab.visible_views[tab.active_view_index].needs_redraw = true;
+				split.tabs[split.active_tab_index].needs_redraw = true;
+				split.active_tab_index = wrap (split.active_tab_index + 1, 0, split.tabs.count);
+				split.tabs[split.active_tab_index].needs_redraw = true;
 			}
 		}
 		else if !executed_command
@@ -214,23 +216,23 @@ screen_handle_event :: (using screen : *Screen, event : Event)
 
 	case .MOUSE_BUTTON_PRESS;
 		// Select text view with mouse
-		if !is_inputting_command && tabs.count != 0 && event.mouse_button_event.button == .LEFT
+		if !is_inputting_command && splits.count != 0 && event.mouse_button_event.button == .LEFT
 		{
-			tab := get_tab (screen);
-			tab.visible_views[tab.active_view_index].needs_redraw = true;
+			split := active_split (screen);
+			split.tabs[split.active_tab_index].needs_redraw = true;
 			mx := cast (f32) event.mouse_button_event.mouse_x;
 			my := cast (f32) event.mouse_button_event.mouse_y;
 			// Find the view we clicked on and select it
-			for view, i : tab.visible_views
+			for tab, i : split.tabs
 			{
-				if mx > view.x && mx < view.x + view.w && my > view.y && my < view.y + view.w
+				if mx > split.x && mx < split.x + split.w && my > split.y && my < split.y + split.w
 				{
-					tab.active_view_index = i;
+					split.active_tab_index = i;
 
 					break;
 				}
 			}
-			tab.visible_views[tab.active_view_index].needs_redraw = true;
+			split.tabs[split.active_tab_index].needs_redraw = true;
 		}
 
 	case .TEXT_INPUT;
@@ -246,18 +248,47 @@ screen_handle_event :: (using screen : *Screen, event : Event)
 	{
 		text_input_handle_event (*command_input, event);
 	}
-	else if tabs.count != 0
+	else
 	{
-		tab := get_tab (screen);
-		if tab.visible_views.count != 0
-		{
-			view := tab.visible_views[tab.active_view_index];
-			if #complete view.kind ==
-			{
-			case .TEXT; text_view_handle_event (cast (*Text_View) view, event);
-			}
-		}
+		tab := active_tab (screen);
+		if tab then screen_tab_handle_event (tab, event);
 	}
+}
+
+screen_tab_handle_event :: (using tab : *Screen_Tab, event : Event)
+{
+	// Horizontal scroll
+	if event.type ==
+	{
+	case .KEY_PRESS; #through;
+	case .KEY_REPEAT;
+		SCROLL_PAGE_COUNT :: 30;
+		if matches_key_binding (event, config.key_scroll_up)
+			scrolling.y -= 1;
+		else if matches_key_binding (event, config.key_scroll_down)
+			scrolling.y += 1;
+		else if matches_key_binding (event, config.key_scroll_page_up)
+			scrolling.y -= SCROLL_PAGE_COUNT;
+		else if matches_key_binding (event, config.key_scroll_page_down)
+			scrolling.y += SCROLL_PAGE_COUNT;
+		needs_redraw = true;
+
+	case .MOUSE_WHEEL;
+		if event.mouse_wheel_event.x > 0 then scrolling.x -= SCROLL_SPEED;
+		else if event.mouse_wheel_event.x < 0 then scrolling.x += SCROLL_SPEED;
+		// Vertical scroll
+		if event.mouse_wheel_event.y > 0 then scrolling.y -= SCROLL_SPEED;
+		else if event.mouse_wheel_event.y < 0 then scrolling.y += SCROLL_SPEED;
+		needs_redraw = true;
+	}
+
+	scrolling.x = max (scrolling.x, 0);
+	scrolling.y = max (scrolling.y, 0);
+
+	modified, dirty := text_input_handle_event (*input, event);
+	if modified then scroll_to_cursor = true;
+	if dirty then is_dirty = true;
+	if modified || dirty then needs_redraw = true;
 }
 
 init_screen :: (screen : *Screen, width : u32, height : u32)
@@ -268,8 +299,8 @@ init_screen :: (screen : *Screen, width : u32, height : u32)
 	init_text_input (*screen.command_input, Text_Input.Flags.SINGLE_LINE | .DISALLOW_TABS);
 	screen.message_buffer = make_string_builder (100, heap_allocator);
 	// Tabs and views
-	init_array (*screen.tabs, 10, heap_allocator);
-	screen.active_tab_index = -1;
+	init_array (*screen.splits, 10, heap_allocator);
+	screen.active_split_index = -1;
 	screen.render_timer_id = schedule_timer_event (*window, 1, 0);
 	screen.ignore_next_text_input_message = false;
 }
@@ -283,19 +314,16 @@ resize_screen :: (using screen : *Screen, new_width : u32, new_height : u32)
 	w_ratio := width  / cast (f32) old_width;
 	h_ratio := (height - window.borders.caption_height - bottom_bar_height ()) / cast (f32) (old_height - window.borders.caption_height - bottom_bar_height ());
 
-	// Resize all views
-	for * tab, i : tabs
+	// Resize all splits
+	for * splits
 	{
-		for tab.visible_views
-		{
-			it.position.x *= w_ratio;
-			it.size.x     *= w_ratio;
+		it.position.x *= w_ratio;
+		it.size.x     *= w_ratio;
 		
-			it.position.y = (it.position.y - window.borders.caption_height) * h_ratio + window.borders.caption_height;
-			it.size.y     *= h_ratio;
-			
-			if it.size.x > 0 && it.size.y > 0 then resize_view (it);
-		}
+		it.position.y = (it.position.y - window.borders.caption_height) * h_ratio + window.borders.caption_height;
+		it.size.y     *= h_ratio;
+		
+		if it.size.x > 0 && it.size.y > 0 then resize_split (it);
 	}
 }
 
@@ -303,14 +331,12 @@ update_screen_from_config_reload :: (using screen : *Screen, previous_bottom_bar
 {
 	h_ratio := (height - window.borders.caption_height - bottom_bar_height ()) / cast (f32) (height - window.borders.caption_height - previous_bottom_bar_height);
 
-	// Resize views
-	for * tab, i : tabs
+	// Resize splits
+	for * splits
 	{
-		for tab.visible_views
-		{
-			it.position.y = (it.position.y - window.borders.caption_height) * h_ratio + window.borders.caption_height;
-			it.size.y     *= h_ratio;
-		}
+		it.position.y = (it.position.y - window.borders.caption_height) * h_ratio + window.borders.caption_height;
+		it.size.y     *= h_ratio;
+		resize_split (it);
 	}
 }
 
@@ -333,151 +359,285 @@ print_to_screen :: (using screen : *Screen, fmt : string, args : ..Any)
 	print_to_builder (*message_buffer, fmt, ..args);
 }
 
-open_new_tab :: (using screen : *Screen, filename := "") -> *Screen_Tab
+active_split :: inline (using screen : *Screen) -> *Screen_Split #must
 {
-	tab := push_to_array (*tabs);
-	init_tab (tab);
-	tab.screen = screen;
-	active_tab_index = tabs.count - 1;
-	split_active_view_into_text_view (tab, filename);
-
-	return tab;
+	if splits.count == 0 then return null;
+	
+	return *splits[active_split_index];
 }
 
-close_current_tab :: (using screen : *Screen)
+active_tab :: inline (using screen : *Screen) -> *Screen_Tab #must
 {
-	if tabs.count == 0 then return;
-	tab := get_tab (screen);
-	reset_tab (tab);
-	sorted_remove_from_array (*tabs, active_tab_index);
-	if active_tab_index == tabs.count then active_tab_index -= 1;
+	split := active_split (screen);
+	if !split then return null;
+	
+	return active_tab (split);;
 }
 
-get_or_add_tab :: (using screen : *Screen, filename := "") -> *Screen_Tab #must
-{
-	if tabs.count == 0 then return open_new_tab (screen, filename);
-
-	return *tabs[active_tab_index];
-}
-
-get_tab :: (using screen : *Screen) -> *Screen_Tab #must
+active_tab :: inline (using split : *Screen_Split) -> *Screen_Tab #must
 {
 	if tabs.count == 0 then return null;
-
+	
 	return *tabs[active_tab_index];
 }
 
-init_tab :: (using tab : *Screen_Tab)
+init_split :: (split : *Screen_Split, screen : *Screen, position : Vec2, size : Vec2)
 {
-	init_array (*visible_views, 10, heap_allocator);
-	init_bucket_array (*text_views, 10, heap_allocator);
-	active_view_index = -1;
+	split.screen   = screen;
+	init_array (*split.tabs, 10, heap_allocator);
+	split.active_tab_index = -1;
+	split.position = position;
+	split.size     = size;
+	split.framebuffer = create_framebuffer (xx split.w, xx split.h);
 }
 
-reset_tab :: (using tab : *Screen_Tab)
+reset_split :: (using split : *Screen_Split)
 {
-	reset_array (*visible_views);
-	reset_bucket_array (*text_views);
+	destroy_framebuffer (*framebuffer);
+	active_tab_index = -1;
+	reset_array (*tabs);
 }
 
-split_active_view :: (using tab : *Screen_Tab, new_view_kind : Screen_View.Kind) -> *Screen_View
+#scope_file
+
+new_split :: (using screen : *Screen) -> *Screen_Split
 {
 	position : Vec2 = ---;
 	size     : Vec2 = ---;
-	if visible_views.count == 0
+	if splits.count == 0
 	{
 		position = vec2 (0, xx window.borders.caption_height);
 		size     = vec2 (xx screen.width, screen.height - xx window.borders.caption_height - bottom_bar_height ());
 	}
 	else
 	{
-		active_view := visible_views[active_view_index];
-		active_view.size.x *= 0.5;
-		resize_view (active_view);
-		position = active_view.position;
-		position.x += active_view.size.x;
-		size = active_view.size;
+		split := active_split (screen);
+		split.size.x *= 0.5;
+		resize_split (split);
+		position = split.position;
+		position.x += split.size.x;
+		size = split.size;
 	}
 
-	view : *Screen_View;
-	if new_view_kind ==
-	{
-	case .TEXT;
-		text_view, index := add_to_bucket_array (*text_views, initialize = true);
-		text_view.index_in_bucket_array = index;
-		init_text_view (text_view);
-		view = text_view;
-	}
+	active_split_index += 1;
+	split := sorted_insert_to_array (*splits, active_split_index);
+	init_split (split, screen, position, size);
 
-	sorted_insert_to_array (*visible_views, active_view_index + 1, view);
-	active_view_index += 1;
-	view.kind = new_view_kind;
-	view.index_in_views_array = active_view_index;
-	view.position = position;
-	view.size     = size;
-	view.framebuffer = create_framebuffer (xx view.w, xx view.h);
-	view.needs_redraw = true;
-
-	return view;
+	return split;
 }
 
-split_active_view_into_text_view :: (using tab : *Screen_Tab, filename := "")
+remove_active_split :: (using screen : *Screen)
 {
-	split_active_view (tab, .TEXT);
-	if filename then load_file_into_active_text_view (tab, filename);
+	split := active_split (screen);
+	if !split then return;
+	
+	if active_split_index > 0 && active_split_index < splits.count - 1
+	{
+		previous_split := *splits[active_split_index - 1];
+		next_split     := *splits[active_split_index + 1];
+		first_half  := split.w * 0.5;
+		second_half := split.w - first_half;
+		previous_split.w += first_half;
+		resize_split (previous_split);
+		next_split.x  = previous_split.x + previous_split.w;
+		next_split.w += second_half;
+		resize_split (next_split);
+	}
+	else if active_split_index > 0
+	{
+		previous_split   := *splits[active_split_index - 1];
+		previous_split.w += split.w;
+		resize_split (previous_split);
+	}
+	else if active_split_index < splits.count - 1
+	{
+		next_split   := *splits[active_split_index + 1];
+		next_split.x  = split.x;
+		next_split.w += split.w;
+		resize_split (next_split);
+	}
+	
+	reset_split (split);
+	sorted_remove_from_array (*splits, active_split_index);
+	if active_split_index == splits.count then active_split_index -= 1;
 }
 
-close_active_view :: (using tab : *Screen_Tab)
+#scope_export
+
+move_active_tab_to_a_new_split :: (using screen : *Screen) -> bool
 {
-	if visible_views.count == 0 then return;
-
-	view := visible_views[active_view_index];
-	destroy_framebuffer (*view.framebuffer);
-	if #complete view.kind ==
-	{
-	case .TEXT; reset_text_view (cast (*Text_View) view);
-	}
-
-	if active_view_index > 0 && active_view_index < visible_views.count - 1
-	{
-		previous_view := visible_views[active_view_index - 1];
-		next_view     := visible_views[active_view_index + 1];
-		first_half  := view.w * 0.5;
-		second_half := view.w - first_half;
-		previous_view.w += first_half;
-		resize_view (previous_view);
-		next_view.x  = previous_view.x + previous_view.w;
-		next_view.w += second_half;
-		resize_view (next_view);
-	}
-	else if active_view_index > 0
-	{
-		previous_view   := visible_views[active_view_index - 1];
-		previous_view.w += view.w;
-		resize_view (previous_view);
-	}
-	else if active_view_index < visible_views.count - 1
-	{
-		next_view   := visible_views[active_view_index + 1];
-		next_view.x  = view.x;
-		next_view.w += view.w;
-		resize_view (next_view);
-	}
-
-	sorted_remove_from_array (*visible_views, active_view_index);
-	if #complete view.kind ==
-	{
-	case .TEXT; remove_from_bucket_array (*text_views, view.index_in_bucket_array);
-	}
-
-	if active_view_index == visible_views.count then active_view_index -= 1;
-	if visible_views.count == 0 then close_current_tab (screen);
+	split := active_split (screen);
+	if !split then return false;
+	if split.tabs.count < 2 then return false;
+	tab := split.tabs[split.active_tab_index];
+	sorted_remove_from_array (*split.tabs, split.active_tab_index);
+	if split.active_tab_index == split.tabs.count then split.active_tab_index -= 1;
+	split = new_split (screen);
+	new_tab := push_to_array (*split.tabs, tab);
+	new_tab.split = split;
+	new_tab.needs_redraw = true;
+	split.active_tab_index = split.tabs.count - 1;
+	
+	return true;
 }
 
-resize_view :: (using view : *Screen_View)
+new_split :: (using screen : *Screen, filename : string) -> bool
+{
+	split := new_split (screen);
+
+	return open_new_tab (split, filename);
+}
+
+merge_active_split :: (using screen : *Screen)
+{
+	if splits.count < 2 then return;
+
+	split := active_split (screen);
+	merge_with : *Screen_Split;
+	if active_split_index == 0 then merge_with = *splits[active_split_index + 1];
+	else merge_with = *splits[active_split_index - 1];
+
+	for tab, i : split.tabs
+	{
+		new_tab := push_to_array (*merge_with.tabs, tab);
+		new_tab.split = merge_with;
+		new_tab.needs_redraw = true;
+	}
+	merge_with.active_tab_index = merge_with.tabs.count - 1;
+	
+	remove_active_split (screen);
+}
+
+resize_split :: (using split : *Screen_Split)
 {
 	resize_framebuffer (*framebuffer, xx w, xx h);
+	for * tabs
+		it.needs_redraw = true;
+}
+
+init_tab :: (tab : *Screen_Tab, split : *Screen_Split)
+{
+	init_text_input (*tab.input, 0);
+	tab.split = split;
+}
+
+reset_tab :: (using tab : *Screen_Tab)
+{
+	clear_tab (tab);
+	reset_text_input (*input);
+}
+
+clear_tab :: (using tab : *Screen_Tab)
+{
+	if filename then free (filename, heap_allocator);
+	filename = "";
+	input.eol_sequence = .LF;
+	clear_gap_buffer (*input.buffer);
+	scrolling = VEC2_ZERO;
+	scroll_to_cursor = false;
+	is_dirty = false;
 	needs_redraw = true;
+	language = .NONE;
+	visual_scrolling = VEC2_ZERO;
+	scrollbar_alpha = 0;
+}
+
+open_new_tab :: (using split : *Screen_Split, filename : string) -> bool
+{
+	tab := push_to_array (*split.tabs, initialize = true);
+	init_tab (tab, split);
+	split.active_tab_index = split.tabs.count - 1;
+	if !filename then return true;
+
+	return load_file_into_active_tab (tab, filename);
+}
+
+open_new_tab :: (using screen : *Screen, filename : string) -> bool
+{
+	split := active_split (screen);
+	if !split then split = new_split (screen);
+	
+	return open_new_tab (split, filename);
+}
+
+close_active_tab :: (using screen : *Screen)
+{
+	split := active_split (screen);
+	if !split then return;
+	tab := active_tab (split);
+	if !tab then return;
+	reset_tab (tab);
+	sorted_remove_from_array (*split.tabs, split.active_tab_index);
+	if split.active_tab_index == split.tabs.count then split.active_tab_index -= 1;
+	if split.tabs.count == 0 then remove_active_split (screen);
+}
+
+detect_language :: (using tab : *Screen_Tab)
+{
+	if filename
+	{
+		// @Todo (stefan): Make this configurable.
+		ext := get_filename_extension (filename);
+		if ext ==
+		{
+		case "jai"; tab.language = .JAI;
+		}
+	}
+}
+
+load_file_into_active_tab :: (using tab : *Screen_Tab, filepath : string) -> bool
+{
+	if !filepath then return false;
+	full_path := get_full_path (filepath, heap_allocator);
+
+	for * split, i : split.screen.splits
+	{
+		for * split.tabs
+		{
+			if it.filename == full_path
+			{
+				print_to_screen (split.screen, "Could not open file '%' because it is already opened in another tab.", filepath);
+
+				return false;
+			}
+		}
+	}
+
+	clear_tab (tab);
+	ok := load_file_into_buffer (*tab.input, full_path);
+	// If we could not load the file into the buffer, try relative to the executable dir
+	if !ok
+	{
+		free (full_path, heap_allocator);
+		full_path = make_path (heap_allocator, executable_dir, "/", filepath);
+		ok = load_file_into_buffer (*tab.input, full_path);
+	}
+
+	if ok
+	{
+		tab.filename = full_path;
+		move_cursor (*tab.input.buffer, 0);
+		tab.scroll_to_cursor = true;
+		detect_language (tab);
+	}
+	else
+	{
+		free (full_path, heap_allocator);
+	}
+
+	return ok;
+}
+
+get_tab_name :: (using tab : *Screen_Tab) -> string #must
+{
+	result := "(unnamed)";
+	if filename
+	{
+		result = get_filename_from_path (filename);
+		if is_dirty then result = join (temp_allocator, result, "*");
+	}
+	
+	return result;
 }
 
 draw_screen :: (using screen : *Screen)
@@ -504,67 +664,50 @@ draw_screen :: (using screen : *Screen)
 
 	// Draw the caption bar
 	immediate_quad (0.0, 0.0, cast (f32) width, cast (f32) window.borders.caption_height, config.window_caption_background_color);
-	xoffset := 0.0;
-	for * tab, i : tabs
+	for * split, i : splits
 	{
-		foreground_color := NOT_QUITE_WHITE;
-		tab_name : string;
-		if tab.visible_views.count != 0
+		caption_area : Clip_Rect;
+		caption_area.x1 = xx split.x;
+		caption_area.x2 = caption_area.x1 + xx split.w;
+		caption_area.y1 = 0;
+		caption_area.y2 = xx window.borders.caption_height;
+		
+		for * tab, ti : split.tabs
 		{
-			view := tab.visible_views[tab.active_view_index];
-			if #complete view.kind ==
-			{
-			case .TEXT;
-				text_view := cast (*Text_View) view;
-				if text_view.filename
-				{
-					if text_view.is_dirty
-					{
-						tab_name = fstring (temp_allocator, "%*", get_filename_from_path (text_view.filename));
-						foreground_color = vec4 (0.9, 0.7, 0.3, 1);
-					}
-					else
-					{
-						tab_name = fstring (temp_allocator, "%", get_filename_from_path (text_view.filename));
-					}
-				}
-				else
-				{
-					tab_name = "**UNNAMED**";
-				}
-			}
+			// @Todo (stefan): Make new entry in config for foreground color
+			foreground_color := NOT_QUITE_WHITE;
+			if tab.is_dirty then foreground_color = vec4 (0.9, 0.7, 0.3, 1);
+			tab_name := get_tab_name (tab);
+			TAB_TITLE_FONT_HEIGHT :: 14;
+			page := get_font_page (*loaded_font, TAB_TITLE_FONT_HEIGHT);
+			x1 := split.x + ti * TAB_CAPTION_WIDTH;
+			x2 := x1 + TAB_CAPTION_WIDTH;
+			y1 := 0.0;
+			y2 := cast (f32) window.borders.caption_height;
+			background_color := config.tab_caption_inactive_background_color;
+			if ti == split.active_tab_index then background_color = config.tab_caption_background_color;
+			immediate_quad (x1, y1, x2, y2, background_color);
+			
+			x1 += page.space_advance;
+			x2 -= page.space_advance;
+			title_area : Clip_Rect;
+			title_area.x1 = xx x1;
+			title_area.y1 = xx y1;
+			title_area.x2 = xx x2;
+			title_area.y2 = xx y2;
+			title_bounds := calculate_drawn_text_bounds (*loaded_font, tab_name, TAB_TITLE_FONT_HEIGHT);
+			// Center tab title horizontally if it fits
+			if x1 + title_bounds.x < x2 then x1 = split.x + ti * TAB_CAPTION_WIDTH + round ((TAB_CAPTION_WIDTH - title_bounds.x) * 0.5);
+			x1 = round (x1);	// We don't handle subpixel text rendering
+			// Center tab title vertically
+			y1 = round ((window.borders.caption_height - title_bounds.y) * 0.5);
+			//immediate_clip (title_area);
+			draw_text (*loaded_font, tab_name, TAB_TITLE_FONT_HEIGHT, vec2 (x1, y1), foreground_color, title_area);
+			immediate_noclip ();
 		}
-		else
-		{
-			tab_name = fstring (temp_allocator, "Tab %", i + 1);
-		}
-
-		TAB_TITLE_FONT_HEIGHT : u32 : 14;
-		page := get_font_page (*loaded_font, TAB_TITLE_FONT_HEIGHT);
-		x1 := cast (f32) i * TAB_CAPTION_WIDTH;
-		x2 := x1 + TAB_CAPTION_WIDTH;
-		y1 := 0.0;
-		y2 := cast (f32) window.borders.caption_height;
-		background_color := ifx i == active_tab_index then config.tab_caption_background_color else config.tab_caption_inactive_background_color;
-		immediate_quad (x1, y1, x2, y2, background_color);
-
-		x1 += page.space_advance;
-		clip_rect : Clip_Rect;
-		clip_rect.x1 = xx x1;
-		clip_rect.y1 = xx y1;
-		clip_rect.x2 = cast (s32) (x2 - xx page.space_advance);
-		clip_rect.y2 = xx y2;
-		tab_title := calculate_drawn_text_bounds (*loaded_font, tab_name, TAB_TITLE_FONT_HEIGHT);
-		// Center tab title if it fits
-		if x1 + tab_title.x < x2 then x1 = cast (f32) i * TAB_CAPTION_WIDTH + round ((TAB_CAPTION_WIDTH - tab_title.x) * 0.5);
-		y1 = round ((window.borders.caption_height - tab_title.y) * 0.5);
-		immediate_clip (clip_rect);
-		draw_text (*loaded_font, tab_name, TAB_TITLE_FONT_HEIGHT, vec2 (x1, y1), foreground_color, clip_rect);
-		immediate_noclip ();
 	}
-	// Update the window move area so we can't move the window when hovering tab captions
-	window.borders.caption_left = xx xoffset;
 
+	// Draw window buttons
 	for i : 0..2
 	{
 		x1 := cast (f32) width - (i + 1) * window.borders.caption_buttons_width;
@@ -602,10 +745,10 @@ draw_screen :: (using screen : *Screen)
 		}
 	}
 
-	if tabs.count == 0
+	if splits.count == 0
 	{
 		immediate_clip (views_area);
-		// Draw lines crossing the screen if no text view is opened
+		// Draw lines crossing the screen if nothing is opened
 		LINE_THICKNESS :: 6.0;
 		i := 0.0;
 		count := max (width, height);
@@ -617,7 +760,33 @@ draw_screen :: (using screen : *Screen)
 	}
 	else
 	{
-		draw_tab (get_tab (screen));
+		// Draw active tabs for each splits
+		immediate_noclip ();
+		for * split, i : splits
+		{
+			tab   := active_tab (split);
+			if tab.needs_redraw
+			{
+				tab.needs_redraw = false;
+				immediate_framebuffer (split.framebuffer.fbo);
+				immediate_framebuffer_viewport (0, 0, xx split.framebuffer.width, xx split.framebuffer.height);
+				active := !is_inputting_command && i == active_split_index;
+				draw_tab (tab, active);
+				immediate_framebuffer (0);
+			}
+
+			// Draw the texture on a quad
+			immediate_texture (split.framebuffer.texture);
+			immediate_quad (round (split.x), round (split.y), round (split.x) + split.framebuffer.width, round (split.y) + split.framebuffer.height,
+				vec4 (1, 1, 1, 1), vec2 (0, 1), vec2 (1, 1), vec2 (1, 0), vec2 (0, 0));
+			immediate_texture (0);
+		}
+		
+		for * split, i : splits
+		{
+			if i == splits.count - 1 then break;
+			immediate_line (vec2 (split.x + split.w, 0), vec2 (split.x + split.w, split.y + split.h), config.split_separation_color, 1);
+		}
 	}
 
 	// Draw the bottom bar
@@ -632,11 +801,11 @@ draw_screen :: (using screen : *Screen)
 		bounds := calculate_drawn_text_bounds (*loaded_font, ">", config.bottom_io_font_height);
 		position.x += bounds.x;
 		
-		// @Fix (stefan): The clipping rect's height is the entire screen because clipping is buggy right now.
 		command_text_clip := bottom_bar;
-		command_text_clip.x1 = xx position.x;
-		command_text_clip.y1 = 0;
-		command_text_clip.y2 = xx height;
+		command_text_clip.x1 += xx (bounds.x + config.bottom_io_padding);
+		command_text_clip.x2 -= xx config.bottom_io_padding;
+		command_text_clip.y1 += xx config.bottom_io_padding;
+		command_text_clip.y2 -= xx config.bottom_io_padding;
 
 		cursor_position := calculate_drawn_cursor_position (*command_input, config.bottom_io_font_height, position);
 		xoffset := 0.0;
@@ -656,49 +825,252 @@ draw_screen :: (using screen : *Screen)
 	}
 }
 
-draw_tab :: (using tab : *Screen_Tab)
+draw_tab :: (using tab : *Screen_Tab, is_active : bool)
 {
-	immediate_noclip ();
-	if visible_views.count == 0
-	{
-		x1 := 0.0;
-		x2 := cast (f32) screen.width;
-		y1 := cast (f32) window.borders.caption_height;
-		y2 := cast (f32) screen.height - bottom_bar_height ();
-		immediate_quad (x1, y1, x2, y2, config.tab_background_color);
-	}
+	buffer_page := get_font_page (*loaded_font, config.buffer_font_height);
+	info_page   := get_font_page (*loaded_font, config.buffer_info_font_height);
+	text_line_height := buffer_page.ascender - buffer_page.descender;
+	info_line_height := info_page.ascender   - info_page.descender;
+	text_offset          : Vec2;
+	tab_area             : Clip_Rect;
+	line_bar             : Clip_Rect;
+	line_number_position : Vec2;
+	text_area            : Clip_Rect;
+	text_position        : Vec2;
+	info_bar             : Clip_Rect;
+	info_text_position   : Vec2;
 
-	// Draw views
-	for visible_views
+	immediate_push_state ();
+	defer immediate_pop_state ();
+
+	max_line_digit_count := 0;
 	{
-		if it.kind ==
+		temp := input.buffer.lines.count;
+		while temp
 		{
-		case .TEXT;
-			profile ("draw text view");
-			// Draw the view onto its associated framebuffer
-			if it.needs_redraw
-			{
-				it.needs_redraw = false;
-				active := !screen.is_inputting_command && it.index_in_views_array == active_view_index;
-				immediate_framebuffer (it.framebuffer.fbo);
-				immediate_framebuffer_viewport (0, 0, xx it.framebuffer.width, xx it.framebuffer.height);
-				draw_text_view (cast (*Text_View) it, active);
-				immediate_framebuffer (0);
-			}
-			// Draw the texture on a quad
-			immediate_texture (it.framebuffer.texture);
-			immediate_quad (round (it.x), round (it.y), round (it.x) + it.framebuffer.width, round (it.y) + it.framebuffer.height,
-				vec4 (1, 1, 1, 1), vec2 (0, 1), vec2 (1, 1), vec2 (1, 0), vec2 (0, 0));
-			immediate_texture (0);
+			temp /= 10;
+			max_line_digit_count += 1;
 		}
 	}
 
-	// Draw visible view separations
-	for visible_views
+	line_number_builder := make_string_builder (max_line_digit_count * input.buffer.lines.count, temp_allocator);
+	for line : 1..input.buffer.lines.count
 	{
-		if it_index == visible_views.count - 1 then break;
-
-		if it.x + it.w < xx screen.width
-			immediate_line (vec2 (it.x + it.w, it.y), vec2 (it.x + it.w, it.y + it.h), config.view_separation_color, 1);
+		print_to_builder (*line_number_builder, " ");
+		// Align right
+		digit_count := 0;
+		temp := line;
+		while temp
+		{
+			temp /= 10;
+			digit_count += 1;
+		}
+		leading_spaces := max_line_digit_count - digit_count;
+		for 0..leading_spaces - 1
+			print_to_builder (*line_number_builder, " ");
+			
+		print_line_to_builder (*line_number_builder, "% ", line);
 	}
+
+	{
+		tab_area.x1 = 0;
+		tab_area.x2 = cast (s32) split.framebuffer.width;
+		tab_area.y1 = 0;
+		tab_area.y2 = cast (s32) split.framebuffer.height;
+	}
+
+	{
+		info_bar.x1 = tab_area.x1;
+		info_bar.x2 = tab_area.x2;
+		info_bar.y1 = tab_area.y2 - cast (s32) (2 * config.buffer_info_padding + info_line_height);
+		info_bar.y2 = tab_area.y2;
+	}
+
+	{
+		line_info_text_end : Vec2;
+		{
+			line_info_text_end = calculate_drawn_text_bounds (*loaded_font, to_string (line_number_builder), config.buffer_font_height);
+		}
+		line_bar.x1 = tab_area.x1;
+		line_bar.x2 = line_bar.x1 + cast (s32) (line_info_text_end.x + 2 * config.buffer_line_numbers_padding);
+		line_bar.y1 = tab_area.y1;
+		line_bar.y2 = info_bar.y1;
+	}
+
+	{
+		text_area.x1 = line_bar.x2;
+		text_area.x2 = tab_area.x2;
+		text_area.y1 = tab_area.y1;
+		text_area.y2 = info_bar.y1;
+	}
+	
+	// Limit the scrolling to the text bounds
+	text_max := calculate_drawn_text_bounds (*input, config.buffer_font_height);
+	max_scrolling  := vec2 (ceil (text_max.x / buffer_page.space_advance), ceil (text_max.y / text_line_height));
+	max_scrolling.x = max (max_scrolling.x - 2, 0);		// Add padding
+	if text_max.x < xx (text_area.x2 - text_area.x1) then max_scrolling.x = 0;
+	if text_max.y < xx (text_area.y2 - text_area.y1) then max_scrolling.y = 0;
+	max_scrolling.y = max (max_scrolling.y - 2, 0);		// Add padding
+	if scrolling.x > max_scrolling.x then scrolling.x = max_scrolling.x;
+	if scrolling.y > max_scrolling.y then scrolling.y = max_scrolling.y;
+
+	scroll_lerp_amount := clamp (1 - config.visual_scrolling_smoothing, 0.05, 1);
+	visual_scrolling = lerp (visual_scrolling, scrolling, scroll_lerp_amount);
+	text_offset      = vec2 (-visual_scrolling.x * buffer_page.space_advance, -visual_scrolling.y * text_line_height);
+	// Calculate the text position
+	text_position.x = cast (f32) text_area.x1 + text_offset.x;
+	text_position.y = cast (f32) text_area.y1 + text_offset.y;
+	// Make sure the cursor is inside the text area if the user modified the buffer
+	if scroll_to_cursor
+	{
+		cursor_position := calculate_drawn_cursor_position (*input, config.buffer_font_height, VEC2_ZERO);
+		// @Cleanup @Speed (stefan): Make this use math instead of loops.
+		while text_position.x + cursor_position.x < xx text_area.x1 && scrolling.x > 0
+		{
+			scrolling.x    -= 1;
+			visual_scrolling.x = lerp (visual_scrolling.x, scrolling.x, scroll_lerp_amount);
+			text_offset.x      = -visual_scrolling.x * buffer_page.space_advance;
+			text_position.x    = cast (f32) text_area.x1 + text_offset.x;
+		}
+
+		while text_position.x + cursor_position.x + buffer_page.space_advance > xx text_area.x2
+		{
+			scrolling.x    += 1;
+			visual_scrolling.x = lerp (visual_scrolling.x, scrolling.x, scroll_lerp_amount);
+			text_offset.x      = -visual_scrolling.x * buffer_page.space_advance;
+			text_position.x    = cast (f32) text_area.x1 + text_offset.x;
+		}
+
+		while text_position.y + cursor_position.y < xx text_area.y1 && scrolling.y > 0
+		{
+			scrolling.y    -= 1;
+			visual_scrolling.y = lerp (visual_scrolling.y, scrolling.y, scroll_lerp_amount);
+			text_offset.y      = -visual_scrolling.y * text_line_height;
+			text_position.y    = cast (f32) text_area.y1 + text_offset.y;
+		}
+		
+		while text_position.y + cursor_position.y + text_line_height > xx text_area.y2
+		{
+			scrolling.y    += 1;
+			visual_scrolling.y = lerp (visual_scrolling.y, scrolling.y, scroll_lerp_amount);
+			text_offset.y      = -visual_scrolling.y * text_line_height;
+			text_position.y    = cast (f32) text_area.y1 + text_offset.y;
+		}
+		
+		// Reset the flag
+		scroll_to_cursor = false;
+	}
+	
+	if !approx_equal (visual_scrolling.x, xx scrolling.x, 0.0001) || !approx_equal (visual_scrolling.y, xx scrolling.y, 0.0001)
+	{
+		// We are still scrolling, so redraw next time
+		needs_redraw = true;
+	}
+	else
+	{
+		visual_scrolling.x = xx scrolling.x;
+		visual_scrolling.y = xx scrolling.y;
+	}
+
+	immediate_clip (tab_area);
+	// View background
+	immediate_quad (cast (f32) tab_area.x1, cast (f32) tab_area.y1, cast (f32) tab_area.x2, cast (f32) tab_area.y2, config.buffer_background_color);
+	// Line number - text separation
+	immediate_line (vec2 (xx line_bar.x2, xx tab_area.y1), vec2 (xx line_bar.x2, xx info_bar.y1), config.buffer_line_numbers_separation_color, 1);
+
+	// Draw line numbers
+	line_number_position.x = cast (f32) line_bar.x1 + config.buffer_line_numbers_padding;
+	line_number_position.y = cast (f32) line_bar.y1 + text_offset.y;
+	immediate_clip (line_bar);
+	{
+		draw_text (*loaded_font, to_string (line_number_builder), config.buffer_font_height, line_number_position, config.buffer_line_numbers_text_color, line_bar);
+	}
+
+	if language == .JAI
+	{
+		buffer_str    := stitch_front_and_back_together (input.buffer, temp_allocator);
+		color_ranges  := make_array (Text_Color_Range, 1500, temp_allocator);
+		lexer         := make_lexer (buffer_str);
+		current_token := jai_read_next_token (*lexer);
+		while current_token.kind != .EOI
+		{
+			color_range : Text_Color_Range;
+			color_range.start = current_token.start - lexer.start;
+			color_range.end   = current_token.end   - lexer.start;
+			color_range.l0    = current_token.l0;
+			color_range.c0    = current_token.c0;
+			color_range.l1    = current_token.l1;
+			color_range.c1    = current_token.c1;
+			color_range.color = NOT_QUITE_WHITE;
+			if current_token.kind ==
+			{
+			case .UNKNOWN; #through;
+			case .INVALID_NUMBER_LITERAL; #through;
+			case .INVALID_COMPILER_DIRECTIVE; color_range.color = color (235, 64, 52);
+			case .COMMENT; color_range.color = color (82, 176, 65);
+			case .IDENTIFIER; color_range.color = NOT_QUITE_WHITE;
+			case .CONTROL_KEYWORD; color_range.color = color (232, 121, 178);
+			case .STORAGE_TYPE_KEYWORD; #through;
+			case .TYPE_KEYWORD; #through;
+			case .FUNCTION_KEYWORD; #through;
+			case .POLYMORPHIC_ARGUMENT; #through;
+			case .COMPILER_DIRECTIVE; #through;
+			case .NOTE; #through;
+			case .OTHER_KEYWORD; color_range.color = color (74, 161, 255);
+			case .STRING_LITERAL; color_range.color = color (224, 131, 105);
+			case .NUMBER_LITERAL; color_range.color = color (174, 219, 154);
+			case .SYMBOL; color_range.color = NOT_QUITE_WHITE;
+			}
+			
+			push_to_array (*color_ranges, color_range);
+			current_token = jai_read_next_token (*lexer);
+		}
+
+		// Draw text buffer
+		immediate_clip (text_area);
+		{
+			draw_text_input (*input, config.buffer_font_height, text_position, color_ranges, text_area, active = is_active, render_whitespace = config.buffer_render_whitespace, whitespace_dimming = config.buffer_rendered_whitespace_dimming);
+		}
+	}
+	else
+	{
+		// Draw text buffer
+		immediate_clip (text_area);
+		{
+			draw_text_input (*input, config.buffer_font_height, text_position, NOT_QUITE_WHITE, text_area, active = is_active, render_whitespace = config.buffer_render_whitespace, whitespace_dimming = config.buffer_rendered_whitespace_dimming);
+		}
+	}
+
+	if config.buffer_show_scrollbar
+	{
+		SCROLLBAR_WIDTH  :: 15;
+		SCROLLBAR_HEIGHT :: 25;
+		x1 := cast (f32) text_area.x2 - SCROLLBAR_WIDTH;
+		x2 := cast (f32) text_area.x2;
+		y1 := cast (f32) text_area.y1;
+		y2 := cast (f32) text_area.y2;
+		
+		mouse_x, mouse_y := get_cursor_position (*window);
+		hovered := xx mouse_x >= x1 && xx mouse_x < x2 && xx mouse_y >= y1 && xx mouse_y < y2;
+		scrollbar_alpha = lerp (scrollbar_alpha, ifx hovered then 0.6 else 0.3, 0.3);
+		immediate_line (vec2 (x1, y1), vec2 (x1, y2), vec4 (0.3, 0.3, 0.3, scrollbar_alpha), 1);
+		// @Todo
+	}
+
+	immediate_clip (info_bar);
+	// Info bar background
+	immediate_quad (cast (f32) info_bar.x1, cast (f32) info_bar.y1, cast (f32) info_bar.x2, cast (f32) info_bar.y2, config.buffer_info_background_color);
+	
+	// Draw info text
+	info_text_position.x = cast (f32) info_bar.x1 + config.buffer_info_padding;
+	info_text_position.y = cast (f32) info_bar.y1 + config.buffer_info_padding;
+	tab_name := get_tab_name (tab);
+	info_str : string;
+	if language != .NONE
+		info_str = fstring (temp_allocator, "% - Ln %, Col % - % line(s) - UTF8 - % - %",
+			tab_name, input.buffer.line_index + 1, input.buffer.column_index + 1, input.buffer.lines.count, input.eol_sequence, language);
+	else
+		info_str = fstring (temp_allocator, "% - Ln %, Col % - % line(s) - UTF8 - %",
+			tab_name, input.buffer.line_index + 1, input.buffer.column_index + 1, input.buffer.lines.count, input.eol_sequence);
+	draw_text (*loaded_font, info_str, config.buffer_info_font_height, info_text_position, config.buffer_info_text_color, tab_area);
 }

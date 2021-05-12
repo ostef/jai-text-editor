@@ -9,7 +9,7 @@ Config :: struct
 	inactive_stripes_color               := DARK_GRAY;
 	bottom_io_background_color           := NOT_QUITE_BLACK;
 	bottom_io_text_color                 := NOT_QUITE_WHITE;
-	view_separation_color                := LIGHT_GRAY;
+	split_separation_color               := LIGHT_GRAY;
 	buffer_background_color              := NOT_QUITE_BLACK;
 	buffer_text_color                    := NOT_QUITE_WHITE;
 	buffer_line_numbers_text_color       := LIGHT_GRAY;
@@ -36,12 +36,11 @@ Config :: struct
 
 	// Key bindings
 	key_toggle_command_input := Key_Binding.{ Mods.NONE, .ESCAPE };
-	key_previous_tab  := Key_Binding.{ Mods.CONTROL | .SHIFT, .W };
-	key_next_tab      := Key_Binding.{ Mods.CONTROL | .SHIFT, .E };
-	key_previous_view := Key_Binding.{ Mods.CONTROL, .W };
-	key_next_view     := Key_Binding.{ Mods.CONTROL, .E };
-	key_close_view    := Key_Binding.{ Mods.CONTROL, .Q };
-	
+	key_previous_split  := Key_Binding.{ Mods.CONTROL, .W };
+	key_next_split      := Key_Binding.{ Mods.CONTROL, .E };
+	key_previous_tab := Key_Binding.{ Mods.CONTROL | .SHIFT, .W };
+	key_next_tab     := Key_Binding.{ Mods.CONTROL | .SHIFT, .E };
+
 	key_copy  := Key_Binding.{ Mods.CONTROL, .C };
 	key_cut   := Key_Binding.{ Mods.CONTROL, .X };
 	key_paste := Key_Binding.{ Mods.CONTROL, .V };

@@ -78,110 +78,138 @@ execute_command :: (using screen : *Screen, str : string)
 		}
 	}
 	
-	if command then command.proc (screen, args);
+	if command
+	{
+		command.proc (screen, args);
+		tab := active_tab (screen);
+		if tab then tab.needs_redraw = true;
+	}
 	else print_to_screen (screen, "Command '%' does not exist.", name);
 }
 
-text_view_barebones :: () #expand
+command_split :: (using screen : *Screen)
 {
-	`tab := get_tab (`screen);
-	if !tab then `return;
-	if tab.text_views.count == 0 then `return;
-
-	`view := cast (*Text_View) tab.visible_views[tab.active_view_index];
-	if view.kind != .TEXT
-	{
-		print_to_screen (`screen, "Active view is not a text view.");
-
-		`return;
-	}
+	ok := move_active_tab_to_a_new_split (screen);
+	if ok then print_to_screen (screen, "Moved active tab to a new split.");
 }
+@Command
 
-// Split the active view horizontally
-command_split :: (using screen : *Screen, filename := "")
+command_unsplit :: (using screen : *Screen)
 {
-	if tabs.count == 0
-		open_new_tab (screen, filename);
+	if screen.splits.count < 2 then return;
+	merge_active_split (screen);
+	print_to_screen (screen, "Merged split.");
+}
+@Command
+
+command_new_split :: (using screen : *Screen, filename := "")
+{
+	ok := new_split (screen, filename);
+	if filename
+	{
+		if ok then print_to_screen (screen, "New split with file '%'.", filename);
+		else print_to_screen (screen, "Could not open file '%'.", filename);
+	}
 	else
-		split_active_view_into_text_view (get_tab (screen), filename);
-		
-	print_to_screen (screen, "Split active text view.");
+	{
+		print_to_screen (screen, "New split.");
+	}
 }
 @Command
 
 command_new_tab :: (using screen : *Screen, filename := "")
 {
-	open_new_tab (screen, filename);
-	print_to_screen (screen, "Opened a new tab.");
+	split := active_split (screen);
+	if !split
+	{
+		ok := new_split (screen, filename);
+		if ok then print_to_screen (screen, "Opened file '%' in a new tab.", filename);
+		else print_to_screen (screen, "Could not open file '%'.", filename);
+	}
+	else
+	{
+		ok := open_new_tab (split, filename);
+		if ok then print_to_screen (screen, "Opened file '%' in a new tab.", filename);
+		else print_to_screen (screen, "Could not open file '%'.", filename);
+	}
 }
 @Command
 
-// Open the specified file into the active text view. If the file does not exist, create a new file on disk when it is saved for the first time.
 command_open :: (using screen : *Screen, filename : string)
 {
-	tab := get_or_add_tab (screen);
-	if tab.text_views.count == 0 then split_active_view_into_text_view (tab);
-	ok := load_file_into_active_text_view (tab, filename);
-	if ok then print_to_screen (screen, "Opened file '%' into active view.", filename);
-	else print_to_screen (screen, "Could not open file '%' into active view.", filename);
+	tab := active_tab (screen);
+	if !tab
+	{
+		command_new_split (screen, filename);
+	}
+	else
+	{
+		ok := load_file_into_active_tab (tab, filename);
+		if ok then print_to_screen (screen, "Opened file '%' into active tab.", filename);
+		else print_to_screen (screen, "Could not open file '%' into active tab.", filename);
+	}
 }
 @Command
 
 command_save :: (using screen : *Screen)
 {
-	text_view_barebones ();
+	tab := active_tab (screen);
+	if !tab then return;
 
-	if !view.filename
+	if !tab.filename
 	{
 		print_to_screen (screen, "Active buffer is not bound to a file. Use 'save_as' instead.");
 
 		return;
 	}
 
-	ok := write_buffer_to_file (*view.input, view.filename);
+	ok := write_buffer_to_file (*tab.input, tab.filename);
 	if ok
 	{
-		print_to_screen (screen, "Saved buffer to file '%'.", view.filename);
-		view.is_dirty = false;
+		print_to_screen (screen, "Saved buffer to file '%'.", tab.filename);
+		tab.is_dirty = false;
 	}
 	else
 	{
-		print_to_screen (screen, "Could not save buffer to file '%'.", view.filename);
+		print_to_screen (screen, "Could not save buffer to file '%'.", tab.filename);
 	}
 }
 @Command
 
 command_save_as :: (using screen : *Screen, filename : string)
 {
-	text_view_barebones ();
+	tab := active_tab (screen);
+	if !tab then return;
 
-	if view.filename then free (view.filename, heap_allocator);
-	view.filename = clone_string (filename, heap_allocator);
-	detect_language (view);
+	if tab.filename then free (tab.filename, heap_allocator);
+	tab.filename = get_full_path (filename, heap_allocator);
+	detect_language (tab);
 
-	ok := write_buffer_to_file (*view.input, view.filename);
+	ok := write_buffer_to_file (*tab.input, tab.filename);
 	if ok
 	{
-		print_to_screen (screen, "Saved buffer to file '%'.", view.filename);
-		view.is_dirty = false;
+		print_to_screen (screen, "Saved buffer to file '%'.", tab.filename);
+		tab.is_dirty = false;
 	}
 	else
 	{
-		print_to_screen (screen, "Could not save buffer to file '%'.", view.filename);
+		print_to_screen (screen, "Could not save buffer to file '%'.", tab.filename);
 	}
 }
 @Command
 
 command_save_all :: (using screen : *Screen)
 {
+	if splits.count == 0 then return;
+	
 	saved   := 0;
 	failed  := 0;
 	no_file := 0;
-	for * tab, i : tabs
+	for * split, i : splits
 	{
-		for * text_view, ti : tab.text_views
+		for * tab, ti : split.tabs
 		{
-			if !text_view.filename
+			if !tab.filename
 			{
 				failed  += 1;
 				no_file += 1;
@@ -189,7 +217,7 @@ command_save_all :: (using screen : *Screen)
 				continue;
 			}
 
-			ok := write_buffer_to_file (*text_view.input, text_view.filename);
+			ok := write_buffer_to_file (*tab.input, tab.filename);
 			if ok then saved += 1;
 			else failed += 1;
 		}
@@ -199,137 +227,90 @@ command_save_all :: (using screen : *Screen)
 }
 @Command
 
-// Close the active text view
 command_close :: (using screen : *Screen)
 {
-	tab := get_tab (screen);
-	if !tab
+	split := active_split (screen);
+	if !split
 	{
-		// Quit
 		running = false;
-	}
-	else if tab.visible_views.count == 0
-	{
-		close_current_tab (screen);
-		print_to_screen (screen, "Closed current tab.");
+		print_to_screen (screen, "Quit.");
 	}
 	else
 	{
-		close_active_view (tab);
-		print_to_screen (screen, "Closed active view.");
+		close_active_tab (screen);
+		print_to_screen (screen, "Closed active tab.");
 	}
 }
 @Command
 
-// Close all text views
 command_close_all :: (using screen : *Screen)
 {
-	tab := get_tab (screen);
-	if !tab then return;
-	if tab.visible_views.count == 0
-	{
-		close_current_tab (screen);
-		print_to_screen (screen, "Closed current tab.");
-	}
-	else
-	{
-		while tab.visible_views.count != 0
-			close_active_view (tab);
-		
-		print_to_screen (screen, "Closed all views.");
-	}
-}
-@Command
-
-command_close_tab :: (using screen : *Screen)
-{
-	if tabs.count == 0 then return;
-	tab := get_tab (screen);
-	while tab.visible_views.count != 0
-		close_active_view (tab);
-	print_to_screen (screen, "Closed current tab.");
-}
-@Command
-
-command_close_all_tabs :: (using screen : *Screen)
-{
-	while tabs.count > 0
-	{
-		tab := get_tab (screen);
-		while tab.visible_views.count != 0
-			close_active_view (tab);
-	}
+	if splits.count == 0 then return;
+	while splits.count > 0
+		close_active_tab (screen);
+	
 	print_to_screen (screen, "Closed all tabs.");
 }
 @Command
 
-// Quit the program
 command_quit :: (using screen : *Screen)
 {
 	running = false;
-}
-@Command
-
-// Open a new scratch buffer into a new text view
-command_scratch :: (using screen : *Screen)
-{
-	// @Todo
-	print_to_screen (screen, "New scratch buffer.");
+	print_to_screen (screen, "Quit.");
 }
 @Command
 
 #scope_file
 
-resize_helper :: (using tab : *Screen_Tab, amount : s64, left : bool) -> bool
+resize_helper :: (using split : *Screen_Split, amount : s64, left : bool) -> bool
 {
-	if visible_views.count <= 1 then return false;
+	if screen.splits.count < 2 then return false;
 
 	page := get_font_page (*loaded_font, config.buffer_font_height);
-	view := visible_views[active_view_index];
 	if left
 	{
-		if active_view_index != 0
+		if screen.active_split_index != 0
 		{
-			previous_view := visible_views[active_view_index - 1];
-			if view.w < previous_view.w
+			previous_split := *screen.splits[screen.active_split_index - 1];
+			if w < previous_split.w
 			{
-				amount = xx (max (view.w + page.space_advance * amount, page.space_advance * 10.0) - view.w);
+				amount = xx (max (w + page.space_advance * amount, page.space_advance * 10.0) - w);
 				amount /= page.space_advance;
 			}
 			else
 			{
-				amount = xx -(max (previous_view.w - page.space_advance * amount, page.space_advance * 10.0) - previous_view.w);
+				amount = xx -(max(previous_split.w - page.space_advance * amount, page.space_advance * 10.0) - previous_split.w);
 				amount /= page.space_advance;
 			}
-			previous_view.w -= page.space_advance * amount;
-			resize_view (previous_view);
-			view.x -= page.space_advance * amount;
-			view.w += page.space_advance * amount;
+			previous_split.w -= page.space_advance * amount;
+			resize_split (previous_split);
+			x -= page.space_advance * amount;
+			w += page.space_advance * amount;
 		}
 	}
 	else
 	{
-		if active_view_index != visible_views.count - 1
+		if screen.active_split_index != screen.splits.count - 1
 		{
-			next_view := visible_views[active_view_index + 1];
-			if view.w < next_view.w
+			next_split := *screen.splits[screen.active_split_index + 1];
+			if w < next_split.w
 			{
-				amount = xx (max (view.w + page.space_advance * amount, page.space_advance * 10.0) - view.w);
+				amount = xx (max (w + page.space_advance * amount, page.space_advance * 10.0) - w);
 				amount /= page.space_advance;
 			}
 			else
 			{
-				amount = xx -(max (next_view.w - page.space_advance * amount, page.space_advance * 10.0) - next_view.w);
+				amount = xx -(max (next_split.w - page.space_advance * amount, page.space_advance * 10.0) - next_split.w);
 				amount /= page.space_advance;
 			}
-			view.w += page.space_advance * amount;
-			next_view.x += page.space_advance * amount;
-			next_view.w -= page.space_advance * amount;
-			resize_view (next_view);
+			w += page.space_advance * amount;
+			next_split.x += page.space_advance * amount;
+			next_split.w -= page.space_advance * amount;
+			resize_split (next_split);
 		}
 	}
 	
-	resize_view (view);
+	resize_split (split);
 
 	return true;
 }
@@ -338,56 +319,54 @@ resize_helper :: (using tab : *Screen_Tab, amount : s64, left : bool) -> bool
 
 command_lgrow :: (using screen : *Screen, amount : u64 = 1)
 {
-	tab := get_tab (screen);
-	if !tab then return;
+	split := active_split (screen);
+	if !split then return;
 	if amount == 0 then amount = 1;
-	if resize_helper (tab, xx amount, true) then print_to_screen (screen, "Grew active view.");
+	if resize_helper (split, xx amount, true) then print_to_screen (screen, "Grew active split.");
 }
 @Command
 
 command_rgrow :: (using screen : *Screen, amount : u64 = 1)
 {
-	tab := get_tab (screen);
-	if !tab then return;
+	split := active_split (screen);
+	if !split then return;
 	if amount == 0 then amount = 1;
-	if resize_helper (tab, xx amount, false) then print_to_screen (screen, "Grew active view.");
+	if resize_helper (split, xx amount, false) then print_to_screen (screen, "Grew active split.");
 }
 @Command
 
 command_lshrink :: (using screen : *Screen, amount : u64 = 1)
 {
-	tab := get_tab (screen);
-	if !tab then return;
+	split := active_split (screen);
+	if !split then return;
 	if amount == 0 then amount = 1;
-	if resize_helper (tab, -cast (s64) amount, true) then print_to_screen (screen, "Shrank active view.");
+	if resize_helper (split, -cast (s64) amount, true) then print_to_screen (screen, "Shrank active split.");
 }
 @Command
 
 command_rshrink :: (using screen : *Screen, amount : u64 = 1 )
 {
-	tab := get_tab (screen);
-	if !tab then return;
+	split := active_split (screen);
+	if !split then return;
 	if amount == 0 then amount = 1;
-	if resize_helper (tab, -cast (s64) amount, false) then print_to_screen (screen, "Shrank active view.");
+	if resize_helper (split, -cast (s64) amount, false) then print_to_screen (screen, "Shrank active split.");
 }
 @Command
 
-// Make all text views have the same width
+// Make all splits have the same width
 command_equalize :: (using screen : *Screen)
 {
-	tab := get_tab (screen);
-	if !tab then return;
-	if tab.visible_views.count <= 1 then return;
-
-	view_width := width / cast (f32) tab.visible_views.count;
-	for view, i : tab.visible_views
+	if splits.count < 2 then return;
+	
+	split_width := width / cast (f32) splits.count;
+	for * split, i : splits
 	{
-		view.x = i * view_width;
-		view.w = view_width;
-		resize_view (view);
+		split.x = i * split_width;
+		split.w = split_width;
+		resize_split (split);
 	}
 
-	print_to_screen (screen, "Equalized view widths.");
+	print_to_screen (screen, "Equalized split widths.");
 }
 @Command
 
@@ -415,9 +394,10 @@ command_reload_config :: (using screen : *Screen, filename := "")
 
 command_line :: (using screen : *Screen, line : s64)
 {
-	text_view_barebones ();
-	
-	buffer := *view.input.buffer;
+	tab := active_tab (screen);
+	if !tab then return;
+
+	buffer := *tab.input.buffer;
 	if line < 0 then line = 1;
 	else if line > buffer.lines.count then line = buffer.lines.count;
 
@@ -428,7 +408,7 @@ command_line :: (using screen : *Screen, line : s64)
 		move_cursor_backward (buffer);
 
 	move_cursor_to_bol (buffer);
-	view.scroll_to_cursor = true;
+	tab.scroll_to_cursor = true;
 
 	print_to_screen (screen, "Moved cursor to line %.", line);
 }
@@ -436,16 +416,17 @@ command_line :: (using screen : *Screen, line : s64)
 
 command_to_crlf :: (using screen : *Screen)
 {
-	text_view_barebones ();
+	tab := active_tab (screen);
+	if !tab then return;
 
-	if view.input.eol_sequence == .CRLF
+	if tab.input.eol_sequence == .CRLF
 	{
 		print_to_screen (screen, "Buffer is already CRLF.");
 
 		return;
 	}
 
-	view.input.eol_sequence = .CRLF;
+	tab.input.eol_sequence = .CRLF;
 	
 	print_to_screen (screen, "Converted buffer line endings to CRLF.");
 }
@@ -453,16 +434,17 @@ command_to_crlf :: (using screen : *Screen)
 
 command_to_lf :: (using screen : *Screen)
 {
-	text_view_barebones ();
+	tab := active_tab (screen);
+	if !tab then return;
 
-	if view.input.eol_sequence == .LF
+	if tab.input.eol_sequence == .LF
 	{
 		print_to_screen (screen, "Buffer is already LF.");
 
 		return;
 	}
 
-	view.input.eol_sequence = .LF;
+	tab.input.eol_sequence = .LF;
 
 	print_to_screen (screen, "Converted buffer line endings to LF.");
 }
@@ -470,12 +452,13 @@ command_to_lf :: (using screen : *Screen)
 
 command_lang :: (using screen : *Screen, language : string)
 {
-	text_view_barebones ();
+	tab := active_tab (screen);
+	if !tab then return;
 
 	if language ==
 	{
 	case "jai";
-		view.language = .JAI;
+		tab.language = .JAI;
 
 	case;
 		print_to_screen (screen, "Unkown language '%'.", language);
@@ -483,7 +466,7 @@ command_lang :: (using screen : *Screen, language : string)
 		return;
 	}
 
-	print_to_screen (screen, "Set active text view's language to '%'.", language);
+	print_to_screen (screen, "Set active tab's language to '%'.", language);
 }
 @Command
 
