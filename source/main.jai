@@ -95,9 +95,6 @@ main :: ()
 	}
 	toggle_command_input (*screen);
 
-	clear_color := get_color_from_theme ("primary_very_light", "inactive_background");
-	glClearColor (clear_color.r, clear_color.g, clear_color.b, 1);
-
 	running = true;
 	while running
 	{

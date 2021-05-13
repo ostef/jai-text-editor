@@ -12,7 +12,6 @@ Screen :: struct
 	visual_cursor_position : Vec2;
 	message_buffer : String_Builder;
 
-	// Views
 	splits : [..]Screen_Split;
 	active_split_index : s64;
 
@@ -76,6 +75,8 @@ screen_handle_event :: (using screen : *Screen, event : Event)
 			frame_start := get_time ();
 			viewport_w, viewport_h := get_window_framebuffer_size (*window);
 			glViewport (0, 0, xx viewport_w, xx viewport_h);
+			clear_color := get_color_from_theme ("primary_very_light", "inactive_background");
+			glClearColor (clear_color.r, clear_color.g, clear_color.b, 1);
 			glClear (GL_COLOR_BUFFER_BIT);
 			
 			immediate_begin ();
@@ -85,11 +86,17 @@ screen_handle_event :: (using screen : *Screen, event : Event)
 			swap_window_buffers (*window);
 			frame_end := get_time ();
 			frame_response_ms := cast (u32) ((frame_end - frame_start) * 1000);
-			//println ("\n\tEvent response took % ms.\n", frame_response_ms);
+			//println ("Event response took % ms.", frame_response_ms);
 			next_timer : u32 = 16;
-			if frame_response_ms < next_timer then next_timer -= frame_response_ms;
-			// Oof, rendering took a long time and we have to schedule a render as soon as possible to keep up
-			else next_timer = 0;
+			if frame_response_ms < next_timer
+			{
+				next_timer -= frame_response_ms;
+			}
+			else
+			{
+				next_timer = 0;
+				println ("Oof, rendering took a long time and we have to schedule a render as soon as possible to keep up.");
+			}
 			schedule_timer_event (event.window, render_timer_id, next_timer);
 		}
 	
@@ -1032,11 +1039,11 @@ draw_tab :: (using tab : *Screen_Tab, is_active : bool)
 	}
 	
 	cursor_smoothing := clamp (config.visual_cursor_smoothing, 0, 0.95);
-	cursor_color := NOT_QUITE_WHITE;
+	cursor_color := get_color_from_theme ("cursor", "buffer_cursor");
 	if !is_active then cursor_color.a = 0;
 	target_cursor_position : Vec2;
 	// Draw cursor
-	visual_cursor_position, target_cursor_position = draw_cursor (*input, config.buffer_font_height, text_position, get_color_from_theme ("cursor", "buffer_cursor"), visual_cursor_position, cursor_smoothing);
+	visual_cursor_position, target_cursor_position = draw_cursor (*input, config.buffer_font_height, text_position, cursor_color, visual_cursor_position, cursor_smoothing);
 	if !approx_equal (visual_cursor_position, target_cursor_position, 0.0001)
 		needs_redraw = true;
 	else
