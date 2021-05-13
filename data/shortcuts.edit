@@ -8,7 +8,7 @@ save_as CTRL+ALT+S
 save_all CTRL+SHIFT+S
 close CTRL+Q
 close_all CTRL+SHIFT+Q
-line CTRL+L
+line CTRL+SHIFT+L
 rgrow ALT+RIGHT
 lgrow ALT+LEFT
 rshrink SHIFT+ALT+RIGHT
