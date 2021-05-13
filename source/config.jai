@@ -16,7 +16,6 @@ Config :: struct
 	buffer_info_font_height : u32 = 16;
 
 	word_skipping_stops_at_word_separators := true;
-	buffer_show_scrollbar := true;
 
 	// Key bindings
 	key_toggle_command_input := Key_Binding.{ Mods.NONE, .ESCAPE };
@@ -331,18 +330,13 @@ read_color_theme :: (theme_name : string) -> bool
 	return true;
 }
 
-get_color_from_theme :: (name : string, default_value := NOT_QUITE_WHITE) -> Vec4 #must
-{
-	return get_value (color_theme, name, default_value);
-}
-
-get_syntax_color :: (name : string, secondary_name := "", default_value := NOT_QUITE_WHITE) -> Vec4 #must
+get_color_from_theme :: (name : string, secondary_name := "", default_value := NOT_QUITE_WHITE) -> Vec4 #must
 {
 	if secondary_name
 	{
-		result, ok := get_value (color_theme, join (temp_allocator, "syntax_", secondary_name), default_value);
+		result, ok := get_value (color_theme, secondary_name, default_value);
 		if ok then return result;
 	}
 	
-	return get_value (color_theme, join (temp_allocator, "syntax_", name), default_value);
+	return get_value (color_theme, name, default_value);
 }

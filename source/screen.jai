@@ -50,7 +50,6 @@ Screen_Tab :: struct
 	language : Language;
 	visual_scrolling : Vec2;
 	visual_cursor_position : Vec2;
-	scrollbar_alpha : f32;
 }
 
 NOT_QUITE_BLACK :: Vec4.{ 0.1, 0.1, 0.1, 1 };
@@ -539,7 +538,6 @@ clear_tab :: (using tab : *Screen_Tab)
 	needs_redraw = true;
 	language = .NONE;
 	visual_scrolling = VEC2_ZERO;
-	scrollbar_alpha = 0;
 }
 
 open_new_tab :: (using split : *Screen_Split, filename : string) -> bool
@@ -663,7 +661,7 @@ draw_screen :: (using screen : *Screen)
 	defer immediate_pop_state ();
 
 	// Draw the caption bar
-	immediate_quad (0.0, 0.0, cast (f32) width, cast (f32) window.borders.caption_height, get_color_from_theme ("window_caption_background_color"));
+	immediate_quad (0.0, 0.0, cast (f32) width, cast (f32) window.borders.caption_height, get_color_from_theme ("primary_light", "window_caption_background"));
 	for * split, i : splits
 	{
 		caption_area : Clip_Rect;
@@ -674,9 +672,8 @@ draw_screen :: (using screen : *Screen)
 		
 		for * tab, ti : split.tabs
 		{
-			// @Todo (stefan): Make new entry in config for foreground color
-			foreground_color := NOT_QUITE_WHITE;
-			if tab.is_dirty then foreground_color = vec4 (0.9, 0.7, 0.3, 1);
+			foreground_color := get_color_from_theme ("primary_text", "tab_title_text");
+			if tab.is_dirty then foreground_color = get_color_from_theme ("secondary", "tab_title_text_dirty");
 			tab_name := get_tab_name (tab);
 			TAB_TITLE_FONT_HEIGHT :: 14;
 			page := get_font_page (*loaded_font, TAB_TITLE_FONT_HEIGHT);
@@ -684,8 +681,8 @@ draw_screen :: (using screen : *Screen)
 			x2 := x1 + TAB_CAPTION_WIDTH;
 			y1 := 0.0;
 			y2 := cast (f32) window.borders.caption_height;
-			background_color := get_color_from_theme ("tab_caption_inactive_background_color");
-			if ti == split.active_tab_index then background_color = get_color_from_theme ("tab_caption_background_color");
+			background_color := get_color_from_theme ("primary_very_light", "tab_caption_inactive_background_color");
+			if ti == split.active_tab_index then background_color = get_color_from_theme ("primary", "tab_caption_background_color");
 			immediate_quad (x1, y1, x2, y2, background_color);
 			
 			x1 += page.space_advance;
@@ -717,14 +714,14 @@ draw_screen :: (using screen : *Screen)
 		center := vec2 (x2 + x1, y2 + y1) * 0.5;
 		LENGTH :: 5.0;
 		background_color := vec4 (1, 1, 1, 0.1);
-		foreground_color := LIGHT_GRAY;
+		foreground_color := vec4 (1, 1, 1, 0.4);
 		if i == 0 then background_color = vec4 (0.8, 0.2, 0.3, 1);
 
 		mouse_x, mouse_y := get_cursor_position (*window);
 		if xx mouse_x >= x1 && xx mouse_x < x2 && xx mouse_y >= y1 && xx mouse_y < y2
 		{
 			immediate_quad (x1, y1, x2, y2, background_color);
-			foreground_color = NOT_QUITE_WHITE;
+			foreground_color.a = 0.6;
 		}
 
 		if i ==
@@ -754,7 +751,7 @@ draw_screen :: (using screen : *Screen)
 		count := max (width, height);
 		while i < count * 2.0
 		{
-			immediate_line (vec2 (i, -LINE_THICKNESS), vec2 (-LINE_THICKNESS, i), get_color_from_theme ("inactive_stripes_color"), LINE_THICKNESS);
+			immediate_line (vec2 (i, -LINE_THICKNESS), vec2 (-LINE_THICKNESS, i), get_color_from_theme ("secondary_very_dark", "inactive_stripes"), LINE_THICKNESS);
 			i += 50;
 		}
 	}
@@ -785,19 +782,19 @@ draw_screen :: (using screen : *Screen)
 		for * split, i : splits
 		{
 			if i == splits.count - 1 then break;
-			immediate_line (vec2 (split.x + split.w, 0), vec2 (split.x + split.w, split.y + split.h), get_color_from_theme ("split_separation_color"), 1);
+			immediate_line (vec2 (split.x + split.w, 0), vec2 (split.x + split.w, split.y + split.h), get_color_from_theme ("primary_light", "split_separation"), 1);
 		}
 	}
 
 	// Draw the bottom bar
 	immediate_clip (bottom_bar);
-	immediate_quad (cast (f32) bottom_bar.x1, cast (f32) bottom_bar.y1, cast (f32) bottom_bar.x2, cast (f32) bottom_bar.y2, get_color_from_theme ("bottom_io_background_color"));
+	immediate_quad (cast (f32) bottom_bar.x1, cast (f32) bottom_bar.y1, cast (f32) bottom_bar.x2, cast (f32) bottom_bar.y2, get_color_from_theme ("primary", "bottom_io_background"));
 
 	// Draw the command/message buffer
 	if is_inputting_command
 	{
 		position := vec2 (xx config.bottom_io_padding, cast (f32) height - config.bottom_io_padding - (page.ascender - page.descender));
-		draw_text (*loaded_font, ">", config.bottom_io_font_height, position, get_color_from_theme ("bottom_io_text_color"), bottom_bar);
+		draw_text (*loaded_font, ">", config.bottom_io_font_height, position, get_color_from_theme ("primary_text", "bottom_io_text"), bottom_bar);
 		bounds := calculate_drawn_text_bounds (*loaded_font, ">", config.bottom_io_font_height);
 		position.x += bounds.x;
 		
@@ -815,16 +812,16 @@ draw_screen :: (using screen : *Screen)
 		
 		// Clip so we don't draw over the '>'
 		immediate_clip (command_text_clip);
+		draw_text_input (*command_input, config.bottom_io_font_height, position, get_color_from_theme ("primary_text", "bottom_io_text"), bottom_bar);
 		cursor_smoothing := clamp (config.visual_cursor_smoothing, 0, 0.95);
-		cursor_color := get_color_from_theme ("cursor_color");
+		cursor_color := get_color_from_theme ("cursor", "bottom_io_cursor");
 		visual_cursor_position = draw_cursor (*command_input, config.bottom_io_font_height, position, cursor_color, visual_cursor_position, cursor_smoothing);
-		draw_text_input (*command_input, config.bottom_io_font_height, position, get_color_from_theme ("bottom_io_text_color"), bottom_bar);
 		immediate_noclip ();
 	}
 	else
 	{
 		draw_text (*loaded_font, to_string (message_buffer), config.bottom_io_font_height,
-			vec2 (xx config.bottom_io_padding, cast (f32) bottom_bar.y1 + config.bottom_io_padding), get_color_from_theme ("bottom_io_text_color"), bottom_bar);
+			vec2 (xx config.bottom_io_padding, cast (f32) bottom_bar.y1 + config.bottom_io_padding), get_color_from_theme ("primary_text", "bottom_io_text"), bottom_bar);
 	}
 }
 
@@ -890,10 +887,7 @@ draw_tab :: (using tab : *Screen_Tab, is_active : bool)
 	}
 
 	{
-		line_info_text_end : Vec2;
-		{
-			line_info_text_end = calculate_drawn_text_bounds (*loaded_font, to_string (line_number_builder), config.buffer_font_height);
-		}
+		line_info_text_end := calculate_drawn_text_bounds (*loaded_font, to_string (line_number_builder), config.buffer_font_height);
 		line_bar.x1 = tab_area.x1;
 		line_bar.x2 = line_bar.x1 + cast (s32) (line_info_text_end.x + 2 * config.buffer_line_numbers_padding);
 		line_bar.y1 = tab_area.y1;
@@ -977,30 +971,17 @@ draw_tab :: (using tab : *Screen_Tab, is_active : bool)
 
 	immediate_clip (tab_area);
 	// View background
-	immediate_quad (cast (f32) tab_area.x1, cast (f32) tab_area.y1, cast (f32) tab_area.x2, cast (f32) tab_area.y2, get_color_from_theme ("buffer_background_color"));
+	immediate_quad (cast (f32) tab_area.x1, cast (f32) tab_area.y1, cast (f32) tab_area.x2, cast (f32) tab_area.y2, get_color_from_theme ("primary", "buffer_background"));
 	// Line number - text separation
-	immediate_line (vec2 (xx line_bar.x2, xx tab_area.y1), vec2 (xx line_bar.x2, xx info_bar.y1), get_color_from_theme ("buffer_line_numbers_separation_color"), 1);
+	immediate_line (vec2 (xx line_bar.x2, xx tab_area.y1), vec2 (xx line_bar.x2, xx info_bar.y1), get_color_from_theme ("primary_light", "buffer_line_numbers_separation"), 1);
 
 	// Draw line numbers
 	line_number_position.x = cast (f32) line_bar.x1 + config.buffer_line_numbers_padding;
 	line_number_position.y = cast (f32) line_bar.y1 + text_offset.y;
 	immediate_clip (line_bar);
-	{
-		draw_text (*loaded_font, to_string (line_number_builder), config.buffer_font_height, line_number_position, get_color_from_theme ("buffer_line_numbers_text_color"), line_bar);
-	}
+	draw_text (*loaded_font, to_string (line_number_builder), config.buffer_font_height, line_number_position, get_color_from_theme ("primary_text", "buffer_line_numbers_text"), line_bar);
 
 	immediate_clip (text_area);
-	cursor_smoothing := clamp (config.visual_cursor_smoothing, 0, 0.95);
-	cursor_color := NOT_QUITE_WHITE;
-	if !is_active then cursor_color.a = 0;
-	target_cursor_position : Vec2;
-	// Draw cursor
-	visual_cursor_position, target_cursor_position = draw_cursor (*input, config.buffer_font_height, text_position, get_color_from_theme ("cursor_color"), visual_cursor_position, cursor_smoothing);
-	if !approx_equal (visual_cursor_position, target_cursor_position, 0.0001)
-		needs_redraw = true;
-	else
-		visual_cursor_position = target_cursor_position;
-
 	if language == .JAI
 	{
 		buffer_str    := stitch_front_and_back_together (input.buffer, temp_allocator);
@@ -1016,25 +997,25 @@ draw_tab :: (using tab : *Screen_Tab, is_active : bool)
 			color_range.c0    = current_token.c0;
 			color_range.l1    = current_token.l1;
 			color_range.c1    = current_token.c1;
-			color_range.color = NOT_QUITE_WHITE;
+			color_range.color = get_color_from_theme ("primary_text", "buffer_text");
 			if current_token.kind ==
 			{
-			case .UNKNOWN;                    color_range.color = get_syntax_color ("invalid");
-			case .INVALID_NUMBER_LITERAL;     color_range.color = get_syntax_color ("invalid", "invalid_number");
-			case .INVALID_COMPILER_DIRECTIVE; color_range.color = get_syntax_color ("invalid", "invalid_compiler");;
-			case .COMMENT;                    color_range.color = get_syntax_color ("comment");
-			case .IDENTIFIER;                 color_range.color = get_syntax_color ("identifier");
-			case .CONTROL_KEYWORD;            color_range.color = get_syntax_color ("keyword", "keyword_control");
-			case .STORAGE_TYPE_KEYWORD;       color_range.color = get_syntax_color ("keyword", "keyword_storage_type");
-			case .TYPE_KEYWORD;               color_range.color = get_syntax_color ("keyword", "keyword_type");
-			case .FUNCTION_KEYWORD;           color_range.color = get_syntax_color ("keyword", "keyword_function");
-			case .POLYMORPHIC_ARGUMENT;       color_range.color = get_syntax_color ("tag", "polymorphic");
-			case .COMPILER_DIRECTIVE;         color_range.color = get_syntax_color ("compiler");
-			case .NOTE;                       color_range.color = get_syntax_color ("tag");
-			case .OTHER_KEYWORD;              color_range.color = get_syntax_color ("keyword");
-			case .STRING_LITERAL;             color_range.color = get_syntax_color ("string");
-			case .NUMBER_LITERAL;             color_range.color = get_syntax_color ("number");
-			case .SYMBOL;                     color_range.color = get_syntax_color ("symbol");
+			case .UNKNOWN;                    color_range.color = get_color_from_theme ("syntax_invalid");
+			case .INVALID_NUMBER_LITERAL;     color_range.color = get_color_from_theme ("syntax_invalid", "syntax_invalid_number");
+			case .INVALID_COMPILER_DIRECTIVE; color_range.color = get_color_from_theme ("syntax_invalid", "syntax_invalid_compiler");;
+			case .COMMENT;                    color_range.color = get_color_from_theme ("syntax_comment");
+			case .IDENTIFIER;                 color_range.color = get_color_from_theme ("syntax_identifier");
+			case .CONTROL_KEYWORD;            color_range.color = get_color_from_theme ("syntax_keyword", "syntax_keyword_control");
+			case .STORAGE_TYPE_KEYWORD;       color_range.color = get_color_from_theme ("syntax_keyword", "syntax_keyword_storage_type");
+			case .TYPE_KEYWORD;               color_range.color = get_color_from_theme ("syntax_keyword", "syntax_keyword_type");
+			case .FUNCTION_KEYWORD;           color_range.color = get_color_from_theme ("syntax_keyword", "syntax_keyword_function");
+			case .POLYMORPHIC_ARGUMENT;       color_range.color = get_color_from_theme ("syntax_tag", "syntax_polymorphic");
+			case .COMPILER_DIRECTIVE;         color_range.color = get_color_from_theme ("syntax_compiler");
+			case .NOTE;                       color_range.color = get_color_from_theme ("syntax_tag");
+			case .OTHER_KEYWORD;              color_range.color = get_color_from_theme ("syntax_keyword");
+			case .STRING_LITERAL;             color_range.color = get_color_from_theme ("syntax_string");
+			case .NUMBER_LITERAL;             color_range.color = get_color_from_theme ("syntax_number");
+			case .SYMBOL;                     color_range.color = get_color_from_theme ("syntax_symbol");
 			}
 			
 			push_to_array (*color_ranges, color_range);
@@ -1047,28 +1028,23 @@ draw_tab :: (using tab : *Screen_Tab, is_active : bool)
 	else
 	{
 		// Draw text buffer
-		draw_text_input (*input, config.buffer_font_height, text_position, get_syntax_color ("syntax_none"), text_area, active = is_active, render_whitespace = config.buffer_render_whitespace, whitespace_dimming = config.buffer_rendered_whitespace_dimming);
+		draw_text_input (*input, config.buffer_font_height, text_position, get_color_from_theme ("primary_text", "buffer_text"), text_area, active = is_active, render_whitespace = config.buffer_render_whitespace, whitespace_dimming = config.buffer_rendered_whitespace_dimming);
 	}
 	
-	if config.buffer_show_scrollbar
-	{
-		SCROLLBAR_WIDTH  :: 15;
-		SCROLLBAR_HEIGHT :: 25;
-		x1 := cast (f32) text_area.x2 - SCROLLBAR_WIDTH;
-		x2 := cast (f32) text_area.x2;
-		y1 := cast (f32) text_area.y1;
-		y2 := cast (f32) text_area.y2;
-		
-		mouse_x, mouse_y := get_cursor_position (*window);
-		hovered := xx mouse_x >= x1 && xx mouse_x < x2 && xx mouse_y >= y1 && xx mouse_y < y2;
-		scrollbar_alpha = lerp (scrollbar_alpha, ifx hovered then 0.6 else 0.3, 0.3);
-		immediate_line (vec2 (x1, y1), vec2 (x1, y2), vec4 (0.3, 0.3, 0.3, scrollbar_alpha), 1);
-		// @Todo
-	}
+	cursor_smoothing := clamp (config.visual_cursor_smoothing, 0, 0.95);
+	cursor_color := NOT_QUITE_WHITE;
+	if !is_active then cursor_color.a = 0;
+	target_cursor_position : Vec2;
+	// Draw cursor
+	visual_cursor_position, target_cursor_position = draw_cursor (*input, config.buffer_font_height, text_position, get_color_from_theme ("cursor", "buffer_cursor"), visual_cursor_position, cursor_smoothing);
+	if !approx_equal (visual_cursor_position, target_cursor_position, 0.0001)
+		needs_redraw = true;
+	else
+		visual_cursor_position = target_cursor_position;
 
 	immediate_clip (info_bar);
 	// Info bar background
-	immediate_quad (cast (f32) info_bar.x1, cast (f32) info_bar.y1, cast (f32) info_bar.x2, cast (f32) info_bar.y2, get_color_from_theme ("buffer_info_background_color"));
+	immediate_quad (cast (f32) info_bar.x1, cast (f32) info_bar.y1, cast (f32) info_bar.x2, cast (f32) info_bar.y2, get_color_from_theme ("secondary", "buffer_info_background"));
 	
 	// Draw info text
 	info_text_position.x = cast (f32) info_bar.x1 + config.buffer_info_padding;
@@ -1081,5 +1057,5 @@ draw_tab :: (using tab : *Screen_Tab, is_active : bool)
 	else
 		info_str = fstring (temp_allocator, "% - Ln %, Col % - % line(s) - UTF8 - %",
 			tab_name, input.buffer.line_index + 1, input.buffer.column_index + 1, input.buffer.lines.count, input.eol_sequence);
-	draw_text (*loaded_font, info_str, config.buffer_info_font_height, info_text_position, get_color_from_theme ("buffer_info_text_color"), tab_area);
+	draw_text (*loaded_font, info_str, config.buffer_info_font_height, info_text_position, get_color_from_theme ("secondary_text", "buffer_info_text"), tab_area);
 }
