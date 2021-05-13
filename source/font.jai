@@ -273,122 +273,6 @@ add_font_page :: (using font : *Font, height : u32) -> *Font_Page #must
 	return page;
 }
 
-draw_text :: (using font : *Font, text : string, height : u32, position : Vec2, color : Vec4)
-{
-	framebuffer_w, framebuffer_h := get_window_framebuffer_size (*window);
-	clip_rect : Clip_Rect;
-	clip_rect.x2 = xx framebuffer_w;
-	clip_rect.y2 = xx framebuffer_h;
-	inline draw_text (font, text, height, position, color, clip_rect);
-}
-
-draw_text :: (using font : *Font, text : string, height : u32, position : Vec2, color : Vec4, clip_rect : Clip_Rect)
-{
-	codepoints := utf8_string_to_runes  (text, temp_allocator);
-
-	inline draw_text (font, codepoints, height, position, color, clip_rect);
-}
-
-// @Note (stefan): Find a way to pass anything that can be iterated on as a sequence of u32s, such as a Utf8_String,
-// or even a special text buffer like a Gap_Buffer.
-// @Note (stefan): We have calculate_drawn_text_bounds that does almost the same thing as this, maybe make a for_expansion ? 
-draw_text :: (using font : *Font, text : []u32, height : u32, position : Vec2, color : Vec4, clip_rect : Clip_Rect)
-{
-	assert (font != null, "Font was null.");
-
-	immediate_push_state ();
-	defer immediate_pop_state ();
-
-	page := get_font_page (font, height);
-	pen := position;
-	pen.y += page.ascender;
-
-	immediate_shader (text_spo);
-
-	for i : 0..text.count - 1
-	{
-		codepoint := text[i];
-		if pen.y - page.descender < xx clip_rect.y1 && codepoint != #char "\n" then continue;
-		if pen.y - page.ascender > xx clip_rect.y2 then break;
-		
-		if codepoint == #char "\n"
-		{
-			pen.x = position.x;
-			pen.y += (page.ascender - page.descender);
-
-			continue;
-		}
-		else if codepoint == #char "\t"
-		{
-			pen.x += page.space_advance;
-			pen.x = position.x + ceil ((pen.x - position.x) / (page.space_advance * 4.0)) * page.space_advance * 4.0;
-
-			continue;
-		}
-		
-		glyph := load_glyph (page, codepoint);
-		if !glyph then continue;
-		glyph_position := vec2 (pen.x + glyph.bitmap_bearing_x, pen.y - glyph.bitmap_bearing_y);
-		immediate_texture (glyph.texture);
-		immediate_quad (glyph_position.x, glyph_position.y, glyph_position.x + glyph.bitmap_width, glyph_position.y + glyph.bitmap_height, color,
-			glyph.uv0, vec2 (glyph.uv1.x, glyph.uv0.y), glyph.uv1, vec2 (glyph.uv0.x, glyph.uv1.y));
-		pen.x += glyph.advance >> 6;
-	}
-}
-
-calculate_drawn_text_bounds :: (using font : *Font, text : string, height : u32) -> Vec2 #must
-{
-	codepoints := utf8_string_to_runes (text, temp_allocator);
-
-	return inline calculate_drawn_text_bounds (font, codepoints, height);
-}
-
-calculate_drawn_text_bounds :: (using font : *Font, text : []u32, height : u32) -> Vec2 #must
-{
-	assert (font != null, "Font was null.");
-
-	page := get_font_page (font, height);
-	pen := vec2 (0, xx (page.ascender - page.descender));
-	max := pen;
-	for i : 0..text.count - 1
-	{
-		codepoint := text[i];
-		if codepoint == #char "\n"
-		{
-			pen.x = 0;
-			pen.y += (page.ascender - page.descender);
-			if pen.x > max.x then max.x = pen.x;
-			if pen.y > max.y then max.y = pen.y;
-
-			continue;
-		}
-		else if codepoint == #char "\t"
-		{
-			pen.x += page.space_advance;
-
-			while cast (int) pen.x % (page.space_advance * 4) != 0
-			{
-				pen.x += page.space_advance;
-			}
-
-			if pen.x > max.x then max.x = pen.x;
-			if pen.y > max.y then max.y = pen.y;
-
-			continue;
-		}
-		
-		glyph := load_glyph (page, codepoint);
-		if !glyph then continue;
-		glyph_position := vec2 (pen.x + glyph.bitmap_bearing_x, pen.y - glyph.bitmap_bearing_y);
-		pen.x += glyph.advance >> 6;
-		
-		if pen.x > max.x then max.x = pen.x;
-		if pen.y > max.y then max.y = pen.y;
-	}
-
-	return max;
-}
-
 Text_Iterator :: struct (Buffer : Type)
 {
 	Elem :: struct
@@ -434,49 +318,49 @@ make_text_iterator :: (font : *Font, buffer : $Buffer, height : u32, position : 
 	return result;
 }
 
-for_expansion :: (using iterator : *Text_Iterator ($T), body : Code, flags : For_Flags) #expand
+for_expansion :: (iterator : *Text_Iterator ($T), body : Code, flags : For_Flags) #expand
 {
 	by_pointer :: (flags & .POINTER) == .POINTER;
 	reverse    :: (flags & .REVERSE) == .REVERSE;
 	#assert !by_pointer "Cannot iterate by pointer.";
 	#assert !reverse "Cannot iterate in reverse.";
 	
-	pen   := starting_position;
-	pen.y += page.ascender;
-	for codepoint, i : text_buffer
+	pen   := iterator.starting_position;
+	pen.y += iterator.page.ascender;
+	for codepoint, i : iterator.text_buffer
 	{
-		if clip && pen.y - page.descender < xx clip_rect.y1 && codepoint != #char "\n" then continue;
-		if clip && pen.y - page.ascender  > xx clip_rect.y2 then break;
+		if iterator.clip && pen.y - iterator.page.descender < xx iterator.clip_rect.y1 && codepoint != #char "\n" then continue;
+		if iterator.clip && pen.y - iterator.page.ascender  > xx iterator.clip_rect.y2 then break;
 
 		`it_index := i;
-		`it : Elem;
+		`it : iterator.Elem;
 		it.codepoint = codepoint;
-		if visible_whitespace
+		if iterator.visible_whitespace
 		{
 			if it.codepoint ==
 			{
-			case #char " "; codepoint = #char "·";
+			case #char " ";  codepoint = #char "·";
 			case #char "\t"; codepoint = #char "→";
 			}
 		}
-		it.glyph     = load_glyph (page, codepoint);
+		it.glyph     = load_glyph (iterator.page, codepoint);
 		it.pen       = pen;
 		it.position  = pen;
 		if it.glyph then it.position = vec2 (pen.x + it.glyph.bitmap_bearing_x, pen.y - it.glyph.bitmap_bearing_y);
-		it.advance   = xx page.space_advance;
+		it.advance   = xx iterator.page.space_advance;
 		if it.glyph then it.advance = xx (it.glyph.advance >> 6);
 		
 		if it.codepoint == #char "\n"
 		{
-			pen.x  = starting_position.x;
-			pen.y += (page.ascender - page.descender);
+			pen.x  = iterator.starting_position.x;
+			pen.y += (iterator.page.ascender - iterator.page.descender);
 		}
 		else if it.codepoint == #char "\t"
 		{
 			start_pen := pen;
 			advance := it.advance;
 			pen.x += it.advance;
-			pen.x = starting_position.x + ceil ((pen.x - starting_position.x) / (page.space_advance * 4.0)) * page.space_advance * 4.0;
+			pen.x = iterator.starting_position.x + ceil ((pen.x - iterator.starting_position.x) / (iterator.page.space_advance * 4.0)) * iterator.page.space_advance * 4.0;
 			it.advance = pen.x - start_pen.x;
 		}
 		else
@@ -488,6 +372,66 @@ for_expansion :: (using iterator : *Text_Iterator ($T), body : Code, flags : For
 	}
 }
 
+draw_text :: (using font : *Font, text : string, height : u32, position : Vec2, color : Vec4)
+{
+	framebuffer_w, framebuffer_h := get_window_framebuffer_size (*window);
+	clip_rect : Clip_Rect;
+	clip_rect.x2 = xx framebuffer_w;
+	clip_rect.y2 = xx framebuffer_h;
+	inline draw_text (font, text, height, position, color, clip_rect);
+}
+
+draw_text :: (using font : *Font, text : string, height : u32, position : Vec2, color : Vec4, clip_rect : Clip_Rect)
+{
+	codepoints := utf8_string_to_runes  (text, temp_allocator);
+
+	inline draw_text (font, codepoints, height, position, color, clip_rect);
+}
+
+draw_text :: (using font : *Font, buffer : $T, height : u32, position : Vec2, color : Vec4, clipping_rect : Clip_Rect)
+{
+	assert (font != null, "Font was null.");
+
+	immediate_push_state ();
+	defer immediate_pop_state ();
+	immediate_shader (text_spo);
+
+	iterator := make_text_iterator (font, buffer, height, position, clipping_rect, false);
+	for iterator
+	{
+		if !is_control (it.glyph.codepoint)
+		{
+			immediate_texture (it.glyph.texture);
+			immediate_quad (it.position.x, it.position.y, it.position.x + it.glyph.bitmap_width, it.position.y + it.glyph.bitmap_height, color,
+				it.glyph.uv0, vec2 (it.glyph.uv1.x, it.glyph.uv0.y), it.glyph.uv1, vec2 (it.glyph.uv0.x, it.glyph.uv1.y));
+		}
+	}
+}
+
+calculate_drawn_text_bounds :: (using font : *Font, text : string, height : u32) -> Vec2 #must
+{
+	codepoints := utf8_string_to_runes (text, temp_allocator);
+
+	return inline calculate_drawn_text_bounds (font, codepoints, height);
+}
+
+calculate_drawn_text_bounds :: (using font : *Font, text_buffer : $T, height : u32) -> Vec2 #must
+{
+	assert (font != null, "Font was null.");
+
+	max : Vec2;
+	iterator := make_text_iterator (font, text_buffer, height, VEC2_ZERO, false);
+	for iterator
+	{
+		pen := it.pen;
+		pen.x += it.advance;
+		pen.y -= iterator.page.descender;
+		if pen.x > max.x then max.x = pen.x;
+		if pen.y > max.y then max.y = pen.y;
+	}
+	
+	return max;
+}
 
 text_spo : GLuint;
 
