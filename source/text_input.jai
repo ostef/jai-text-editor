@@ -162,6 +162,7 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> modifie
 		else if matches_key_binding (event, config.key_paste)
 		{
 			pasted_text := clone_clipboard_text (*window, temp_allocator);
+			println ("Pasted: %", pasted_text);
 			utf32 := utf8_string_to_runes (pasted_text, temp_allocator);
 			if utf32.count != 0
 			{
@@ -251,9 +252,20 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> modifie
 		{
 			if (flags & .DISALLOW_TABS) != .DISALLOW_TABS
 			{
-				insert_at_cursor (*buffer, #char "\t");
-				modified = true;
-				dirty    = true;
+				if event.key_event.mods == .SHIFT
+				{
+					// Unindent line/selection
+				}
+				else if buffer.selection != 0
+				{
+					// Indent line/selection
+				}
+				else
+				{
+					insert_at_cursor (*buffer, #char "\t");
+					modified = true;
+					dirty    = true;
+				}
 			}
 		}
 
@@ -462,6 +474,10 @@ draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, co
 	defer immediate_pop_state ();
 	immediate_shader (text_spo);
 	
+	inverse_cursor_color := get_color_from_theme ("cursor_color");
+	inverse_cursor_color.r = 1 - inverse_cursor_color.r;
+	inverse_cursor_color.g = 1 - inverse_cursor_color.g;
+	inverse_cursor_color.b = 1 - inverse_cursor_color.b;
 	color_index := 0;
 	iterator := make_text_iterator (*loaded_font, buffer, height, position, clipping_rect, render_whitespace);
 	for it, i : iterator
@@ -484,12 +500,14 @@ draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, co
 			(buffer.selection > 0 && i >= buffer.cursor && i < buffer.cursor + buffer.selection ||
 			buffer.selection  < 0 && i >= buffer.cursor + buffer.selection && i < buffer.cursor)
 		{
+			selection_color := ifx active then get_color_from_theme ("text_input_selection_color") else get_color_from_theme ("inactive_text_input_selection_color");
 			immediate_texture (0);
-			immediate_quad (it.pen.x, it.pen.y - iterator.page.ascender, it.pen.x + it.advance, it.pen.y - iterator.page.descender, ifx active then config.text_input_selection_color else config.inactive_text_input_selection_color);
+			immediate_quad (it.pen.x, it.pen.y - iterator.page.ascender, it.pen.x + it.advance, it.pen.y - iterator.page.descender, selection_color);
 		}
 
 		if !is_control (it.glyph.codepoint)
 		{
+			if i == buffer.cursor then color = inverse_cursor_color;
 			immediate_texture (it.glyph.texture);
 			immediate_quad (it.position.x, it.position.y, it.position.x + it.glyph.bitmap_width, it.position.y + it.glyph.bitmap_height, color,
 				it.glyph.uv0, vec2 (it.glyph.uv1.x, it.glyph.uv0.y), it.glyph.uv1, vec2 (it.glyph.uv0.x, it.glyph.uv1.y));
