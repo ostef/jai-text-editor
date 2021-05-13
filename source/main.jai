@@ -95,7 +95,8 @@ main :: ()
 	}
 	toggle_command_input (*screen);
 
-	glClearColor (config.inactive_background_color.r, config.inactive_background_color.g, config.inactive_background_color.b, 1);
+	clear_color := get_color_from_theme ("inactive_background_color");
+	glClearColor (clear_color.r, clear_color.g, clear_color.b, 1);
 
 	running = true;
 	while running

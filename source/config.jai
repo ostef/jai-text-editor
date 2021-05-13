@@ -1,23 +1,6 @@
 Config :: struct
 {
-	// Colors
-	window_caption_background_color      := NOT_QUITE_BLACK;
-	tab_background_color                 := NOT_QUITE_BLACK;
-	tab_caption_background_color         := NOT_QUITE_BLACK;
-	tab_caption_inactive_background_color := NOT_QUITE_BLACK;
-	inactive_background_color            := Vec4.{ 0.2, 0.2, 0.2, 1 };
-	inactive_stripes_color               := DARK_GRAY;
-	bottom_io_background_color           := NOT_QUITE_BLACK;
-	bottom_io_text_color                 := NOT_QUITE_WHITE;
-	split_separation_color               := LIGHT_GRAY;
-	buffer_background_color              := NOT_QUITE_BLACK;
-	buffer_text_color                    := NOT_QUITE_WHITE;
-	buffer_line_numbers_text_color       := LIGHT_GRAY;
-	buffer_line_numbers_separation_color := LIGHT_GRAY;
-	buffer_info_background_color         := LIGHT_GRAY;
-	buffer_info_text_color               := VERY_DARK_GRAY;
-	text_input_selection_color           := Vec4.{ 0.3, 0.5, 0.9, 0.7 };
-	inactive_text_input_selection_color  := Vec4.{ 0.5, 0.5, 0.5, 0.5 };
+	color_theme : string;
 
 	// Visuals
 	font : string;	// @Note (stefan): Don't give it a default value, because when we'll try to free it, it will crash!
@@ -28,8 +11,8 @@ Config :: struct
 	visual_scrolling_smoothing  := 0.7;		// @Todo (stefan): Make sure this is between 0 and 1
 	buffer_render_whitespace := true;
 	buffer_rendered_whitespace_dimming := 0.8;
-	bottom_io_font_height : u32 = 16;
-	buffer_font_height : u32 = 16;
+	bottom_io_font_height   : u32 = 16;
+	buffer_font_height      : u32 = 16;
 	buffer_info_font_height : u32 = 16;
 
 	word_skipping_stops_at_word_separators := true;
@@ -85,6 +68,8 @@ Key_Binding :: struct
 	key  : Key_Code;
 }
 
+color_theme : Map (string, Vec4);
+
 matches_key_binding :: (event : Event, binding : Key_Binding) -> bool #must
 {
 	return event.key_event.key_code == binding.key && event.key_event.mods == binding.mods;
@@ -120,6 +105,7 @@ read_config_from_file :: (filename := "config.edit") -> bool
 	file_contents, ok := read_entire_file (full_path, temp_allocator, null_terminate = false);
 	if !ok then return false;
 	free (config.font, heap_allocator);
+	free (config.color_theme, heap_allocator);
 
 	lines := break_by_lines (file_contents, temp_allocator);
 	for * lines
@@ -263,6 +249,100 @@ read_config_from_file :: (filename := "config.edit") -> bool
 
 	font_filename := make_path (temp_allocator, executable_dir, "/fonts/", config.font);
 	if loaded_font.filename != font_filename then try_reloading_font (*loaded_font, font_filename);
+	if !read_color_theme (config.color_theme) then log_error ("Config", "Could not read color theme.");
 
 	return true;
+}
+
+read_color_theme :: (theme_name : string) -> bool
+{
+	filename := make_path (temp_allocator, executable_dir, "/themes/", theme_name, ".edit");
+	file_contents, ok := read_entire_file (filename, temp_allocator);
+	if !ok then return false;
+	
+	lines := break_by_lines (file_contents, temp_allocator);
+	for * lines
+	{
+		<<it = trim_spaces_at_ends (<<it);
+	}
+	
+	// Clear the color theme map
+	for val, key : color_theme
+		free (key, heap_allocator);
+	clear_map (*color_theme);
+	
+	for lines
+	{
+		line := it;
+		if line[0] == #char "#" then continue;
+		name := line;
+		name.count = 0;
+		while line.count > 0 && line[0] != #char " "
+		{
+			name.count += 1;
+			line.data  += 1;
+			line.count -= 1;
+		}
+		line = skip_spaces (line);
+		color := line;
+		if color.count != 0 && color[0] != #char "#"
+		{
+			log_error ("Color_Theme", "Invalid line %. Color value should start with a '#'", it_index + 1);
+		
+			continue;
+		}
+		color = advance (color);
+		r, g, b, a : u8;
+		// RGB
+		if color.count == 6
+		{
+			rstr := trim (color, 4);
+			gstr := trim (advance (color, 2), 2);
+			bstr := advance (color, 4);
+			r = cast (u8) string_to_u64 (rstr, 16);
+			g = cast (u8) string_to_u64 (gstr, 16);
+			b = cast (u8) string_to_u64 (bstr, 16);
+			a = 255;
+		}
+		// RGBA
+		else if color.count == 8
+		{
+			rstr := trim (color, 6);
+			gstr := trim (advance (color, 2), 4);
+			bstr := trim (advance (color, 4), 2);
+			astr := advance (color, 6);
+			r = cast (u8) string_to_u64 (rstr, 16);
+			g = cast (u8) string_to_u64 (gstr, 16);
+			b = cast (u8) string_to_u64 (bstr, 16);
+			a = cast (u8) string_to_u64 (astr, 16);
+		}
+		// Invalid
+		else
+		{
+			log_error ("Color_Theme", "Invalid color at line %.", it_index + 1);
+			
+			continue;
+		}
+		
+		value := vec4 (r / 255.0, g / 255.0, b / 255.0, a / 255.0);
+		insert_to_map (*color_theme, clone_string (name, heap_allocator), value);
+	}
+	
+	return true;
+}
+
+get_color_from_theme :: (name : string, default_value := NOT_QUITE_WHITE) -> Vec4 #must
+{
+	return get_value (color_theme, name, default_value);
+}
+
+get_syntax_color :: (name : string, secondary_name := "", default_value := NOT_QUITE_WHITE) -> Vec4 #must
+{
+	if secondary_name
+	{
+		result, ok := get_value (color_theme, join (temp_allocator, "syntax_", secondary_name), default_value);
+		if ok then return result;
+	}
+	
+	return get_value (color_theme, join (temp_allocator, "syntax_", name), default_value);
 }

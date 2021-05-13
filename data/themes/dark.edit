@@ -1,0 +1,32 @@
+# Editor colors
+window_caption_background_color #262626
+tab_background_color #191919
+tab_caption_background_color #191919
+tab_caption_inactive_background_color #333333
+inactive_background_color #333333
+inactive_stripes_color #666666
+bottom_io_background_color #191919
+bottom_io_text_color #e5e5e5
+split_separation_color #999999
+buffer_background_color #191919
+buffer_text_color #e5e5e5
+buffer_line_numbers_text_color #999999
+buffer_line_numbers_separation_color #999999
+buffer_info_background_color #999999
+buffer_info_text_color #3f3f3f
+text_input_selection_color #4c7fe5b2
+inactive_text_input_selection_color #80808080
+cursor_color #e5e5e5
+
+# Syntax highlighting
+syntax_none #e5e5e5
+syntax_invalid #eb4034
+syntax_comment #52b041
+syntax_identifier #e5e5e5
+syntax_keyword #4aa1ff
+syntax_keyword_control #e879b2
+syntax_string #e08369
+syntax_number #aedb9a
+syntax_symbol #e5e5e5
+syntax_tag #4aa1ff
+syntax_compiler #4aa1ff
