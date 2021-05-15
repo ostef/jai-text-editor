@@ -21,6 +21,7 @@ Debug :: #import "Debug";
 #load "screen.jai";
 #load "language.jai";
 #load "languages/jai.jai";
+#load "profiling.jai";
 
 executable_path : string;
 executable_dir  : string;
@@ -45,12 +46,6 @@ handle_window_event :: (using event : Event)
 	if running then screen_handle_event (*screen, event);
 }
 
-profile :: (name : string) #expand
-{
-	//`profile_start := get_time ();
-	//`defer { profile_end := get_time (); println ("% took % s.", name, profile_end - profile_start); }
-}
-
 main :: ()
 {
 	executable_path = get_executable_path (heap_allocator);
@@ -61,6 +56,7 @@ main :: ()
 	context.logger    = console_logger;
 	linalg_register_print_procedures ();
 
+	init_profiler ();
 	init_window (*window, "Edit", 100, 100, 1280, 720, handle_window_event, flags = Window_Flags.CUSTOM_BORDER);
 	window.borders = DEFAULT_WINDOW_BORDERS;
 	make_window_context_current (*window);
@@ -101,6 +97,8 @@ main :: ()
 		// Rendering is done in a TIMER event callback, the first one of these was scheduled when we called init_screen.
 		wait_for_window_events (*window);
 	}
+
+	write_profiling_data_to_file ("debug/profile.txt");
 }
 
 create_shader_program :: (vertex_source : string, fragment_source : string) -> GLuint #must

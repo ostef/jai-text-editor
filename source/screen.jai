@@ -49,6 +49,8 @@ Screen_Tab :: struct
 	language : Language;
 	visual_scrolling : Vec2;
 	visual_cursor_position : Vec2;
+	color_ranges : [..]Text_Color_Range;
+	needs_regenerate_color_ranges : bool;
 }
 
 NOT_QUITE_BLACK :: Vec4.{ 0.1, 0.1, 0.1, 1 };
@@ -86,17 +88,11 @@ screen_handle_event :: (using screen : *Screen, event : Event)
 			swap_window_buffers (*window);
 			frame_end := get_time ();
 			frame_response_ms := cast (u32) ((frame_end - frame_start) * 1000);
-			//println ("Event response took % ms.", frame_response_ms);
 			next_timer : u32 = 16;
 			if frame_response_ms < next_timer
-			{
 				next_timer -= frame_response_ms;
-			}
 			else
-			{
 				next_timer = 0;
-				println ("Oof, rendering took a long time and we have to schedule a render as soon as possible to keep up.");
-			}
 			schedule_timer_event (event.window, render_timer_id, next_timer);
 		}
 	
@@ -291,10 +287,14 @@ screen_tab_handle_event :: (using tab : *Screen_Tab, event : Event)
 	scrolling.x = max (scrolling.x, 0);
 	scrolling.y = max (scrolling.y, 0);
 
-	modified, dirty := text_input_handle_event (*input, event);
+	modified, modified_text := text_input_handle_event (*input, event);
 	if modified then scroll_to_cursor = true;
-	if dirty then is_dirty = true;
-	if modified || dirty then needs_redraw = true;
+	if modified_text
+	{
+		is_dirty = true;
+		needs_regenerate_color_ranges = true;
+	}
+	if modified || modified_text then needs_redraw = true;
 }
 
 init_screen :: (screen : *Screen, width : u32, height : u32)
@@ -525,12 +525,15 @@ init_tab :: (tab : *Screen_Tab, split : *Screen_Split)
 {
 	init_text_input (*tab.input, 0);
 	tab.split = split;
+	init_array (*tab.color_ranges, 5000, heap_allocator);
+	tab.needs_regenerate_color_ranges = true;
 }
 
 reset_tab :: (using tab : *Screen_Tab)
 {
 	clear_tab (tab);
 	reset_text_input (*input);
+	reset_array (*color_ranges);
 }
 
 clear_tab :: (using tab : *Screen_Tab)
@@ -545,6 +548,8 @@ clear_tab :: (using tab : *Screen_Tab)
 	needs_redraw = true;
 	language = .NONE;
 	visual_scrolling = VEC2_ZERO;
+	clear_array (*color_ranges);
+	needs_regenerate_color_ranges = true;
 }
 
 open_new_tab :: (using split : *Screen_Split, filename : string) -> bool
@@ -587,6 +592,64 @@ detect_language :: (using tab : *Screen_Tab)
 		{
 		case "jai"; tab.language = .JAI;
 		}
+	}
+}
+
+generate_color_ranges :: (using tab : *Screen_Tab)
+{
+	profile ();
+	defer needs_regenerate_color_ranges = false;
+	clear_array (*color_ranges);
+	
+	if language == .NONE then
+	{
+		whole_range : Text_Color_Range;
+		whole_range.l0 = 1;
+		whole_range.c0 = 1;
+		whole_range.l1 = input.buffer.lines.count - 1;
+		whole_range.c1 = input.buffer.lines[input.buffer.lines.count - 1];
+		whole_range.color = get_color_from_theme ("primary_text", "buffer_text");
+		push_to_array (*color_ranges, whole_range);
+	
+		return;
+	}
+	
+	// @Todo (stefan): Handle multiple languages
+	buffer_str    := stitch_front_and_back_together (input.buffer, temp_allocator);
+	lexer         := make_lexer (buffer_str);
+	current_token := jai_read_next_token (*lexer);
+	while current_token.kind != .EOI
+	{
+		color_range : Text_Color_Range;
+		color_range.start = current_token.start - lexer.start;
+		color_range.end   = current_token.end   - lexer.start;
+		color_range.l0    = current_token.l0;
+		color_range.c0    = current_token.c0;
+		color_range.l1    = current_token.l1;
+		color_range.c1    = current_token.c1;
+		color_range.color = get_color_from_theme ("primary_text", "buffer_text");
+		if current_token.kind ==
+		{
+		case .UNKNOWN;                    color_range.color = get_color_from_theme ("syntax_invalid");
+		case .INVALID_NUMBER_LITERAL;     color_range.color = get_color_from_theme ("syntax_invalid", "syntax_invalid_number");
+		case .INVALID_COMPILER_DIRECTIVE; color_range.color = get_color_from_theme ("syntax_invalid", "syntax_invalid_compiler");;
+		case .COMMENT;                    color_range.color = get_color_from_theme ("syntax_comment");
+		case .IDENTIFIER;                 color_range.color = get_color_from_theme ("syntax_identifier");
+		case .CONTROL_KEYWORD;            color_range.color = get_color_from_theme ("syntax_keyword", "syntax_keyword_control");
+		case .STORAGE_TYPE_KEYWORD;       color_range.color = get_color_from_theme ("syntax_keyword", "syntax_keyword_storage_type");
+		case .TYPE_KEYWORD;               color_range.color = get_color_from_theme ("syntax_keyword", "syntax_keyword_type");
+		case .FUNCTION_KEYWORD;           color_range.color = get_color_from_theme ("syntax_keyword", "syntax_keyword_function");
+		case .POLYMORPHIC_ARGUMENT;       color_range.color = get_color_from_theme ("syntax_tag", "syntax_polymorphic");
+		case .COMPILER_DIRECTIVE;         color_range.color = get_color_from_theme ("syntax_compiler");
+		case .NOTE;                       color_range.color = get_color_from_theme ("syntax_tag");
+		case .OTHER_KEYWORD;              color_range.color = get_color_from_theme ("syntax_keyword");
+		case .STRING_LITERAL;             color_range.color = get_color_from_theme ("syntax_string");
+		case .NUMBER_LITERAL;             color_range.color = get_color_from_theme ("syntax_number");
+		case .SYMBOL;                     color_range.color = get_color_from_theme ("syntax_symbol");
+		}
+		
+		push_to_array (*color_ranges, color_range);
+		current_token = jai_read_next_token (*lexer);
 	}
 }
 
@@ -647,6 +710,8 @@ get_tab_name :: (using tab : *Screen_Tab) -> string #must
 
 draw_screen :: (using screen : *Screen)
 {
+	profile ();
+	
 	page := get_font_page (*loaded_font, config.bottom_io_font_height);
 	bottom_bar : Clip_Rect;
 	{
@@ -834,6 +899,8 @@ draw_screen :: (using screen : *Screen)
 
 draw_tab :: (using tab : *Screen_Tab, is_active : bool)
 {
+	profile ();
+
 	buffer_page := get_font_page (*loaded_font, config.buffer_font_height);
 	info_page   := get_font_page (*loaded_font, config.buffer_info_font_height);
 	text_line_height := buffer_page.ascender - buffer_page.descender;
@@ -927,8 +994,11 @@ draw_tab :: (using tab : *Screen_Tab, is_active : bool)
 	// Make sure the cursor is inside the text area if the user modified the buffer
 	if scroll_to_cursor
 	{
+		profile ("scroll_to_cursor");
 		cursor_position := calculate_drawn_cursor_position (*input, config.buffer_font_height, VEC2_ZERO);
 		// @Cleanup @Speed (stefan): Make this use math instead of loops.
+		// @Note (stefan): After profiling, this is very slow and takes about 2.14 ms min, 4.7 ms max, 2.25 ms on average (for comparison,
+		// drawing the text buffer is 0.89 ms on average).
 		while text_position.x + cursor_position.x < xx text_area.x1 && scrolling.x > 0
 		{
 			scrolling.x    -= 1;
@@ -960,7 +1030,7 @@ draw_tab :: (using tab : *Screen_Tab, is_active : bool)
 			text_offset.y      = -visual_scrolling.y * text_line_height;
 			text_position.y    = cast (f32) text_area.y1 + text_offset.y;
 		}
-		
+
 		// Reset the flag
 		scroll_to_cursor = false;
 	}
@@ -983,59 +1053,25 @@ draw_tab :: (using tab : *Screen_Tab, is_active : bool)
 	immediate_line (vec2 (xx line_bar.x2, xx tab_area.y1), vec2 (xx line_bar.x2, xx info_bar.y1), get_color_from_theme ("primary_light", "buffer_line_numbers_separation"), 1);
 
 	// Draw line numbers
+	{
+	profile ("draw_line_numbers");
 	line_number_position.x = cast (f32) line_bar.x1 + config.buffer_line_numbers_padding;
 	line_number_position.y = cast (f32) line_bar.y1 + text_offset.y;
 	immediate_clip (line_bar);
 	draw_text (*loaded_font, to_string (line_number_builder), config.buffer_font_height, line_number_position, get_color_from_theme ("primary_text", "buffer_line_numbers_text"), line_bar);
+	}
 
 	immediate_clip (text_area);
-	if language == .JAI
+	if needs_regenerate_color_ranges then generate_color_ranges (tab);
+	if language == .NONE
 	{
-		buffer_str    := stitch_front_and_back_together (input.buffer, temp_allocator);
-		color_ranges  := make_array (Text_Color_Range, 1500, temp_allocator);
-		lexer         := make_lexer (buffer_str);
-		current_token := jai_read_next_token (*lexer);
-		while current_token.kind != .EOI
-		{
-			color_range : Text_Color_Range;
-			color_range.start = current_token.start - lexer.start;
-			color_range.end   = current_token.end   - lexer.start;
-			color_range.l0    = current_token.l0;
-			color_range.c0    = current_token.c0;
-			color_range.l1    = current_token.l1;
-			color_range.c1    = current_token.c1;
-			color_range.color = get_color_from_theme ("primary_text", "buffer_text");
-			if current_token.kind ==
-			{
-			case .UNKNOWN;                    color_range.color = get_color_from_theme ("syntax_invalid");
-			case .INVALID_NUMBER_LITERAL;     color_range.color = get_color_from_theme ("syntax_invalid", "syntax_invalid_number");
-			case .INVALID_COMPILER_DIRECTIVE; color_range.color = get_color_from_theme ("syntax_invalid", "syntax_invalid_compiler");;
-			case .COMMENT;                    color_range.color = get_color_from_theme ("syntax_comment");
-			case .IDENTIFIER;                 color_range.color = get_color_from_theme ("syntax_identifier");
-			case .CONTROL_KEYWORD;            color_range.color = get_color_from_theme ("syntax_keyword", "syntax_keyword_control");
-			case .STORAGE_TYPE_KEYWORD;       color_range.color = get_color_from_theme ("syntax_keyword", "syntax_keyword_storage_type");
-			case .TYPE_KEYWORD;               color_range.color = get_color_from_theme ("syntax_keyword", "syntax_keyword_type");
-			case .FUNCTION_KEYWORD;           color_range.color = get_color_from_theme ("syntax_keyword", "syntax_keyword_function");
-			case .POLYMORPHIC_ARGUMENT;       color_range.color = get_color_from_theme ("syntax_tag", "syntax_polymorphic");
-			case .COMPILER_DIRECTIVE;         color_range.color = get_color_from_theme ("syntax_compiler");
-			case .NOTE;                       color_range.color = get_color_from_theme ("syntax_tag");
-			case .OTHER_KEYWORD;              color_range.color = get_color_from_theme ("syntax_keyword");
-			case .STRING_LITERAL;             color_range.color = get_color_from_theme ("syntax_string");
-			case .NUMBER_LITERAL;             color_range.color = get_color_from_theme ("syntax_number");
-			case .SYMBOL;                     color_range.color = get_color_from_theme ("syntax_symbol");
-			}
-			
-			push_to_array (*color_ranges, color_range);
-			current_token = jai_read_next_token (*lexer);
-		}
-
-		// Draw text buffer
-		draw_text_input (*input, config.buffer_font_height, text_position, color_ranges, text_area, active = is_active, render_whitespace = config.buffer_render_whitespace, whitespace_dimming = config.buffer_rendered_whitespace_dimming);
+		profile ("draw_text_buffer");
+		draw_text_input (*input, config.buffer_font_height, text_position, get_color_from_theme ("primary_text", "buffer_text"), text_area, active = is_active, render_whitespace = config.buffer_render_whitespace, whitespace_dimming = config.buffer_rendered_whitespace_dimming);
 	}
 	else
 	{
-		// Draw text buffer
-		draw_text_input (*input, config.buffer_font_height, text_position, get_color_from_theme ("primary_text", "buffer_text"), text_area, active = is_active, render_whitespace = config.buffer_render_whitespace, whitespace_dimming = config.buffer_rendered_whitespace_dimming);
+		profile ("draw_text_buffer");
+		draw_text_input (*input, config.buffer_font_height, text_position, color_ranges, text_area, active = is_active, render_whitespace = config.buffer_render_whitespace, whitespace_dimming = config.buffer_rendered_whitespace_dimming);
 	}
 	
 	cursor_smoothing := clamp (config.visual_cursor_smoothing, 0, 0.95);

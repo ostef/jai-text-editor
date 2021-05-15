@@ -318,9 +318,9 @@ build :: ()
 
 	run_on_success := false;
 	debugging      := false;
-	deploy_assets  := false;
-	args           := Compiler.compiler_get_command_line_arguments ();
+	profile        := false;
 	is_program := false;
+	args           := Compiler.compiler_get_command_line_arguments ();
 	program_args := make_array (string, 10, temp_allocator);
 	push_to_array (*program_args, BUILD_DIR, OUTPUT_NAME, " ");
 	for args
@@ -331,7 +331,7 @@ build :: ()
 			{
 			case "run";    run_on_success = true;
 			case "debug";  debugging      = true;
-			case "deploy"; deploy_assets  = true;
+			case "profile"; profile = true;
 			case "---";    is_program = true;
 			case;          println ("Unknown argument: '%'", it);
 			}
@@ -371,6 +371,7 @@ else #if OS == .LINUX
 	build_options.backend = .LLVM;
 	//if debugging then build_options.backend = .LLVM;
 	//else              build_options.backend = .X64;
+	if profile then build_options.stack_trace = true;
 
 	Compiler.set_build_options (build_options, workspace);
 	delete_directory (BUILD_DIR);
@@ -378,6 +379,8 @@ else #if OS == .LINUX
 
 	Compiler.compiler_begin_intercept (workspace);
 	Compiler.add_build_file ("main.jai", workspace);
+	if profile then Compiler.add_build_string ("ENABLE_PROFILING :: true;", workspace);
+	else Compiler.add_build_string ("ENABLE_PROFILING :: false;", workspace);
 
 	init_array (*commands_to_register, 50, temp_allocator);
 	init_array (*command_decls, 50, temp_allocator);
