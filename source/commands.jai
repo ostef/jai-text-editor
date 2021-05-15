@@ -527,6 +527,13 @@ command_touch :: (using screen : *Screen, filename : string)
 }
 @Command
 
+command_cp :: (using screen : *Screen, source : string, dest : string, overwrite := false)
+{
+	ok := copy_file (source, dest, overwrite);
+	if ok then print_to_screen (screen, "Copied file '%' to '%'.", source, dest);
+	else print_to_screen (screen, "Could not copy file '%' to '%'.", source, dest);
+}
+
 command_rm :: (using screen : *Screen, filename : string)
 {
 	ok := delete_file (filename);
