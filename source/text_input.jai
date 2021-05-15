@@ -405,46 +405,6 @@ calculate_drawn_cursor_position :: (using input : *Text_Input, height : u32, pos
 	return cursor_position;
 }
 
-calculate_drawn_text_bounds :: (using input : *Text_Input, height : u32) -> Vec2 #must
-{
-	page := get_font_page (*loaded_font, height);
-	pen := vec2 (0, xx (page.ascender - page.descender));
-	max := pen;
-	for codepoint, i : buffer
-	{
-		glyph := load_glyph (page, codepoint);
-		if !glyph then continue;
-
-		if codepoint == #char "\n"
-		{
-			pen.x = 0;
-			pen.y += (page.ascender - page.descender);
-			if pen.x > max.x then max.x = pen.x;
-			if pen.y > max.y then max.y = pen.y;
-
-			continue;
-		}
-		else if codepoint == #char "\t"
-		{
-			pen.x += page.space_advance;
-			pen.x = ceil (pen.x / (page.space_advance * 4.0)) * page.space_advance * 4.0;
-
-			if pen.x > max.x then max.x = pen.x;
-			if pen.y > max.y then max.y = pen.y;
-
-			continue;
-		}
-		
-		glyph_position := vec2 (pen.x + glyph.bitmap_bearing_x, pen.y - glyph.bitmap_bearing_y);
-		pen.x += glyph.advance >> 6;
-
-		if pen.x > max.x then max.x = pen.x;
-		if pen.y > max.y then max.y = pen.y;
-	}
-	
-	return max;
-}
-
 Text_Color_Range :: struct
 {
 	start, end : s64;
@@ -468,7 +428,33 @@ draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, co
 	inline draw_text_input (input, height, position, colors, clip_rect, active, render_whitespace, whitespace_dimming);
 }
 
-draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, colors : []Text_Color_Range, clipping_rect : Clip_Rect, active := true, render_whitespace := false, whitespace_dimming := 0.7)
+draw_selection :: (using input : *Text_Input, height : u32, position : Vec2, clipping_rect : Clip_Rect, active := true, render_whitespace := false)
+{
+	immediate_push_state ();
+	defer immediate_pop_state ();
+	
+	iterator := make_text_iterator (*loaded_font, buffer, height, position, clipping_rect, render_whitespace);
+	selection_start_x : f32;
+	selection_color := ifx active then get_color_from_theme ("selection") else get_color_from_theme ("inactive_selection");
+	for it, i : iterator
+	{
+		is_selection_start := buffer.selection > 0 && i == buffer.cursor || buffer.selection < 0 && i == buffer.cursor + buffer.selection;
+		is_selected        := buffer.selection > 0 && i >= buffer.cursor && i < buffer.cursor + buffer.selection ||
+							  buffer.selection < 0 && i >= buffer.cursor + buffer.selection && i < buffer.cursor;
+		is_selection_end   := buffer.selection > 0 && i == buffer.cursor + buffer.selection - 1 || buffer.selection < 0 && i == buffer.cursor - 1;
+		
+		if is_selection_start then selection_start_x = it.pen.x;
+		
+		if it.codepoint == #char "\n" && is_selected || is_selection_end
+		{
+			immediate_texture (0);
+			immediate_quad (selection_start_x, it.pen.y - iterator.page.ascender, it.pen.x + it.advance, it.pen.y - iterator.page.descender, selection_color);
+			selection_start_x = position.x;
+		}
+	}
+}
+
+draw_buffer :: (using input : *Text_Input, height : u32, position : Vec2, colors : []Text_Color_Range, clipping_rect : Clip_Rect, active := true, render_whitespace := false, whitespace_dimming := 0.7)
 {
 	immediate_push_state ();
 	defer immediate_pop_state ();
@@ -490,16 +476,6 @@ draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, co
 		
 			if color_index < colors.count && i >= colors[color_index].start && i < colors[color_index].end then color = colors[color_index].color;
 		}
-		
-		// @Speed
-		if buffer.selection != 0 &&
-			(buffer.selection > 0 && i >= buffer.cursor && i < buffer.cursor + buffer.selection ||
-			buffer.selection  < 0 && i >= buffer.cursor + buffer.selection && i < buffer.cursor)
-		{
-			selection_color := ifx active then get_color_from_theme ("selection") else get_color_from_theme ("inactive_selection");
-			immediate_texture (0);
-			immediate_quad (it.pen.x, it.pen.y - iterator.page.ascender, it.pen.x + it.advance, it.pen.y - iterator.page.descender, selection_color);
-		}
 
 		if !is_control (it.glyph.codepoint)
 		{
@@ -508,6 +484,14 @@ draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, co
 				it.glyph.uv0, vec2 (it.glyph.uv1.x, it.glyph.uv0.y), it.glyph.uv1, vec2 (it.glyph.uv0.x, it.glyph.uv1.y));
 		}
 	}
+}
+
+draw_text_input :: inline (using input : *Text_Input, height : u32, position : Vec2, colors : []Text_Color_Range, clipping_rect : Clip_Rect, active := true, render_whitespace := false, whitespace_dimming := 0.7)
+{
+	// Draw selection and buffer separately so we don't flush the immediate state too often with big selections.
+	// @Incomplete @Speed (stefan): Make sure it's actually faster to draw the selection and the text separately.
+	draw_selection (input, height, position, clipping_rect, active, render_whitespace);
+	draw_buffer (input, height, position, colors, clipping_rect, active, render_whitespace, whitespace_dimming);
 }
 
 draw_cursor :: (using input : *Text_Input, height : u32, position : Vec2, color : Vec4, current_cursor_position := VEC2_ZERO, cursor_position_smoothing := 0.0) -> current : Vec2, target : Vec2

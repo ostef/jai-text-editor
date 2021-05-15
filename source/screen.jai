@@ -976,7 +976,7 @@ draw_tab :: (using tab : *Screen_Tab, is_active : bool)
 	}
 	
 	// Limit the scrolling to the text bounds
-	text_max := calculate_drawn_text_bounds (*input, config.buffer_font_height);
+	text_max := calculate_drawn_text_bounds (*loaded_font, input.buffer, config.buffer_font_height);
 	max_scrolling  := vec2 (ceil (text_max.x / buffer_page.space_advance), ceil (text_max.y / text_line_height));
 	max_scrolling.x = max (max_scrolling.x - 2, 0);		// Add padding
 	if text_max.x < xx (text_area.x2 - text_area.x1) then max_scrolling.x = 0;
