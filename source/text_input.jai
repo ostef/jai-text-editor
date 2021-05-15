@@ -9,6 +9,9 @@ Text_Input :: struct
 	flags  : Flags;
 	eol_sequence : EOL_Sequence;
 	buffer : Gap_Buffer;
+
+	cursor_position : Vec2;
+	cursor_width    : f32;
 }
 
 EOL_Sequence :: enum
@@ -162,7 +165,6 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> modifie
 		else if matches_key_binding (event, config.key_paste)
 		{
 			pasted_text := clone_clipboard_text (*window, temp_allocator);
-			println ("Pasted: %", pasted_text);
 			utf32 := utf8_string_to_runes (pasted_text, temp_allocator);
 			if utf32.count != 0
 			{
@@ -356,53 +358,26 @@ detect_eol_sequence :: (str : string) -> EOL_Sequence, correct : bool
 	return eol_sequence, correct;
 }
 
-calculate_drawn_cursor_position :: (using input : *Text_Input, height : u32, position : Vec2) -> Vec2 #must
+calculate_drawn_cursor_position :: (using input : *Text_Input, height : u32, position : Vec2, render_whitespace := false) -> position : Vec2 #must, width : f32
 {
 	page := get_font_page (*loaded_font, height);
-	cursor_position : Vec2;
-	cursor_advance  := page.space_advance;
+	result_position : Vec2;
+	result_width    := cast (f32) page.space_advance;
 
-	pen := position;
-	pen.y += page.ascender;
-
-	for codepoint, i : buffer
+	iterator := make_text_iterator (*loaded_font, buffer, height, position, render_whitespace);
+	for it, i : iterator
 	{
-		glyph := load_glyph (page, codepoint);
-		if !glyph then continue;
-		
 		if i == buffer.cursor
 		{
-			cursor_position = pen;
-			cursor_advance  = glyph.advance >> 6;
+			result_position = it.pen;
+			result_width    = it.advance;
+
+			break;
 		}
-
-		if codepoint == #char "\n"
-		{
-			pen.x = position.x;
-			pen.y += (page.ascender - page.descender);
-
-			continue;
-		}
-		else if codepoint == #char "\t"
-		{
-			pen.x += page.space_advance;
-			pen.x = position.x + ceil ((pen.x - position.x) / (page.space_advance * 4.0)) * page.space_advance * 4.0;
-
-			// Highlight the whole tab
-			if i == buffer.cursor
-			{
-				cursor_advance = xx (pen.x - cursor_position.x);
-			}
-
-			continue;
-		}
-		
-		glyph_position := vec2 (pen.x + glyph.bitmap_bearing_x, pen.y - glyph.bitmap_bearing_y);
-		pen.x += glyph.advance >> 6;
 	}
-	if buffer.cursor == gap_buffer_count (buffer) then cursor_position = pen;
+	if buffer.cursor == gap_buffer_count (buffer) then result_position = iterator.pen;
 
-	return cursor_position;
+	return result_position, result_width;
 }
 
 Text_Color_Range :: struct
@@ -410,22 +385,6 @@ Text_Color_Range :: struct
 	start, end : s64;
 	l0, c0, l1, c1 : s64;
 	color : Vec4;
-}
-
-draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, color : Vec4, clip_rect : Clip_Rect, active := true, render_whitespace := false, whitespace_dimming := 0.7)
-{
-	whole_range : Text_Color_Range;
-	whole_range.l0 = 1;
-	whole_range.c0 = 1;
-	whole_range.l1 = buffer.lines.count - 1;
-	whole_range.c1 = buffer.lines[buffer.lines.count - 1];
-	whole_range.color = color;
-
-	colors : []Text_Color_Range;
-	colors.data  = *whole_range;
-	colors.count = 1;
-
-	inline draw_text_input (input, height, position, colors, clip_rect, active, render_whitespace, whitespace_dimming);
 }
 
 draw_selection :: (using input : *Text_Input, height : u32, position : Vec2, clipping_rect : Clip_Rect, active := true, render_whitespace := false)
@@ -486,6 +445,22 @@ draw_buffer :: (using input : *Text_Input, height : u32, position : Vec2, colors
 	}
 }
 
+draw_text_input :: (using input : *Text_Input, height : u32, position : Vec2, color : Vec4, clip_rect : Clip_Rect, active := true, render_whitespace := false, whitespace_dimming := 0.7)
+{
+	whole_range : Text_Color_Range;
+	whole_range.l0 = 1;
+	whole_range.c0 = 1;
+	whole_range.l1 = buffer.lines.count - 1;
+	whole_range.c1 = buffer.lines[buffer.lines.count - 1];
+	whole_range.color = color;
+
+	colors : []Text_Color_Range;
+	colors.data  = *whole_range;
+	colors.count = 1;
+
+	inline draw_text_input (input, height, position, colors, clip_rect, active, render_whitespace, whitespace_dimming);
+}
+
 draw_text_input :: inline (using input : *Text_Input, height : u32, position : Vec2, colors : []Text_Color_Range, clipping_rect : Clip_Rect, active := true, render_whitespace := false, whitespace_dimming := 0.7)
 {
 	// Draw selection and buffer separately so we don't flush the immediate state too often with big selections.
@@ -494,7 +469,7 @@ draw_text_input :: inline (using input : *Text_Input, height : u32, position : V
 	draw_buffer (input, height, position, colors, clipping_rect, active, render_whitespace, whitespace_dimming);
 }
 
-draw_cursor :: (using input : *Text_Input, height : u32, position : Vec2, color : Vec4, current_cursor_position := VEC2_ZERO, cursor_position_smoothing := 0.0) -> current : Vec2, target : Vec2
+draw_cursor :: (using input : *Text_Input, height : u32, position : Vec2, color : Vec4, smoothing := 0.0, render_whitespace := false) -> not_smoothed_cursor_position : Vec2, not_smoothed_cursor_width : f32
 {
 	immediate_push_state ();
 	defer immediate_pop_state ();
@@ -502,10 +477,10 @@ draw_cursor :: (using input : *Text_Input, height : u32, position : Vec2, color 
 	immediate_shader (0);
 	
 	page := get_font_page (*loaded_font, height);
-	target_position := calculate_drawn_cursor_position (input, height, position);
-	current_position := lerp (current_cursor_position, target_position, 1 - cursor_position_smoothing);
-	cursor_advance := page.space_advance;
-	immediate_quad (current_position.x, current_position.y - page.ascender, current_position.x + cursor_advance, current_position.y - page.descender, color);
+	target_position, target_width := calculate_drawn_cursor_position (input, height, position, render_whitespace);
+	cursor_position = lerp (cursor_position, target_position, 1 - smoothing);
+	cursor_width    = lerp (cursor_width, target_width, 1 - smoothing);
+	immediate_quad (cursor_position.x, cursor_position.y - page.ascender, cursor_position.x + cursor_width, cursor_position.y - page.descender, color);
 
-	return current_position, target_position;
+	return target_position, target_width;
 }

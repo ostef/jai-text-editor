@@ -9,7 +9,6 @@ Screen :: struct
 	// Bottom IO
 	command_input : Text_Input;
 	is_inputting_command := true;
-	visual_cursor_position : Vec2;
 	message_buffer : String_Builder;
 
 	splits : [..]Screen_Split;
@@ -48,7 +47,6 @@ Screen_Tab :: struct
 	needs_redraw : bool;
 	language : Language;
 	visual_scrolling : Vec2;
-	visual_cursor_position : Vec2;
 	color_ranges : [..]Text_Color_Range;
 	needs_regenerate_color_ranges : bool;
 }
@@ -887,7 +885,7 @@ draw_screen :: (using screen : *Screen)
 		draw_text_input (*command_input, config.bottom_io_font_height, position, get_color_from_theme ("primary_text", "bottom_io_text"), bottom_bar);
 		cursor_smoothing := clamp (config.visual_cursor_smoothing, 0, 0.95);
 		cursor_color := get_color_from_theme ("cursor", "bottom_io_cursor");
-		visual_cursor_position = draw_cursor (*command_input, config.bottom_io_font_height, position, cursor_color, visual_cursor_position, cursor_smoothing);
+		draw_cursor (*command_input, config.bottom_io_font_height, position, cursor_color, cursor_smoothing);
 		immediate_noclip ();
 	}
 	else
@@ -995,7 +993,7 @@ draw_tab :: (using tab : *Screen_Tab, is_active : bool)
 	if scroll_to_cursor
 	{
 		profile ("scroll_to_cursor");
-		cursor_position := calculate_drawn_cursor_position (*input, config.buffer_font_height, VEC2_ZERO);
+		cursor_position := calculate_drawn_cursor_position (*input, config.buffer_font_height, VEC2_ZERO, config.buffer_render_whitespace);
 		// @Cleanup @Speed (stefan): Make this use math instead of loops.
 		// @Note (stefan): After profiling, this is very slow and takes about 2.14 ms min, 4.7 ms max, 2.25 ms on average (for comparison,
 		// drawing the text buffer is 0.89 ms on average).
@@ -1077,13 +1075,12 @@ draw_tab :: (using tab : *Screen_Tab, is_active : bool)
 	cursor_smoothing := clamp (config.visual_cursor_smoothing, 0, 0.95);
 	cursor_color := get_color_from_theme ("cursor", "buffer_cursor");
 	if !is_active then cursor_color.a = 0;
-	target_cursor_position : Vec2;
 	// Draw cursor
-	visual_cursor_position, target_cursor_position = draw_cursor (*input, config.buffer_font_height, text_position, cursor_color, visual_cursor_position, cursor_smoothing);
-	if !approx_equal (visual_cursor_position, target_cursor_position, 0.0001)
+	target_cursor_position := draw_cursor (*input, config.buffer_font_height, text_position, cursor_color, cursor_smoothing, config.buffer_render_whitespace);
+	if !approx_equal (input.cursor_position, target_cursor_position, 0.0001)
 		needs_redraw = true;
 	else
-		visual_cursor_position = target_cursor_position;
+		input.cursor_position = target_cursor_position;
 
 	immediate_clip (info_bar);
 	// Info bar background

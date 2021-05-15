@@ -287,6 +287,7 @@ Text_Iterator :: struct (Buffer : Type)
 	text_buffer : Buffer;
 	page      : *Font_Page;
 	starting_position : Vec2;
+	pen       : Vec2;
 	clip      : bool;
 	clip_rect : Clip_Rect;
 	visible_whitespace : bool;
@@ -325,12 +326,12 @@ for_expansion :: (iterator : *Text_Iterator ($T), body : Code, flags : For_Flags
 	#assert !by_pointer "Cannot iterate by pointer.";
 	#assert !reverse "Cannot iterate in reverse.";
 	
-	pen   := iterator.starting_position;
-	pen.y += iterator.page.ascender;
+	iterator.pen    = iterator.starting_position;
+	iterator.pen.y += iterator.page.ascender;
 	for codepoint, i : iterator.text_buffer
 	{
-		if iterator.clip && pen.y - iterator.page.descender < xx iterator.clip_rect.y1 && codepoint != #char "\n" then continue;
-		if iterator.clip && pen.y - iterator.page.ascender  > xx iterator.clip_rect.y2 then break;
+		if iterator.clip && iterator.pen.y - iterator.page.descender < xx iterator.clip_rect.y1 && codepoint != #char "\n" then continue;
+		if iterator.clip && iterator.pen.y - iterator.page.ascender  > xx iterator.clip_rect.y2 then break;
 
 		`it_index := i;
 		`it : iterator.Elem;
@@ -344,28 +345,28 @@ for_expansion :: (iterator : *Text_Iterator ($T), body : Code, flags : For_Flags
 			}
 		}
 		it.glyph     = load_glyph (iterator.page, codepoint);
-		it.pen       = pen;
-		it.position  = pen;
-		if it.glyph then it.position = vec2 (pen.x + it.glyph.bitmap_bearing_x, pen.y - it.glyph.bitmap_bearing_y);
+		it.pen       = iterator.pen;
+		it.position  = iterator.pen;
+		if it.glyph then it.position = vec2 (iterator.pen.x + it.glyph.bitmap_bearing_x, iterator.pen.y - it.glyph.bitmap_bearing_y);
 		it.advance   = xx iterator.page.space_advance;
 		if it.glyph then it.advance = xx (it.glyph.advance >> 6);
 		
 		if it.codepoint == #char "\n"
 		{
-			pen.x  = iterator.starting_position.x;
-			pen.y += (iterator.page.ascender - iterator.page.descender);
+			iterator.pen.x  = iterator.starting_position.x;
+			iterator.pen.y += (iterator.page.ascender - iterator.page.descender);
 		}
 		else if it.codepoint == #char "\t"
 		{
-			start_pen := pen;
+			start_pen := iterator.pen;
 			advance := it.advance;
-			pen.x += it.advance;
-			pen.x = iterator.starting_position.x + ceil ((pen.x - iterator.starting_position.x) / (iterator.page.space_advance * 4.0)) * iterator.page.space_advance * 4.0;
-			it.advance = pen.x - start_pen.x;
+			iterator.pen.x += it.advance;
+			iterator.pen.x = iterator.starting_position.x + ceil ((iterator.pen.x - iterator.starting_position.x) / (iterator.page.space_advance * 4.0)) * iterator.page.space_advance * 4.0;
+			it.advance = iterator.pen.x - start_pen.x;
 		}
 		else
 		{
-			pen.x += it.advance;
+			iterator.pen.x += it.advance;
 		}
 		
 		#insert body;

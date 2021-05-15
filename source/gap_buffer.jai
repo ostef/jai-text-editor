@@ -200,7 +200,6 @@ grow_gap_buffer :: (using buffer : *Gap_Buffer, factor : s64)
 	count := gap_buffer_count (buffer);
 	back  := gap_buffer_count (buffer) - cursor;
 	new_capacity := allocated * factor + 8;
-	println ("Grew gap buffer (from % to %).", allocated, new_capacity);
 	new_gap  := new_capacity - count;
 	new_data := alloc (new_capacity * size_of (u32), allocator, allocator_data);
 	memcpy (new_data, data, cursor * size_of (u32));
