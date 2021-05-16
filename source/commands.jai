@@ -438,6 +438,7 @@ command_to_crlf :: (using screen : *Screen)
 	}
 
 	tab.input.eol_sequence = .CRLF;
+	tab.is_dirty = true;
 	
 	print_to_screen (screen, "Converted buffer line endings to CRLF.");
 }
@@ -456,6 +457,7 @@ command_to_lf :: (using screen : *Screen)
 	}
 
 	tab.input.eol_sequence = .LF;
+	tab.is_dirty = true;
 
 	print_to_screen (screen, "Converted buffer line endings to LF.");
 }
@@ -533,6 +535,7 @@ command_cp :: (using screen : *Screen, source : string, dest : string, overwrite
 	if ok then print_to_screen (screen, "Copied file '%' to '%'.", source, dest);
 	else print_to_screen (screen, "Could not copy file '%' to '%'.", source, dest);
 }
+@Command
 
 command_rm :: (using screen : *Screen, filename : string)
 {
