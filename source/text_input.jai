@@ -560,14 +560,38 @@ draw_cursor :: (using input : *Text_Input, height : u32, position : Vec2, color 
 {
 	immediate_push_state ();
 	defer immediate_pop_state ();
-	immediate_texture (0);
 	immediate_shader (0);
-	
-	page := get_font_page (*loaded_font, height);
-	target_position, target_width := calculate_drawn_cursor_position (input, height, position, render_whitespace);
+	immediate_texture (0);
+
+	iterator := make_text_iterator (*loaded_font, buffer, height, position, render_whitespace);
+	target_position : Vec2;
+	target_width    := cast (f32) iterator.page.space_advance;	
+	for it, i : iterator
+	{
+		if i == buffer.cursor
+		{
+			target_position = it.pen;
+			target_width    = it.advance;
+			cursor_position = lerp (cursor_position, target_position, 1 - smoothing);
+			cursor_width    = lerp (cursor_width, target_width, 1 - smoothing);
+			immediate_quad (cursor_position.x, cursor_position.y - iterator.page.ascender, cursor_position.x + cursor_width, cursor_position.y - iterator.page.descender, color);
+			inverse_color := vec4 (1 - color.r, 1 - color.g, 1 - color.b, color.a);
+			
+			if !is_control (it.glyph.codepoint)
+			{
+				immediate_shader (text_spo);
+				immediate_texture (it.glyph.texture);
+				immediate_quad (it.position.x, it.position.y, it.position.x + it.glyph.bitmap_width, it.position.y + it.glyph.bitmap_height, inverse_color,
+					it.glyph.uv0, vec2 (it.glyph.uv1.x, it.glyph.uv0.y), it.glyph.uv1, vec2 (it.glyph.uv0.x, it.glyph.uv1.y));
+			}
+
+			return target_position, target_width;
+		}
+	}
+	if buffer.cursor == gap_buffer_count (buffer) then target_position = iterator.pen;
 	cursor_position = lerp (cursor_position, target_position, 1 - smoothing);
 	cursor_width    = lerp (cursor_width, target_width, 1 - smoothing);
-	immediate_quad (cursor_position.x, cursor_position.y - page.ascender, cursor_position.x + cursor_width, cursor_position.y - page.descender, color);
-
+	immediate_quad (cursor_position.x, cursor_position.y - iterator.page.ascender, cursor_position.x + cursor_width, cursor_position.y - iterator.page.descender, color);
+	
 	return target_position, target_width;
 }
