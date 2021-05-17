@@ -196,7 +196,7 @@ command_save_as :: (using screen : *Screen, filename : string)
 	tab.filename = get_full_path (filename, heap_allocator);
 	detect_language (tab);
 
-	ok := write_buffer_to_file (*tab.input, tab.filename);
+	written, ok := write_buffer_to_file (*tab.input, tab.filename);
 	if ok
 	{
 		print_to_screen (screen, "Saved buffer to file '%'.", tab.filename);
