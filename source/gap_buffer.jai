@@ -705,7 +705,7 @@ move_line_down :: (using buffer : *Gap_Buffer, undo_buffering := Undo_Buffering.
 
 move_selection_up :: (using buffer : *Gap_Buffer, undo_buffering := Undo_Buffering.PUSH_OPERATION) -> bool
 {
-	if selection == 0 then return move_line_down (buffer, undo_buffering);
+	if selection == 0 then return move_line_up (buffer, undo_buffering);
 	
 	cached_selection  := selection;
 	cached_line_index := line_index;
