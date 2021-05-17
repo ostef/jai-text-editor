@@ -10,10 +10,10 @@ Screen :: struct
 	command_input : Text_Input;
 	is_inputting_command := true;
 	message_buffer : String_Builder;
-
+	
 	splits : [..]Screen_Split;
 	active_split_index : s64;
-
+	
 	render_timer_id  : u32;
 	ignore_next_text_input_message : bool;
 }
