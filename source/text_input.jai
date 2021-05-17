@@ -115,13 +115,13 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> modifie
 			if skip_word_forward (*buffer, select = true, stop_at_word_separators = config.word_skipping_stops_at_word_separators) then modified = true;
 		}
 		// Move line up and down
-		else if matches_key_binding (event, config.key_move_line_up)
+		else if matches_key_binding (event, config.key_move_selection_up)
 		{
-			if move_line_up (*buffer) then { modified = true; dirty = true; }
+			if move_selection_up (*buffer) then { modified = true; dirty = true; }
 		}
-		else if matches_key_binding (event, config.key_move_line_down)
+		else if matches_key_binding (event, config.key_move_selection_down)
 		{
-			if move_line_down (*buffer) then { modified = true; dirty = true; }
+			if move_selection_down (*buffer) then { modified = true; dirty = true; }
 		}
 		// Select all
 		else if matches_key_binding (event, config.key_select_all)

@@ -587,6 +587,8 @@ delete_selection :: (using buffer : *Gap_Buffer, undo_buffering := Undo_Bufferin
 	return false;
 }
 
+#scope_file
+
 move_line_up :: (using buffer : *Gap_Buffer, undo_buffering := Undo_Buffering.PUSH_OPERATION) -> bool
 {
 	if line_index == 0 then return false;
@@ -651,6 +653,7 @@ move_line_down :: (using buffer : *Gap_Buffer, undo_buffering := Undo_Buffering.
 	}
 
 	line_buffer := make_array (u32, lines[line_index] + 1, temp_allocator);
+	start_selection    := selection;
 	start_column_index := column_index;
 	move_to_last_line := line_index == lines.count - 2;
 	move_cursor_to_bol (buffer);
@@ -680,6 +683,92 @@ move_line_down :: (using buffer : *Gap_Buffer, undo_buffering := Undo_Buffering.
 	if !move_to_last_line then move_cursor_to_previous_line (buffer);
 	move_cursor_to_column (buffer, start_column_index);
 
+	return true;
+}
+
+#scope_export
+
+move_selection_up :: (using buffer : *Gap_Buffer, undo_buffering := Undo_Buffering.PUSH_OPERATION) -> bool
+{
+	if selection == 0 then return move_line_down (buffer, undo_buffering);
+	
+	cached_selection  := selection;
+	cached_line_index := line_index;
+	cached_column_index := column_index;
+	start_line_index, end_line_index : s64;
+	if selection < 0
+	{
+		end_line_index = line_index;
+		while selection != 0
+			move_cursor_backward (buffer, select = true);
+		start_line_index = line_index;
+	}
+	else
+	{
+		start_line_index = line_index;
+		while selection != 0
+			move_cursor_forward (buffer, select = true);
+		end_line_index = line_index;
+	}
+	
+	if start_line_index == 0
+	{
+		move_cursor_to_line (buffer, cached_line_index);
+		move_cursor_to_column (buffer, cached_column_index);
+		selection = cached_selection;
+		
+		return false;
+	}
+	
+	move_cursor_to_line (buffer, start_line_index - 1);
+	for i : start_line_index..end_line_index
+		move_line_down (buffer, undo_buffering);
+	move_cursor_to_line (buffer, cached_line_index - 1);
+	move_cursor_to_column (buffer, cached_column_index);
+	selection = cached_selection;
+	
+	return true;
+}
+
+move_selection_down :: (using buffer : *Gap_Buffer, undo_buffering := Undo_Buffering.PUSH_OPERATION) -> bool
+{
+	if selection == 0 then return move_line_down (buffer, undo_buffering);
+	
+	cached_selection  := selection;
+	cached_line_index := line_index;
+	cached_column_index := column_index;
+	start_line_index, end_line_index : s64;
+	if selection < 0
+	{
+		end_line_index = line_index;
+		while selection != 0
+			move_cursor_backward (buffer, select = true);
+		start_line_index = line_index;
+	}
+	else
+	{
+		start_line_index = line_index;
+		while selection != 0
+			move_cursor_forward (buffer, select = true);
+		end_line_index = line_index;
+	}
+	
+	if end_line_index == lines.count - 1
+	{
+		move_cursor_to_line (buffer, cached_line_index);
+		move_cursor_to_column (buffer, cached_column_index);
+		selection = cached_selection;
+		
+		return false;
+	}
+	
+	move_cursor_to_line (buffer, end_line_index + 1);
+	for i : start_line_index..end_line_index
+		move_line_up (buffer, undo_buffering);
+	move_cursor_to_line (buffer, cached_line_index + 1);
+	move_cursor_to_column (buffer, cached_column_index);
+	selection = cached_selection;
+	
 	return true;
 }
 

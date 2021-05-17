@@ -42,8 +42,8 @@ key_skip_left CTRL+LEFT
 key_skip_right CTRL+RIGHT
 key_select_skip_left CTRL+SHIFT+LEFT
 key_select_skip_right CTRL+SHIFT+RIGHT
-key_move_line_up ALT+UP
-key_move_line_down ALT+DOWN
+key_move_selection_up ALT+UP
+key_move_selection_down ALT+DOWN
 key_scroll_up CTRL+UP
 key_scroll_down CTRL+DOWN
 key_scroll_page_up CTRL+PAGE_UP

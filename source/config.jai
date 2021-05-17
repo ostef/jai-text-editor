@@ -50,8 +50,8 @@ Config :: struct
 	key_select_skip_left  := Key_Binding.{ Mods.CONTROL | .SHIFT, .LEFT };
 	key_select_skip_right := Key_Binding.{ Mods.CONTROL | .SHIFT, .RIGHT };
 
-	key_move_line_up   := Key_Binding.{ Mods.ALT, .UP };
-	key_move_line_down := Key_Binding.{ Mods.ALT, .DOWN };
+	key_move_selection_up   := Key_Binding.{ Mods.ALT, .UP };
+	key_move_selection_down := Key_Binding.{ Mods.ALT, .DOWN };
 
 	key_scroll_up   := Key_Binding.{ Mods.CONTROL, .UP };
 	key_scroll_down := Key_Binding.{ Mods.CONTROL, .DOWN };
