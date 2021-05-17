@@ -457,6 +457,7 @@ skip_word_backward :: (using buffer : *Gap_Buffer, select := false, stop_at_word
 	{
 		if move_cursor_backward (buffer, select) then modified = true;
 	}
+	if column_index == 0 && modified then return modified;
 
 	first := data[cursor - 1];
 	if move_cursor_backward (buffer, select) then modified = true;
