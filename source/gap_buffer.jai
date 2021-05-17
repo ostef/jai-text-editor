@@ -286,47 +286,81 @@ move_cursor_backward :: (using buffer : *Gap_Buffer, select := false) -> bool
 
 move_cursor :: inline (using buffer : *Gap_Buffer, position : s64, select := false) -> bool
 {
-	position = clamp (position, 0, gap_buffer_count (buffer));
-	if cursor == position then return false;
+	modified := false;
+	if !select && selection != 0
+	{
+		selection = 0;
+		modified  = true;
+	}
 
+	position = clamp (position, 0, gap_buffer_count (buffer));
 	while cursor > position
-		move_cursor_backward (buffer, select);
+	{
+		if move_cursor_backward (buffer, select) then modified = true;
+	}
 
 	while cursor < position
-		move_cursor_forward (buffer, select);
+	{
+		if move_cursor_forward (buffer, select) then modified = true;
+	}
 
-	return true;
+	return modified;
 }
 
 move_cursor_to_bol :: inline (using buffer : *Gap_Buffer, select := false) -> bool
 {
-	if column_index == 0 then return false;
+	modified := false;
+	if !select && selection != 0
+	{
+		selection = 0;
+		modified  = true;
+	}
+	
 	while column_index > 0
-		move_cursor_backward (buffer, select);
+	{
+		if move_cursor_backward (buffer, select) then modified = true;
+	}
 
-	return true;
+	return modified;
 }
 
 move_cursor_to_eol :: inline (using buffer : *Gap_Buffer, select := false) -> bool
 {
-	if is_at_eol (buffer) then return false;
+	modified := false;
+	if !select && selection != 0
+	{
+		selection = 0;
+		modified  = true;
+	}
+	
 	while !is_at_eol (buffer)
-		move_cursor_forward (buffer, select);
+	{
+		if move_cursor_forward (buffer, select) then modified = true;
+	}
 
-	return true;
+	return modified;
 }
 
 move_cursor_to_column :: inline (using buffer : *Gap_Buffer, column : s64, select := false) -> bool
 {
-	if column_index == column then return false;
+	modified := false;
+	if !select && selection != 0
+	{
+		selection = 0;
+		modified  = true;
+	}
 
 	while !is_at_eol (buffer) && column_index < column
-		move_cursor_forward (buffer, select);
+	{
+		if move_cursor_forward (buffer, select) then modified = true;
+	}
 
 	while column_index > 0 && column_index > column
-		move_cursor_backward (buffer, select);
+	{
+		if move_cursor_backward (buffer, select) then modified = true;
+	}
 
-	return true;
+	return modified;
 }
 
 move_cursor_to_previous_line :: inline (using buffer : *Gap_Buffer, select := false) -> bool
@@ -355,22 +389,37 @@ move_cursor_to_next_line :: inline (using buffer : *Gap_Buffer, select := false)
 
 move_cursor_to_line :: inline (using buffer : *Gap_Buffer, line : s64, select := false) -> bool
 {
-	if line_index == line then return false;
+	modified := false;
+	if !select && selection != 0
+	{
+		selection = 0;
+		modified  = true;
+	}
 
 	while line_index > 0 && line_index > line
-		move_cursor_to_previous_line (buffer, select);
+	{
+		if move_cursor_to_previous_line (buffer, select) then modified = true;
+	}
 
 	while line_index < lines.count - 1 && line_index < line
-		move_cursor_to_next_line (buffer, select);
+	{
+		if move_cursor_to_next_line (buffer, select) then modified = true;
+	}
 
-	return true;
+	return modified;
 }
 
 skip_word_forward :: (using buffer : *Gap_Buffer, select := false, stop_at_word_separators := true) -> bool
 {
-	if cursor == gap_buffer_count (buffer) then return false;
-
 	modified := false;
+	if !select && selection != 0
+	{
+		selection = 0;
+		modified  = true;
+	}
+	
+	if cursor == gap_buffer_count (buffer) then return modified;
+
 	while is_space (data[cursor + gap])
 	{
 		if move_cursor_forward (buffer, select) then modified = true;
@@ -395,9 +444,15 @@ skip_word_forward :: (using buffer : *Gap_Buffer, select := false, stop_at_word_
 
 skip_word_backward :: (using buffer : *Gap_Buffer, select := false, stop_at_word_separators := true) -> bool
 {
+	modified := false;
+	if !select && selection != 0
+	{
+		selection = 0;
+		modified  = true;
+	}
+
 	if cursor == 0 then return false;
 
-	modified := false;
 	while column_index > 0 && is_space (data[cursor - 1])
 	{
 		if move_cursor_backward (buffer, select) then modified = true;
