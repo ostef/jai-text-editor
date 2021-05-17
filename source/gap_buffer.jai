@@ -27,6 +27,9 @@ Text_Operation :: struct
 		DELETE;
 		MOVE_LINE_UP;
 		MOVE_LINE_DOWN;
+	
+		BATCH_BEGIN;
+		BATCH_END;
 	}
 
 	kind : Kind;
@@ -719,10 +722,24 @@ move_selection_up :: (using buffer : *Gap_Buffer, undo_buffering := Undo_Bufferi
 		
 		return false;
 	}
+
+	if undo_buffering == .PUSH_OPERATION
+	{
+		clear_redo (buffer);
+		op := make_text_operation (buffer, .BATCH_BEGIN);
+		push_to_array (*undo_stack, op);
+	}
 	
 	move_cursor_to_line (buffer, start_line_index - 1);
 	for i : start_line_index..end_line_index
 		move_line_down (buffer, undo_buffering);
+	
+	if undo_buffering == .PUSH_OPERATION
+	{
+		op := make_text_operation (buffer, .BATCH_END);
+		push_to_array (*undo_stack, op);
+	}
+	
 	move_cursor_to_line (buffer, cached_line_index - 1);
 	move_cursor_to_column (buffer, cached_column_index);
 	selection = cached_selection;
@@ -762,9 +779,23 @@ move_selection_down :: (using buffer : *Gap_Buffer, undo_buffering := Undo_Buffe
 		return false;
 	}
 	
+	if undo_buffering == .PUSH_OPERATION
+	{
+		clear_redo (buffer);
+		op := make_text_operation (buffer, .BATCH_BEGIN);
+		push_to_array (*undo_stack, op);
+	}
+	
 	move_cursor_to_line (buffer, end_line_index + 1);
 	for i : start_line_index..end_line_index
 		move_line_up (buffer, undo_buffering);
+	
+	if undo_buffering == .PUSH_OPERATION
+	{
+		op := make_text_operation (buffer, .BATCH_END);
+		push_to_array (*undo_stack, op);
+	}
+	
 	move_cursor_to_line (buffer, cached_line_index + 1);
 	move_cursor_to_column (buffer, cached_column_index);
 	selection = cached_selection;
@@ -810,6 +841,21 @@ undo_last_operation :: (using buffer : *Gap_Buffer) -> bool
 	case .MOVE_LINE_DOWN;
 		move_cursor_to_line (buffer, op.line_index + 1);
 		move_line_up (buffer, undo_buffering = .NONE);
+	
+	case .BATCH_END;
+		assert (undo_stack.count > 0, "Found a BATCH_END operation, but no matching BATCH_BEGIN operation was present on the undo stack.");
+		next := array_top (undo_stack);
+		while next.kind != .BATCH_BEGIN
+		{
+			assert (next.kind != .BATCH_END, "Found a BATCH_END operation before a matching BATCH_BEGIN one when batch undoing an operation."); 
+			assert (undo_stack.count > 0, "Found a BATCH_END operation, but no matching BATCH_BEGIN operation was present on the undo stack.");
+			undo_last_operation (buffer);
+			next = array_top (undo_stack);
+		}
+		undo_last_operation (buffer);	// Pop the BATCH_BEGIN operation from the stack
+		
+	case .BATCH_BEGIN;
+		// Do nothing
 	}
 
 	return true;
@@ -851,6 +897,21 @@ redo_undone_operation :: (using buffer : *Gap_Buffer) -> bool
 	case .MOVE_LINE_DOWN;
 		move_cursor_to_line (buffer, op.line_index);
 		move_line_down (buffer, undo_buffering = .NONE);
+
+	case .BATCH_BEGIN;
+		assert (redo_stack.count > 0, "Found a BATCH_END operation, but no matching BATCH_BEGIN operation was present on the undo stack.");
+		next := array_top (redo_stack);
+		while next.kind != .BATCH_BEGIN
+		{
+			assert (next.kind != .BATCH_BEGIN, "Found a BATCH_BEGIN operation before a matching BATCH_END one when batch redoing an operation."); 
+			assert (redo_stack.count > 0, "Found a BATCH_BEGIN operation, but no matching BATCH_END operation was present on the redo stack.");
+			redo_undone_operation (buffer);
+			next = array_top (redo_stack);
+		}
+		redo_undone_operation (buffer);	// Pop the BATCH_END operation from the stack
+		
+	case .BATCH_END;
+		// Do nothing
 	}
 
 	return true;
