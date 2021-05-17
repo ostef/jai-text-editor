@@ -169,10 +169,16 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> modifie
 			if utf32.count != 0
 			{
 				clear_redo (*buffer);
-				if buffer.selection != 0 then delete_selection (*buffer);
+				batch_operations := false;
+				if buffer.selection != 0
+				{
+					batch_operations = true;
+					begin_batch_operation (*buffer);
+					delete_selection (*buffer);
+				}
+				
 				op := make_text_operation (*buffer, .INSERT);
 				push_to_array (*buffer.undo_stack, op);
-			
 				for codepoint, i : utf32
 				{
 					if codepoint ==
@@ -191,6 +197,9 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> modifie
 				}
 				modified = true;
 				dirty    = true;
+			
+				if batch_operations
+					end_batch_operation (*buffer);
 			}
 		}
 		// Backspace, delete, return, tab
@@ -257,10 +266,88 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> modifie
 				if event.key_event.mods == .SHIFT
 				{
 					// Unindent line/selection
+					// @Cleanup (stefan): Move this to gap buffer ?
+					cached_column_index := buffer.column_index;
+					cached_line_index   := buffer.line_index;
+					cached_selection    := buffer.selection;
+					start_line_index, end_line_index : s64;
+					if buffer.selection < 0
+					{
+						end_line_index = buffer.line_index;
+						while buffer.selection != 0
+							move_cursor_backward (*buffer, select = true);
+						start_line_index = buffer.line_index;
+					}
+					else
+					{
+						start_line_index = buffer.line_index;
+						while buffer.selection != 0
+							move_cursor_forward (*buffer, select = true);
+						end_line_index = buffer.line_index;
+					}
+					
+					// @Fix (stefan): When the selection is already unindented, it will push empty batch operations. Fix that.
+					begin_batch_operation (*buffer);
+					move_cursor_to_line (*buffer, start_line_index);
+					move_cursor_to_bol (*buffer);
+					deleted := 0;
+					for i : start_line_index..end_line_index
+					{
+						if buffer[buffer.cursor] == #char "\t"
+						{
+							delete_selection (*buffer);
+							deleted += 1;
+						}
+						move_cursor_to_next_line (*buffer);
+						move_cursor_to_bol (*buffer);
+					}
+					move_cursor_to_line (*buffer, cached_line_index);
+					move_cursor_to_column (*buffer, cached_column_index - 1);
+					buffer.selection = cached_selection - sign (cached_selection) * deleted;
+					end_batch_operation (*buffer);
+				
+					modified = true;
+					dirty    = true;
 				}
 				else if buffer.selection != 0
 				{
 					// Indent line/selection
+					// @Cleanup (stefan): Move this to gap buffer ?
+					cached_column_index := buffer.column_index;
+					cached_line_index   := buffer.line_index;
+					cached_selection    := buffer.selection;
+					start_line_index, end_line_index : s64;
+					if buffer.selection < 0
+					{
+						end_line_index = buffer.line_index;
+						while buffer.selection != 0
+							move_cursor_backward (*buffer, select = true);
+						start_line_index = buffer.line_index;
+					}
+					else
+					{
+						start_line_index = buffer.line_index;
+						while buffer.selection != 0
+							move_cursor_forward (*buffer, select = true);
+						end_line_index = buffer.line_index;
+					}
+					
+					begin_batch_operation (*buffer);
+					move_cursor_to_line (*buffer, start_line_index);
+					move_cursor_to_bol (*buffer);
+					for i : start_line_index..end_line_index
+					{
+						insert_at_cursor (*buffer, #char "\t");
+						move_cursor_to_next_line (*buffer);
+						move_cursor_to_bol (*buffer);
+					}
+					move_cursor_to_line (*buffer, cached_line_index);
+					move_cursor_to_column (*buffer, cached_column_index + 1);
+					buffer.selection = cached_selection + sign (cached_selection) * (end_line_index - start_line_index);
+					end_batch_operation (*buffer);
+				
+					modified = true;
+					dirty    = true;
 				}
 				else
 				{
