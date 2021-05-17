@@ -315,7 +315,7 @@ resize_screen :: (using screen : *Screen, new_width : u32, new_height : u32)
 	old_height := height;
 	width  = new_width;
 	height = new_height;
-	w_ratio := width  / cast (f32) old_width;
+	w_ratio := width / cast (f32) old_width;
 	h_ratio := (height - window.borders.caption_height - bottom_bar_height ()) / cast (f32) (old_height - window.borders.caption_height - bottom_bar_height ());
 
 	// Resize all splits
@@ -325,7 +325,7 @@ resize_screen :: (using screen : *Screen, new_width : u32, new_height : u32)
 		it.size.x     *= w_ratio;
 		
 		it.position.y = (it.position.y - window.borders.caption_height) * h_ratio + window.borders.caption_height;
-		it.size.y     *= h_ratio;
+		it.size.y    *= h_ratio;
 		
 		if it.size.x > 0 && it.size.y > 0 then resize_split (it);
 	}
@@ -348,6 +348,9 @@ toggle_command_input :: inline (using screen : *Screen)
 {
 	is_inputting_command = !is_inputting_command;
 	clear_gap_buffer (*command_input.buffer);
+	tab := active_tab (screen);
+	// Make sure we redraw the tab in an inactive mode next time
+	if tab then tab.needs_redraw = true;
 }
 
 bottom_bar_height :: inline () -> f32 #must
@@ -812,10 +815,10 @@ draw_screen :: (using screen : *Screen)
 		}
 	}
 
+	// Draw lines crossing the screen if nothing is opened
 	if splits.count == 0
 	{
 		immediate_clip (views_area);
-		// Draw lines crossing the screen if nothing is opened
 		LINE_THICKNESS :: 6.0;
 		i := 0.0;
 		count := max (width, height);
@@ -825,13 +828,13 @@ draw_screen :: (using screen : *Screen)
 			i += 50;
 		}
 	}
+	// Draw active tabs for each splits
 	else
 	{
-		// Draw active tabs for each splits
 		immediate_noclip ();
 		for * split, i : splits
 		{
-			tab   := active_tab (split);
+			tab := active_tab (split);
 			if tab.needs_redraw
 			{
 				tab.needs_redraw = false;
