@@ -54,7 +54,19 @@ make_text_operation :: inline (using buffer : *Gap_Buffer, kind : Text_Operation
 	return make_text_operation (buffer, kind, cursor, line_index);
 }
 
-operator [] :: inline (using buffer : *Gap_Buffer, position : s64) -> u32 #must
+begin_batch_operation :: inline (using buffer : *Gap_Buffer)
+{
+	op := make_text_operation (buffer, .BATCH_BEGIN);
+	push_to_array (*undo_stack, op);
+}
+
+end_batch_operation :: inline (using buffer : *Gap_Buffer)
+{
+	op := make_text_operation (buffer, .BATCH_END);
+	push_to_array (*undo_stack, op);
+}
+
+operator [] :: inline (using buffer : Gap_Buffer, position : s64) -> u32 #must
 {
 	assert (position >= 0 && position < gap_buffer_count (buffer), "Gap buffer index is out of bounds (got %, must be in [%, %]).", position, 0, gap_buffer_count (buffer) - 1);
 	if position >= cursor then return data[gap + position];
@@ -726,8 +738,7 @@ move_selection_up :: (using buffer : *Gap_Buffer, undo_buffering := Undo_Bufferi
 	if undo_buffering == .PUSH_OPERATION
 	{
 		clear_redo (buffer);
-		op := make_text_operation (buffer, .BATCH_BEGIN);
-		push_to_array (*undo_stack, op);
+		begin_batch_operation (buffer);
 	}
 	
 	move_cursor_to_line (buffer, start_line_index - 1);
@@ -735,10 +746,7 @@ move_selection_up :: (using buffer : *Gap_Buffer, undo_buffering := Undo_Bufferi
 		move_line_down (buffer, undo_buffering);
 	
 	if undo_buffering == .PUSH_OPERATION
-	{
-		op := make_text_operation (buffer, .BATCH_END);
-		push_to_array (*undo_stack, op);
-	}
+		end_batch_operation (buffer);
 	
 	move_cursor_to_line (buffer, cached_line_index - 1);
 	move_cursor_to_column (buffer, cached_column_index);
@@ -782,8 +790,7 @@ move_selection_down :: (using buffer : *Gap_Buffer, undo_buffering := Undo_Buffe
 	if undo_buffering == .PUSH_OPERATION
 	{
 		clear_redo (buffer);
-		op := make_text_operation (buffer, .BATCH_BEGIN);
-		push_to_array (*undo_stack, op);
+		begin_batch_operation (buffer);
 	}
 	
 	move_cursor_to_line (buffer, end_line_index + 1);
@@ -791,10 +798,7 @@ move_selection_down :: (using buffer : *Gap_Buffer, undo_buffering := Undo_Buffe
 		move_line_up (buffer, undo_buffering);
 	
 	if undo_buffering == .PUSH_OPERATION
-	{
-		op := make_text_operation (buffer, .BATCH_END);
-		push_to_array (*undo_stack, op);
-	}
+		end_batch_operation (buffer);
 	
 	move_cursor_to_line (buffer, cached_line_index + 1);
 	move_cursor_to_column (buffer, cached_column_index);
@@ -901,7 +905,7 @@ redo_undone_operation :: (using buffer : *Gap_Buffer) -> bool
 	case .BATCH_BEGIN;
 		assert (redo_stack.count > 0, "Found a BATCH_END operation, but no matching BATCH_BEGIN operation was present on the undo stack.");
 		next := array_top (redo_stack);
-		while next.kind != .BATCH_BEGIN
+		while next.kind != .BATCH_END
 		{
 			assert (next.kind != .BATCH_BEGIN, "Found a BATCH_BEGIN operation before a matching BATCH_END one when batch redoing an operation."); 
 			assert (redo_stack.count > 0, "Found a BATCH_BEGIN operation, but no matching BATCH_END operation was present on the redo stack.");
