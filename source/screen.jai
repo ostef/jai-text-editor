@@ -929,22 +929,26 @@ draw_tab :: (using tab : *Screen_Tab, is_active : bool)
 	}
 
 	line_number_builder := make_string_builder (max_line_digit_count * input.buffer.lines.count, temp_allocator);
-	for line : 1..input.buffer.lines.count
+
 	{
-		print_to_builder (*line_number_builder, " ");
-		// Align right
-		digit_count := 0;
-		temp := line;
-		while temp
+		profile ("generate line numbers string");
+		for line : 1..input.buffer.lines.count
 		{
-			temp /= 10;
-			digit_count += 1;
-		}
-		leading_spaces := max_line_digit_count - digit_count;
-		for 0..leading_spaces - 1
 			print_to_builder (*line_number_builder, " ");
-			
-		print_line_to_builder (*line_number_builder, "% ", line);
+			// Align right
+			digit_count := 0;
+			temp := line;
+			while temp
+			{
+				temp /= 10;
+				digit_count += 1;
+			}
+			leading_spaces := max_line_digit_count - digit_count;
+			for 0..leading_spaces - 1
+				print_to_builder (*line_number_builder, " ");
+				
+			print_line_to_builder (*line_number_builder, "% ", line);
+		}
 	}
 
 	{
@@ -962,6 +966,7 @@ draw_tab :: (using tab : *Screen_Tab, is_active : bool)
 	}
 
 	{
+		profile ("calculate line number text bounds");
 		line_info_text_end := calculate_drawn_text_bounds (*loaded_font, to_string (line_number_builder), config.buffer_font_height);
 		line_bar.x1 = tab_area.x1;
 		line_bar.x2 = line_bar.x1 + cast (s32) (line_info_text_end.x + 2 * config.buffer_line_numbers_padding);
@@ -977,7 +982,11 @@ draw_tab :: (using tab : *Screen_Tab, is_active : bool)
 	}
 	
 	// Limit the scrolling to the text bounds
-	text_max := calculate_drawn_text_bounds (*loaded_font, input.buffer, config.buffer_font_height);
+	text_max : Vec2;
+	{
+		profile ("calculate buffer bounds");
+		text_max = calculate_drawn_text_bounds (*loaded_font, input.buffer, config.buffer_font_height);
+	}
 	max_scrolling  := vec2 (ceil (text_max.x / buffer_page.space_advance), ceil (text_max.y / text_line_height));
 	max_scrolling.x = max (max_scrolling.x - 2, 0);		// Add padding
 	if text_max.x < xx (text_area.x2 - text_area.x1) then max_scrolling.x = 0;
@@ -1055,11 +1064,11 @@ draw_tab :: (using tab : *Screen_Tab, is_active : bool)
 
 	// Draw line numbers
 	{
-	profile ("draw_line_numbers");
-	line_number_position.x = cast (f32) line_bar.x1 + config.buffer_line_numbers_padding;
-	line_number_position.y = cast (f32) line_bar.y1 + text_offset.y;
-	immediate_clip (line_bar);
-	draw_text (*loaded_font, to_string (line_number_builder), config.buffer_font_height, line_number_position, get_color_from_theme ("primary_text", "buffer_line_numbers_text"), line_bar);
+		profile ("draw_line_numbers");
+		line_number_position.x = cast (f32) line_bar.x1 + config.buffer_line_numbers_padding;
+		line_number_position.y = cast (f32) line_bar.y1 + text_offset.y;
+		immediate_clip (line_bar);
+		draw_text (*loaded_font, to_string (line_number_builder), config.buffer_font_height, line_number_position, get_color_from_theme ("primary_text", "buffer_line_numbers_text"), line_bar);
 	}
 
 	immediate_clip (text_area);
@@ -1075,15 +1084,18 @@ draw_tab :: (using tab : *Screen_Tab, is_active : bool)
 		draw_text_input (*input, config.buffer_font_height, text_position, color_ranges, text_area, active = is_active, render_whitespace = config.buffer_render_whitespace, whitespace_dimming = config.buffer_rendered_whitespace_dimming);
 	}
 	
-	cursor_smoothing := clamp (config.visual_cursor_smoothing, 0, 0.95);
-	cursor_color := get_color_from_theme ("cursor", "buffer_cursor");
-	if !is_active then cursor_color.a = 0;
-	// Draw cursor
-	target_cursor_position := draw_cursor (*input, config.buffer_font_height, text_position, cursor_color, cursor_smoothing, config.buffer_render_whitespace);
-	if !approx_equal (input.cursor_position, target_cursor_position, 0.0001)
-		needs_redraw = true;
-	else
-		input.cursor_position = target_cursor_position;
+	{
+		profile ("draw buffer cursor");
+		cursor_smoothing := clamp (config.visual_cursor_smoothing, 0, 0.95);
+		cursor_color := get_color_from_theme ("cursor", "buffer_cursor");
+		if !is_active then cursor_color.a = 0;
+		// Draw cursor
+		target_cursor_position := draw_cursor (*input, config.buffer_font_height, text_position, cursor_color, cursor_smoothing, config.buffer_render_whitespace);
+		if !approx_equal (input.cursor_position, target_cursor_position, 0.0001)
+			needs_redraw = true;
+		else
+			input.cursor_position = target_cursor_position;
+	}
 
 	immediate_clip (info_bar);
 	// Info bar background
