@@ -395,9 +395,10 @@ command_reload_config :: (using screen : *Screen, filename := "")
 {
 	name := filename;
 	if !name then name = "config.edit";
+	previous_tab_height        := tab_height ();
 	previous_bottom_bar_height := bottom_bar_height ();
 	ok := read_config_from_file (name);
-	update_screen_from_config_reload (screen, previous_bottom_bar_height);
+	update_screen_from_config_reload (screen, previous_tab_height, previous_bottom_bar_height);
 	if ok then print_to_screen (screen, "Reloaded config from file '%'.", name);
 	else       print_to_screen (screen, "Could not reload config from file '%'.", name);
 }

@@ -316,7 +316,7 @@ resize_screen :: (using screen : *Screen, new_width : u32, new_height : u32)
 	width  = new_width;
 	height = new_height;
 	w_ratio := width / cast (f32) old_width;
-	h_ratio := (height - window.borders.caption_height - bottom_bar_height ()) / cast (f32) (old_height - window.borders.caption_height - bottom_bar_height ());
+	h_ratio := (height - tab_height () - bottom_bar_height ()) / cast (f32) (old_height - tab_height () - bottom_bar_height ());
 
 	// Resize all splits
 	for * splits
@@ -324,21 +324,21 @@ resize_screen :: (using screen : *Screen, new_width : u32, new_height : u32)
 		it.position.x *= w_ratio;
 		it.size.x     *= w_ratio;
 		
-		it.position.y = (it.position.y - window.borders.caption_height) * h_ratio + window.borders.caption_height;
+		it.position.y = (it.position.y - tab_height ()) * h_ratio + tab_height ();
 		it.size.y    *= h_ratio;
 		
 		if it.size.x > 0 && it.size.y > 0 then resize_split (it);
 	}
 }
 
-update_screen_from_config_reload :: (using screen : *Screen, previous_bottom_bar_height : f32)
+update_screen_from_config_reload :: (using screen : *Screen, previous_tab_height : f32, previous_bottom_bar_height : f32)
 {
-	h_ratio := (height - window.borders.caption_height - bottom_bar_height ()) / cast (f32) (height - window.borders.caption_height - previous_bottom_bar_height);
+	h_ratio := (height - tab_height () - bottom_bar_height ()) / cast (f32) (height - previous_tab_height - previous_bottom_bar_height);
 
 	// Resize splits
 	for * splits
 	{
-		it.position.y = (it.position.y - window.borders.caption_height) * h_ratio + window.borders.caption_height;
+		it.position.y = (it.position.y - previous_tab_height) * h_ratio + tab_height ();
 		it.size.y     *= h_ratio;
 		resize_split (it);
 	}
@@ -358,6 +358,13 @@ bottom_bar_height :: inline () -> f32 #must
 	page := get_font_page (*loaded_font, config.bottom_io_font_height);
 
 	return (page.ascender - page.descender) + 2.0 * config.bottom_io_padding;
+}
+
+tab_height :: inline () -> f32 #must
+{
+	page := get_font_page (*loaded_font, config.tab_title_font_height);
+	
+	return (page.ascender - page.descender) + 2.0 * config.tab_title_padding;
 }
 
 print_to_screen :: (using screen : *Screen, fmt : string, args : ..Any)
@@ -413,8 +420,8 @@ new_split :: (using screen : *Screen) -> *Screen_Split
 	size     : Vec2 = ---;
 	if splits.count == 0
 	{
-		position = vec2 (0, xx window.borders.caption_height);
-		size     = vec2 (xx screen.width, screen.height - xx window.borders.caption_height - bottom_bar_height ());
+		position = vec2 (0, tab_height ());
+		size     = vec2 (xx screen.width, screen.height - tab_height () - bottom_bar_height ());
 	}
 	else
 	{
@@ -726,34 +733,33 @@ draw_screen :: (using screen : *Screen)
 	{
 		views_area.x1 = 0;
 		views_area.x2 = xx screen.width;
-		views_area.y1 = xx window.borders.caption_height;
+		views_area.y1 = xx tab_height ();
 		views_area.y2 = bottom_bar.y1;
 	}
 
 	immediate_push_state ();
 	defer immediate_pop_state ();
 
-	// Draw the caption bar
-	immediate_quad (0.0, 0.0, cast (f32) width, cast (f32) window.borders.caption_height, get_color_from_theme ("primary_light", "window_caption_background"));
+	// Draw the tab captions
+	immediate_quad (0.0, 0.0, cast (f32) width, tab_height (), get_color_from_theme ("primary_light", "window_caption_background"));
 	for * split, i : splits
 	{
 		caption_area : Clip_Rect;
 		caption_area.x1 = xx split.x;
 		caption_area.x2 = caption_area.x1 + xx split.w;
 		caption_area.y1 = 0;
-		caption_area.y2 = xx window.borders.caption_height;
+		caption_area.y2 = xx tab_height ();
 		
 		for * tab, ti : split.tabs
 		{
 			foreground_color := get_color_from_theme ("primary_text", "tab_title_text");
 			if tab.is_dirty then foreground_color = get_color_from_theme ("secondary", "tab_title_text_dirty");
 			tab_name := get_tab_name (tab);
-			TAB_TITLE_FONT_HEIGHT :: 14;
-			page := get_font_page (*loaded_font, TAB_TITLE_FONT_HEIGHT);
+			page := get_font_page (*loaded_font, config.tab_title_font_height);
 			x1 := split.x + ti * TAB_CAPTION_WIDTH;
 			x2 := x1 + TAB_CAPTION_WIDTH;
 			y1 := 0.0;
-			y2 := cast (f32) window.borders.caption_height;
+			y2 := tab_height ();
 			background_color := get_color_from_theme ("primary_very_light", "tab_caption_inactive_background_color");
 			if ti == split.active_tab_index then background_color = get_color_from_theme ("primary", "tab_caption_background_color");
 			immediate_quad (x1, y1, x2, y2, background_color);
@@ -765,18 +771,19 @@ draw_screen :: (using screen : *Screen)
 			title_area.y1 = xx y1;
 			title_area.x2 = xx x2;
 			title_area.y2 = xx y2;
-			title_bounds := calculate_drawn_text_bounds (*loaded_font, tab_name, TAB_TITLE_FONT_HEIGHT);
+			title_bounds := calculate_drawn_text_bounds (*loaded_font, tab_name, config.tab_title_font_height);
 			// Center tab title horizontally if it fits
 			if x1 + title_bounds.x < x2 then x1 = split.x + ti * TAB_CAPTION_WIDTH + round ((TAB_CAPTION_WIDTH - title_bounds.x) * 0.5);
 			x1 = round (x1);	// We don't handle subpixel text rendering
 			// Center tab title vertically
-			y1 = round ((window.borders.caption_height - title_bounds.y) * 0.5);
+			y1 = round ((tab_height () - title_bounds.y) * 0.5);
 			//immediate_clip (title_area);
-			draw_text (*loaded_font, tab_name, TAB_TITLE_FONT_HEIGHT, vec2 (x1, y1), foreground_color, title_area);
+			draw_text (*loaded_font, tab_name, config.tab_title_font_height, vec2 (x1, y1), foreground_color, title_area);
 			immediate_noclip ();
 		}
 	}
 
+	/*
 	// Draw window buttons
 	for i : 0..2
 	{
@@ -814,6 +821,7 @@ draw_screen :: (using screen : *Screen)
 			immediate_line (center - vec2 (LENGTH, 0), center + vec2 (LENGTH, 0), foreground_color, 1);
 		}
 	}
+	*/
 
 	// Draw lines crossing the screen if nothing is opened
 	if splits.count == 0
