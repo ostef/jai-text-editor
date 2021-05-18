@@ -174,7 +174,7 @@ command_save :: (using screen : *Screen)
 		return;
 	}
 
-	ok := write_buffer_to_file (*tab.input, tab.filename);
+	written, ok := write_buffer_to_file (*tab.input, tab.filename);
 	if ok
 	{
 		print_to_screen (screen, "Saved buffer to file '%'.", tab.filename);
@@ -228,7 +228,7 @@ command_save_all :: (using screen : *Screen)
 				continue;
 			}
 
-			ok := write_buffer_to_file (*tab.input, tab.filename);
+			written, ok := write_buffer_to_file (*tab.input, tab.filename);
 			if ok then saved += 1;
 			else failed += 1;
 		}
