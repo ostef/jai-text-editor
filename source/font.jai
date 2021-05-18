@@ -424,11 +424,8 @@ calculate_drawn_text_bounds :: (using font : *Font, text_buffer : $T, height : u
 	iterator := make_text_iterator (font, text_buffer, height, VEC2_ZERO, false);
 	for iterator
 	{
-		pen := it.pen;
-		pen.x += it.advance;
-		pen.y -= iterator.page.descender;
-		if pen.x > max.x then max.x = pen.x;
-		if pen.y > max.y then max.y = pen.y;
+		if iterator.pen.x > max.x then max.x = iterator.pen.x;
+		if iterator.pen.y > max.y then max.y = iterator.pen.y;
 	}
 	
 	return max;
