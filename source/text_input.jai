@@ -581,7 +581,8 @@ draw_cursor :: (using input : *Text_Input, height : u32, position : Vec2, color 
 			{
 				immediate_shader (text_spo);
 				immediate_texture (it.glyph.texture);
-				immediate_quad (it.position.x, it.position.y, it.position.x + it.glyph.bitmap_width, it.position.y + it.glyph.bitmap_height, inverse_color,
+				glyph_position := vec2 (cursor_position.x + it.glyph.bitmap_bearing_x, cursor_position.y - it.glyph.bitmap_bearing_y);
+				immediate_quad (glyph_position.x, glyph_position.y, glyph_position.x + it.glyph.bitmap_width, glyph_position.y + it.glyph.bitmap_height, inverse_color,
 					it.glyph.uv0, vec2 (it.glyph.uv1.x, it.glyph.uv0.y), it.glyph.uv1, vec2 (it.glyph.uv0.x, it.glyph.uv1.y));
 			}
 
