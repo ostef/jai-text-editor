@@ -1,4 +1,5 @@
 .build/
 .vs/
 .vscode/
+int/
 debug/

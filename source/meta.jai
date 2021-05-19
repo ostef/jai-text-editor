@@ -2,16 +2,19 @@
 #import "Process";
 #import "File";
 Compiler :: #import "Compiler";
+Windows_Resources :: #import "Windows_Resources";
 
 #if OS == .WINDOWS
 {
 	DATA_DIR  :: "d:/dev/edit/data/";
 	BUILD_DIR :: "d:/dev/edit/bin/win/";
+	INT_DIR   :: "d:/dev/edit/int/";
 }
 else #if OS == .LINUX
 {
 	DATA_DIR  :: "~/hdd/dev/edit/data/";
 	BUILD_DIR :: "~/hdd/dev/edit/bin/linux/";
+	INT_DIR   :: "~/hdd/dev/edit/int/";
 }
 OUTPUT_NAME :: "edit";
 
@@ -282,8 +285,9 @@ handle_compiler_message :: (message : *Compiler.Message)
 
 	case .COMPILATION_PHASE;
 		phase := cast (*Compiler.Message_Phase) message;
-		if phase.phase == .TYPECHECKED_ALL_WE_CAN
+		if phase.phase == 
 		{
+		case .TYPECHECKED_ALL_WE_CAN;
 			if !command_register_proc_generated
 			{
 				for i : 0..commands_to_register.count - 1
@@ -307,6 +311,9 @@ handle_compiler_message :: (message : *Compiler.Message)
 				Compiler.add_build_string (fstring (temp_allocator, "#run % ();", it), message.workspace);
 			}
 			clear_array (*run_when_all_typechecked);
+		
+		case .READY_FOR_CUSTOM_LINK_COMMAND;
+			run_custom_link_command (message.workspace, phase);
 		}
 	}
 }
@@ -356,6 +363,8 @@ build :: ()
 	build_options.output_type            = .EXECUTABLE;
 	build_options.output_executable_name = OUTPUT_NAME;
 	build_options.output_path            = BUILD_DIR;
+	build_options.intermediate_path      = INT_DIR;
+	build_options.use_custom_link_command = true;
 	modules_search_path_array := make_array (string, 5, temp_allocator);
 #if OS == .WINDOWS
 {
@@ -369,8 +378,6 @@ else #if OS == .LINUX
 }
 	build_options.import_path = modules_search_path_array;
 	build_options.backend = .LLVM;
-	//if debugging then build_options.backend = .LLVM;
-	//else              build_options.backend = .X64;
 	if profile then build_options.stack_trace = true;
 
 	Compiler.set_build_options (build_options, workspace);
@@ -424,6 +431,196 @@ else #if OS == .LINUX
 	build_options = Compiler.get_build_options ();
 	build_options.output_type = .NO_OUTPUT;
 	Compiler.set_build_options (build_options);
+}
+
+run_custom_link_command :: (w : Workspace, msg : *Compiler.Message_Phase, use_system_linker_if_available := true, make_windows_application := false)
+{
+	options := Compiler.get_build_options (w);
+	
+	target := options.os_target;
+	target_windows := target == .WINDOWS;
+	target_linux   := target == .LINUX;
+	target_macos   := target == .MACOS;
+	use_lld := !((target == OS) && use_system_linker_if_available);
+	
+#if OS == .WINDOWS
+	system_linker_exe_name := "link.exe";
+else #if OS == .LINUX || OS == .MACOS 
+	system_linker_exe_name := "ld";
+	
+#if OS == .WINDOWS
+{
+	if !use_lld && target_windows
+	{
+		vc_path, linker_path := Windows_Resources.find_visual_studio_in_a_ridiculous_garbage_way ();
+		if linker_path
+		{
+			system_linker_exe_name = fstring (temp_allocator, "%\\%", linker_path, system_linker_exe_name);
+		}
+		else
+		{
+			Compiler.compiler_report ("Could not find link.exe path, falling back to using LLD.\n", mode = .WARNING);
+			use_lld = true;
+		}
+	}
+}
+
+	suffix := "";
+#if OS == .WINDOWS suffix = ".exe";
+	target_filename := join (temp_allocator, options.output_path, options.output_executable_name, suffix);
+	exe_name := get_executable_path (temp_allocator);
+	index := find_last_occurence (exe_name, "jai/");
+	
+	lld_exe_name : string;
+	if use_lld
+	{
+		compiler_base_path := "d:/dev/jai/";
+		if index != -1
+		{
+			compiler_base_path = exe_name;
+			compiler_base_path.count = index + "jai/".count;
+		}
+		else
+		{
+			Compiler.compiler_report ("Could not find path to lld.exe, in the compiler executable's root folder.\n");
+		}
+		
+#if OS == .WINDOWS
+		lld := "lld.exe";
+else #if OS == .LINUX
+		lld := "lld-linux";
+else #if OS == .MACOS
+		lld := "lld-macos";
+		
+		lld_exe_name = join (temp_allocator, compiler_base_path, "bin/", lld);
+	}
+	
+	args := make_array (string, 20, temp_allocator);
+	pta :: push_to_array;
+	if use_lld
+	{
+		pta (*args, lld_exe_name);
+		pta (*args, "-flavor");
+		if target_windows
+			pta (*args, "link");
+		else if target_linux
+			pta (*args, "Gnu");
+		else if target_macos
+			pta (*args, "Darwin");
+	}
+	else
+	{
+		pta (*args, system_linker_exe_name);
+	}
+	
+	if target_windows then pta (*args, "/nologo");
+	
+	for msg.compiler_generated_object_files
+		pta (*args, it);
+	
+	for msg.support_object_files
+		pta (*args, it);
+		
+	if target_windows
+	{
+		pta (*args, fstring (temp_allocator, "/OUT:%", target_filename));
+		pta (*args, "/MACHINE:AMD64");
+		pta (*args, "/INCREMENTAL:NO");
+		pta (*args, "/DEBUG");
+		
+		// Generate a Windows app instead of a CLI program
+		if make_windows_application
+		{
+			pta (*args, "/SUBSYSTEM:WINDOWS");
+			pta (*args, "/ENTRY:main");
+			pta (*args, "/IGNORE:4216");
+		}
+		
+		if options.output_type == .EXECUTABLE
+			pta (*args, fstring (temp_allocator, "/IMPLIB:%.lib", join (temp_allocator, options.intermediate_path, strip_extension_from_path (options.output_executable_name))));
+	}
+	else if target_linux
+	{
+		pta (*args, "--eh-frame-hdr");
+		pta (*args, "-export-dynamic");
+		pta (*args, fstring (temp_allocator, "-o%", target_filename));
+		pta (*args, "--dynamic-linker");
+		pta (*args, "/lib64/ld-linux-x86-64.so.2");
+		pta (*args, "-rpath=$ORIGIN");
+	}
+	else if target_macos
+	{
+		pta (*args, "-export_dynamic");
+		pta (*args, "-dynamic");
+		pta (*args, "-o");
+		pta (*args, target_filename);
+		
+		pta (*args, "-macosx_version_min");
+		pta (*args, "10.11");
+		
+		pta (*args, "-rpath");
+		pta (*args, "@loader_path");
+	}
+	
+#if OS == .WINDOWS
+{
+	if target_windows
+	{
+		vc_path := Windows_Resources.find_visual_studio_in_a_ridiculous_garbage_way ();
+		if vc_path then pta (*args, fstring (temp_allocator, "/libpath:\"%\"", vc_path));
+		else Compiler.compiler_report (#file, #line, 0, "Unable to find Visual Studio runtime library folder. Can't compile.\n");
+
+		kit_root, windows_version := Windows_Resources.find_windows_kit_root ();
+		if kit_root
+		{
+			pta (*args, fstring (temp_allocator, "/libpath:\"%/um/x64\"", kit_root));
+			pta (*args, fstring (temp_allocator, "/libpath:\"%/ucrt/x64\"", kit_root));
+		}
+		else
+		{
+			Compiler.compiler_report (#file, #line, 0, "Unable to find Windows Kit root. Can't compiler.\n");
+		}
+		
+		if options.output_type == .DYNAMIC_LIBRARY then pta (*args, "/DLL");
+		pta (*args, "-nodefaultlib");
+	}
+}
+
+	for msg.libraries
+		pta (*args, it);
+
+	//println ("Link line: %", join_with_separator (temp_allocator, ..args, " "));
+	success, exit_code, out, err := os_run_command (..args, capture_and_return_output = true);
+	
+	if !success || exit_code != 0
+	{
+		println ("\n\n\e[1;31mError: Link step failed! (Exit code %).", exit_code);
+		if err then println (err);
+		if out then println (out);
+		print ("\e[0;37m");
+	}
+	else
+	{
+		displayed_something := false;
+		lines := break_by (out, "\n", temp_allocator);
+		for lines
+		{
+			line := trim_matched_at_ends (it, " \t\n\r");
+			if line && !starts_with (line, "Creating library")
+			{
+				if !displayed_something
+				{
+					print ("\n\n");
+					displayed_something = true;
+				}
+				
+				println (line);
+			}
+		}
+	}
+	println ("\e[0;37m");
+	
+	Compiler.compiler_custom_link_command_is_complete (w);
 }
 
 #run build ();
