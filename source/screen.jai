@@ -311,6 +311,7 @@ init_screen :: (screen : *Screen, width : u32, height : u32)
 
 resize_screen :: (using screen : *Screen, new_width : u32, new_height : u32)
 {
+	if new_width == 0 || new_height == 0 then return;
 	old_width  := width;
 	old_height := height;
 	width  = new_width;
@@ -341,6 +342,9 @@ update_screen_from_config_reload :: (using screen : *Screen, previous_tab_height
 		it.position.y = (it.position.y - previous_tab_height) * h_ratio + tab_height ();
 		it.size.y     *= h_ratio;
 		resize_split (it);
+		// Regenerate colors
+		for * tab, i : it.tabs
+			generate_color_ranges (tab);
 	}
 }
 
