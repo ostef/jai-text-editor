@@ -67,12 +67,28 @@ jai_read_next_token :: (using lexer : *Lexer) -> Jai_Token #must
 		level := 1;
 		while curr < end && level != 0
 		{
-			if advance_if_matches (lexer, "/*")
-				level += 1;
-			else if advance_if_matches (lexer, "*/")
-				level -= 1;
-			else
+			if advance_if_matches (lexer, "\"")
+			{
+				while curr < end && <<curr != #char "\""
+				{
+					if <<curr == #char "\\" then advance (lexer);
+					advance (lexer);
+				}
 				advance (lexer);
+		
+			}
+			if advance_if_matches (lexer, "/*")
+			{
+				level += 1;
+			}
+			else if advance_if_matches (lexer, "*/")
+			{
+				level -= 1;
+			}
+			else
+			{
+				advance (lexer);
+			}
 		}
 		set_token_end (lexer, *result);
 	}
