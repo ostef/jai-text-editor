@@ -313,10 +313,14 @@ handle_compiler_message :: (message : *Compiler.Message)
 			clear_array (*run_when_all_typechecked);
 		
 		case .READY_FOR_CUSTOM_LINK_COMMAND;
-			run_custom_link_command (message.workspace, phase);
+			run_custom_link_command (message.workspace, phase, no_console = false);
 		}
 	}
 }
+
+debugging := false;
+profile   := false;
+release   := false;
 
 build :: ()
 {
@@ -324,23 +328,29 @@ build :: ()
 	context.allocator = temp_allocator;
 
 	run_on_success := false;
-	debugging      := false;
-	profile        := false;
 	is_program := false;
-	args           := Compiler.compiler_get_command_line_arguments ();
+	args, system_args := Compiler.compiler_get_command_line_arguments ();
 	program_args := make_array (string, 10, temp_allocator);
 	push_to_array (*program_args, BUILD_DIR, OUTPUT_NAME, " ");
+	for system_args
+	{
+		if it ==
+		{
+		case "-release"; release = true;
+		}
+	}
+	
 	for args
 	{
 		if !is_program
 		{
 			if it ==
 			{
-			case "run";    run_on_success = true;
-			case "debug";  debugging      = true;
+			case "run";     run_on_success = true;
+			case "debug";   debugging      = true;
 			case "profile"; profile = true;
-			case "---";    is_program = true;
-			case;          println ("Unknown argument: '%'", it);
+			case "---";     is_program = true;
+			case;           println ("Unknown argument: '%'", it);
 			}
 		}
 		else
@@ -388,6 +398,8 @@ else #if OS == .LINUX
 	Compiler.add_build_file ("main.jai", workspace);
 	if profile then Compiler.add_build_string ("ENABLE_PROFILING :: true;", workspace);
 	else Compiler.add_build_string ("ENABLE_PROFILING :: false;", workspace);
+	if false && release then Compiler.add_build_string ("NO_CONSOLE :: true;", workspace);
+	else Compiler.add_build_string ("NO_CONSOLE :: false;", workspace);
 
 	init_array (*commands_to_register, 50, temp_allocator);
 	init_array (*command_decls, 50, temp_allocator);
@@ -433,7 +445,7 @@ else #if OS == .LINUX
 	Compiler.set_build_options (build_options);
 }
 
-run_custom_link_command :: (w : Workspace, msg : *Compiler.Message_Phase, use_system_linker_if_available := true, make_windows_application := false)
+run_custom_link_command :: (w : Workspace, msg : *Compiler.Message_Phase, use_system_linker_if_available := true, no_console := false)
 {
 	options := Compiler.get_build_options (w);
 	
@@ -527,14 +539,13 @@ else #if OS == .MACOS
 		pta (*args, "/MACHINE:AMD64");
 		pta (*args, "/INCREMENTAL:NO");
 		pta (*args, "/DEBUG");
+		pta (*args, "/IGNORE:4216");
 		
 		// Generate a Windows app instead of a CLI program
-		if make_windows_application
-		{
+		if no_console
 			pta (*args, "/SUBSYSTEM:WINDOWS");
-			pta (*args, "/ENTRY:main");
-			pta (*args, "/IGNORE:4216");
-		}
+		else
+			pta (*args, "/SUBSYSTEM:CONSOLE");
 		
 		if options.output_type == .EXECUTABLE
 			pta (*args, fstring (temp_allocator, "/IMPLIB:%.lib", join (temp_allocator, options.intermediate_path, strip_extension_from_path (options.output_executable_name))));
