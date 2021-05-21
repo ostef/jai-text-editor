@@ -215,7 +215,7 @@ screen_handle_event :: (using screen : *Screen, event : Event)
 		{
 			ignore_next_text_input_message = false;
 		}
-
+		
 	case .MOUSE_BUTTON_PRESS;
 		// Select text view with mouse
 		if !is_inputting_command && splits.count != 0 && event.mouse_button_event.button == .LEFT
