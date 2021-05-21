@@ -203,7 +203,7 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> modifie
 			}
 		}
 		// Backspace, delete, return, tab
-		else if event.key_event.key_code == .BACKSPACE
+		else if event.key_event.key_code == .BACKSPACE 
 		{
 			if event.key_event.mods == .CONTROL
 				skip_word_backward (*buffer, true);
@@ -356,6 +356,14 @@ text_input_handle_event :: (using input : *Text_Input, event : Event) -> modifie
 					dirty    = true;
 				}
 			}
+		}
+		else if event.key_event.key_code == .HOME && (event.key_event.mods & .CONTROL) == .NONE
+		{
+			modified = move_cursor_to_boi (*buffer, select = (event.key_event.mods & .SHIFT) == .SHIFT);
+		}
+		else if event.key_event.key_code == .END && (event.key_event.mods & .CONTROL) == .NONE
+		{
+			modified = move_cursor_to_eoi (*buffer, select = (event.key_event.mods & .SHIFT) == .SHIFT);
 		}
 
 	case .TEXT_INPUT;

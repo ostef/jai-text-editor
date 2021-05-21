@@ -442,6 +442,40 @@ skip_word_forward :: (using buffer : *Gap_Buffer, select := false, stop_at_word_
 	return modified;
 }
 
+move_cursor_to_boi :: (using buffer : *Gap_Buffer, select := false) -> bool
+{
+	modified := false;
+	if !select && selection != 0
+	{
+		selection = 0;
+		modified  = true;
+	}
+	
+	while cursor > 0
+	{
+		if move_cursor_backward (buffer, select) then modified = true;
+	}
+	
+	return modified;
+}
+
+move_cursor_to_eoi :: (using buffer : *Gap_Buffer, select := false) -> bool
+{
+	modified := false;
+	if !select && selection != 0
+	{
+		selection = 0;
+		modified  = true;
+	}
+	
+	while cursor < gap_buffer_count (buffer)
+	{
+		if move_cursor_forward (buffer, select) then modified = true;
+	}
+	
+	return modified;
+}
+
 skip_word_backward :: (using buffer : *Gap_Buffer, select := false, stop_at_word_separators := true) -> bool
 {
 	modified := false;
