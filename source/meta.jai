@@ -313,7 +313,7 @@ handle_compiler_message :: (message : *Compiler.Message)
 			clear_array (*run_when_all_typechecked);
 		
 		case .READY_FOR_CUSTOM_LINK_COMMAND;
-			run_custom_link_command (message.workspace, phase, no_console = false);
+			run_custom_link_command (message.workspace, phase, no_console = false && release);
 		}
 	}
 }
