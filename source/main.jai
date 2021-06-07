@@ -96,7 +96,7 @@ main :: ()
 	linalg_register_print_procedures ();
 
 	init_profiler ();
-	init_window (*window, "Edit", 100, 100, 1280, 720, handle_window_event, flags = Window_Flags.CUSTOM_BORDER);
+	init_window (*window, "Edit", 100, 100, 1280, 720);
 	window.borders = DEFAULT_WINDOW_BORDERS;
 	make_window_context_current (*window);
 	gl_load (*gl, get_gl_proc_address);
@@ -135,7 +135,9 @@ main :: ()
 	while running
 	{
 		// Rendering is done in a TIMER event callback, the first one of these was scheduled when we called init_screen.
-		wait_for_window_events (*window);
+		events := wait_for_window_events (*window);
+		for events
+			handle_window_event (it);
 	}
 
 	write_profiling_data_to_file ("debug/profile.txt");

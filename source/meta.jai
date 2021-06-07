@@ -389,6 +389,7 @@ else #if OS == .LINUX
 	build_options.import_path = modules_search_path_array;
 	build_options.backend = .LLVM;
 	if profile then build_options.stack_trace = true;
+	else if release && !profile then build_options.stack_trace = false;
 
 	Compiler.set_build_options (build_options, workspace);
 	delete_directory (BUILD_DIR);
@@ -597,7 +598,10 @@ else #if OS == .MACOS
 	}
 }
 
-	for msg.libraries
+	for msg.system_libraries
+		pta (*args, it);
+	
+	for msg.user_libraries
 		pta (*args, it);
 
 	//println ("Link line: %", join_with_separator (temp_allocator, ..args, " "));

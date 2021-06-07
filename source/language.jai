@@ -62,11 +62,11 @@ make_lexer :: (filename : string, contents : []u32) -> Lexer #must
 	return result;
 }
 
-report_error :: (using lexer : Lexer, header : string, fmt : string, args : ..Any) -> bool
+report_error :: (using lexer : Lexer, header : string, fmt : string, args : ..Any, location := #caller_location) -> bool
 {
 	str := fstring (temp_allocator, "'%' (%, %): %", filename, l0, c0, fmt);
 
-	return log_error (header, str, ..args);
+	return log_error (str, ..args, location);
 }
 
 advance :: (using lexer : *Lexer, count := 1)
