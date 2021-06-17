@@ -384,20 +384,20 @@ draw_text :: (using font : *Font, text : string, height : u32, position : Vec2, 
 
 draw_text :: (using font : *Font, text : string, height : u32, position : Vec2, color : Vec4, clip_rect : Clip_Rect)
 {
-	codepoints := utf8_string_to_runes  (text, temp_allocator);
-
-	inline draw_text (font, codepoints, height, position, color, clip_rect);
+	inline draw_text (font, utf8 (text), height, position, color, clip_rect);
 }
 
-draw_text :: (using font : *Font, buffer : $T, height : u32, position : Vec2, color : Vec4, clipping_rect : Clip_Rect)
+draw_text :: (using font : *Font, buffer : $T, height : u32, position : Vec2, color : Vec4, clip_rect : Clip_Rect)
 {
 	assert (font != null, "Font was null.");
 
 	immediate_push_state ();
 	defer immediate_pop_state ();
 	immediate_shader (text_spo);
+	immediate_push_clip (clip_rect);
+	defer immediate_pop_clip ();
 
-	iterator := make_text_iterator (font, buffer, height, position, clipping_rect, false);
+	iterator := make_text_iterator (font, buffer, height, position, clip_rect, false);
 	for iterator
 	{
 		if !is_control (it.glyph.codepoint)
@@ -409,14 +409,12 @@ draw_text :: (using font : *Font, buffer : $T, height : u32, position : Vec2, co
 	}
 }
 
-calculate_drawn_text_bounds :: (using font : *Font, text : string, height : u32) -> Vec2 #must
+calculate_text_size :: (using font : *Font, text : string, height : u32) -> Vec2 #must
 {
-	codepoints := utf8_string_to_runes (text, temp_allocator);
-
-	return inline calculate_drawn_text_bounds (font, codepoints, height);
+	return inline calculate_text_size (font, utf8 (text), height);
 }
 
-calculate_drawn_text_bounds :: (using font : *Font, text_buffer : $T, height : u32) -> Vec2 #must
+calculate_text_size :: (using font : *Font, text_buffer : $T, height : u32) -> Vec2 #must
 {
 	assert (font != null, "Font was null.");
 
