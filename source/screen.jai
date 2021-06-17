@@ -753,6 +753,8 @@ draw_screen :: (using screen : *Screen)
 		caption_area.x2 = caption_area.x1 + xx split.w;
 		caption_area.y1 = 0;
 		caption_area.y2 = xx tab_height ();
+		immediate_push_clip (caption_area);
+		defer immediate_pop_clip ();
 		
 		for * tab, ti : split.tabs
 		{
@@ -775,15 +777,14 @@ draw_screen :: (using screen : *Screen)
 			title_area.y1 = xx y1;
 			title_area.x2 = xx x2;
 			title_area.y2 = xx y2;
-			title_bounds := calculate_drawn_text_bounds (*loaded_font, tab_name, config.tab_title_font_height);
+			title_bounds := calculate_text_size (*loaded_font, tab_name, config.tab_title_font_height);
 			// Center tab title horizontally if it fits
 			if x1 + title_bounds.x < x2 then x1 = split.x + ti * TAB_CAPTION_WIDTH + round ((TAB_CAPTION_WIDTH - title_bounds.x) * 0.5);
 			x1 = round (x1);	// We don't handle subpixel text rendering
 			// Center tab title vertically
 			y1 = round ((tab_height () - title_bounds.y) * 0.5);
-			//immediate_clip (title_area);
+			
 			draw_text (*loaded_font, tab_name, config.tab_title_font_height, vec2 (x1, y1), foreground_color, title_area);
-			immediate_noclip ();
 		}
 	}
 
@@ -880,7 +881,7 @@ draw_screen :: (using screen : *Screen)
 	{
 		position := vec2 (xx config.bottom_io_padding, cast (f32) height - config.bottom_io_padding - (page.ascender - page.descender));
 		draw_text (*loaded_font, ">", config.bottom_io_font_height, position, get_color_from_theme ("primary_text", "bottom_io_text"), bottom_bar);
-		bounds := calculate_drawn_text_bounds (*loaded_font, ">", config.bottom_io_font_height);
+		bounds := calculate_text_size (*loaded_font, ">", config.bottom_io_font_height);
 		position.x += bounds.x;
 		
 		command_text_clip := bottom_bar;
@@ -979,7 +980,7 @@ draw_tab :: (using tab : *Screen_Tab, is_active : bool)
 
 	{
 		profile ("calculate line number text bounds");
-		line_info_text_end := calculate_drawn_text_bounds (*loaded_font, to_string (line_number_builder), config.buffer_font_height);
+		line_info_text_end := calculate_text_size (*loaded_font, to_string (line_number_builder), config.buffer_font_height);
 		line_bar.x1 = tab_area.x1;
 		line_bar.x2 = line_bar.x1 + cast (s32) (line_info_text_end.x + 2 * config.buffer_line_numbers_padding);
 		line_bar.y1 = tab_area.y1;
@@ -997,7 +998,7 @@ draw_tab :: (using tab : *Screen_Tab, is_active : bool)
 	text_max : Vec2;
 	{
 		profile ("calculate buffer bounds");
-		text_max = calculate_drawn_text_bounds (*loaded_font, input.buffer, config.buffer_font_height);
+		text_max = calculate_text_size (*loaded_font, input.buffer, config.buffer_font_height);
 	}
 	max_scrolling  := vec2 (ceil (text_max.x / buffer_page.space_advance), ceil (text_max.y / text_line_height));
 	max_scrolling.x = max (max_scrolling.x - 2, 0);		// Add padding
