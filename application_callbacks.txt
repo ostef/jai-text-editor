@@ -1,0 +1,15 @@
+on_tab_added
+on_tab_removed
+on_tab_focused
+on_tab_unfocused
+on_split_added
+on_split_removed
+on_split_resized
+on_buffer_file_opened
+on_buffer_file_saved
+on_buffer_file_changed
+on_buffer_modified
+on_buffer_highlight
+on_command_input_toggled
+on_command_input_modified
+on_command_entered
