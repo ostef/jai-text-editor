@@ -14,6 +14,7 @@ Config :: struct
 	buffer_rendered_whitespace_dimming := 0.8;
 	bottom_io_font_height   : u32 = 16;
 	tab_title_font_height   : u32 = 16;
+	tab_title_frame_rounding : f32 = 16.0;
 	buffer_font_height      : u32 = 16;
 	buffer_info_font_height : u32 = 16;
 

@@ -12,6 +12,7 @@ buffer_render_whitespace true
 buffer_rendered_whitespace_dimming 0.8
 bottom_io_font_height 16
 tab_title_font_height 14
+tab_title_frame_rounding 16.0
 buffer_font_height 16
 buffer_info_font_height 16
 
