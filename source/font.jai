@@ -244,7 +244,7 @@ add_glyph_to_page :: (using page : *Font_Page, codepoint : u32) -> *Font_Glyph
 	immediate_shader (text_spo);
 	immediate_framebuffer (atlas.framebuffer);
 	immediate_framebuffer_viewport (0, 0, xx atlas.width, xx atlas.height);
-	immediate_noclip ();
+	immediate_clear_clip ();
 	
 	drawn := immediate_quad (cast (f32) atlas.pen_x, cast (f32) atlas.pen_y, cast (f32) atlas.pen_x + glyph.bitmap_width, cast (f32) atlas.pen_y + glyph.bitmap_height, VEC4_ONE);
 
