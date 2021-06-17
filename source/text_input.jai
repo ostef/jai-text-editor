@@ -508,14 +508,16 @@ draw_selection :: (using input : *Text_Input, height : u32, position : Vec2, cli
 	}
 }
 
-draw_buffer :: (using input : *Text_Input, height : u32, position : Vec2, colors : []Text_Color_Range, clipping_rect : Clip_Rect, active := true, render_whitespace := false, whitespace_dimming := 0.7)
+draw_buffer :: (using input : *Text_Input, height : u32, position : Vec2, colors : []Text_Color_Range, clip_rect : Clip_Rect, active := true, render_whitespace := false, whitespace_dimming := 0.7)
 {
 	immediate_push_state ();
 	defer immediate_pop_state ();
 	immediate_shader (text_spo);
+	immediate_push_clip (clip_rect);
+	defer immediate_pop_clip ();
 	
 	color_index := 0;
-	iterator := make_text_iterator (*loaded_font, buffer, height, position, clipping_rect, render_whitespace);
+	iterator := make_text_iterator (*loaded_font, buffer, height, position, clip_rect, render_whitespace);
 	for it, i : iterator
 	{
 		color := get_color_from_theme ("primary_text");
