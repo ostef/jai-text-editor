@@ -4,17 +4,12 @@ Config :: struct
 
 	// Visuals
 	font : string;	// @Note (stefan): Don't give it a default value, because when we'll try to free it, it will crash!
-	bottom_io_padding           := 0.0;
-	buffer_line_numbers_padding := 0.0;
-	buffer_info_padding         := 0.0;
-	tab_title_padding           := 0.0;
 	visual_cursor_smoothing     := 0.5;
 	visual_scrolling_smoothing  := 0.7;		// @Todo (stefan): Make sure this is between 0 and 1
 	buffer_render_whitespace := true;
 	buffer_rendered_whitespace_dimming := 0.8;
 	bottom_io_font_height   : u32 = 16;
 	tab_title_font_height   : u32 = 16;
-	tab_title_frame_rounding : f32 = 16.0;
 	buffer_font_height      : u32 = 16;
 	buffer_info_font_height : u32 = 16;
 
