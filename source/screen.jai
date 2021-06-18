@@ -19,6 +19,8 @@ Screen :: struct
 }
 
 TAB_CAPTION_WIDTH :: 125.0;
+TAB_CAPTION_SEPARATION :: 2.0;
+TAB_TITLE_VERTICAL_PADDING :: 5.0;
 
 Screen_Split :: struct
 {
@@ -361,14 +363,14 @@ bottom_bar_height :: inline () -> f32 #must
 {
 	page := get_font_page (*loaded_font, config.bottom_io_font_height);
 
-	return (page.ascender - page.descender) + 2.0 * config.bottom_io_padding;
+	return cast (f32) (page.ascender - page.descender);
 }
 
 tab_height :: inline () -> f32 #must
 {
 	page := get_font_page (*loaded_font, config.tab_title_font_height);
 	
-	return (page.ascender - page.descender) + 2.0 * config.tab_title_padding;
+	return (page.ascender - page.descender) + 2.0 * TAB_TITLE_VERTICAL_PADDING;
 }
 
 print_to_screen :: (using screen : *Screen, fmt : string, args : ..Any)
@@ -757,20 +759,36 @@ draw_screen :: (using screen : *Screen)
 		immediate_push_clip (caption_area);
 		defer immediate_pop_clip ();
 		
-		for * tab, ti : split.tabs
+		draw_tab_title :: (split : *Screen_Split, index : s64)
 		{
+			tab := *split.tabs[index];
 			foreground_color := get_color_from_theme ("primary_text", "tab_title_text");
 			if tab.is_dirty then foreground_color = get_color_from_theme ("secondary", "tab_title_text_dirty");
 			tab_name := get_tab_name (tab);
 			page := get_font_page (*loaded_font, config.tab_title_font_height);
-			x1 := split.x + ti * TAB_CAPTION_WIDTH;
+			x1 := split.x + index * (TAB_CAPTION_WIDTH + TAB_CAPTION_SEPARATION);
 			x2 := x1 + TAB_CAPTION_WIDTH;
 			y1 := 0.0;
 			y2 := tab_height ();
-			background_color := get_color_from_theme ("primary_very_light", "tab_caption_inactive_background_color");
-			if ti == split.active_tab_index then background_color = get_color_from_theme ("primary", "tab_caption_background_color");
-			immediate_rounded_quad (x1, y1, x2, y2, background_color, config.tab_title_frame_rounding, Quad_Corners.TOP_LEFT | .TOP_RIGHT);
 			
+			// Draw a fancy rounded rectangle for the active tab's background, and just a simple rect for other tabs
+			if index == split.active_tab_index
+			{
+				background_color := get_color_from_theme ("primary", "tab_caption_background");
+				// Rect
+				immediate_rounded_quad (x1, y1, x2, y2, background_color, 14.0, Quad_Corners.TOP_LEFT | .TOP_RIGHT);
+				// Outer bottom left corner
+				immediate_inverse_fourth_circle (vec2 (x1, y2), 10.0, background_color, 0);
+				// Outer bottom right corner
+				immediate_inverse_fourth_circle (vec2 (x2, y2), 10.0, background_color, 1);
+			}
+			else
+			{
+				background_color := get_color_from_theme ("primary_very_light", "tab_caption_inactive_background");
+				immediate_quad (x1, y1, x2, y2, background_color);
+			}
+			
+			// Draw tab title
 			x1 += page.space_advance;
 			x2 -= page.space_advance;
 			title_area : Clip_Rect;
@@ -780,54 +798,22 @@ draw_screen :: (using screen : *Screen)
 			title_area.y2 = xx y2;
 			title_bounds := calculate_text_size (*loaded_font, tab_name, config.tab_title_font_height);
 			// Center tab title horizontally if it fits
-			if x1 + title_bounds.x < x2 then x1 = split.x + ti * TAB_CAPTION_WIDTH + round ((TAB_CAPTION_WIDTH - title_bounds.x) * 0.5);
+			if x1 + title_bounds.x < x2 then x1 = split.x + index * (TAB_CAPTION_WIDTH + TAB_CAPTION_SEPARATION) + round ((TAB_CAPTION_WIDTH - title_bounds.x) * 0.5);
 			x1 = round (x1);	// We don't handle subpixel text rendering
 			// Center tab title vertically
 			y1 = round ((tab_height () - title_bounds.y) * 0.5);
 			
 			draw_text (*loaded_font, tab_name, config.tab_title_font_height, vec2 (x1, y1), foreground_color, title_area);
 		}
-	}
-
-	/*
-	// Draw window buttons
-	for i : 0..2
-	{
-		x1 := cast (f32) width - (i + 1) * window.borders.caption_buttons_width;
-		y1 := 0.0;
-		x2 := cast (f32) width - i * window.borders.caption_buttons_width;
-		y2 := cast (f32) window.borders.caption_height;
-		center := vec2 (x2 + x1, y2 + y1) * 0.5;
-		LENGTH :: 5.0;
-		background_color := vec4 (1, 1, 1, 0.1);
-		foreground_color := vec4 (1, 1, 1, 0.4);
-		if i == 0 then background_color = vec4 (0.8, 0.2, 0.3, 1);
-
-		mouse_x, mouse_y := get_cursor_position (*window);
-		if xx mouse_x >= x1 && xx mouse_x < x2 && xx mouse_y >= y1 && xx mouse_y < y2
+		
+		for * tab, ti : split.tabs
 		{
-			immediate_quad (x1, y1, x2, y2, background_color);
-			foreground_color.a = 0.6;
+			if ti == split.active_tab_index then continue;
+			draw_tab_title (split, ti);
 		}
-
-		if i ==
-		{
-		case 0;
-			x1 := round (center.x - LENGTH);
-			x2 := round (center.x + LENGTH);
-			y1 := round (center.y - LENGTH);
-			y2 := round (center.y + LENGTH);
-			immediate_line (vec2 (x1, y1), vec2 (x2, y2), foreground_color, 1);
-			immediate_line (vec2 (x1, y2), vec2 (x2, y1), foreground_color, 1);
-
-		case 1;
-			immediate_quad_outline (center.x - LENGTH, center.y - LENGTH, center.x + LENGTH, center.y + LENGTH, foreground_color, 1);
-
-		case 2;
-			immediate_line (center - vec2 (LENGTH, 0), center + vec2 (LENGTH, 0), foreground_color, 1);
-		}
+		// Draw the active tab title after all the other ones, so it appears on top
+		draw_tab_title (split, split.active_tab_index);
 	}
-	*/
 
 	// Draw lines crossing the screen if nothing is opened
 	if splits.count == 0
@@ -883,17 +869,14 @@ draw_screen :: (using screen : *Screen)
 		// Draw the command/message buffer
 		if is_inputting_command
 		{
-			position := vec2 (xx config.bottom_io_padding, cast (f32) height - config.bottom_io_padding - (page.ascender - page.descender));
+			position := vec2 (0, cast (f32) height - (page.ascender - page.descender));
 			draw_text (*loaded_font, ">", config.bottom_io_font_height, position, get_color_from_theme ("primary_text", "bottom_io_text"), bottom_bar);
 			bounds := calculate_text_size (*loaded_font, ">", config.bottom_io_font_height);
 			position.x += bounds.x;
 			
 			command_text_clip := bottom_bar;
-			command_text_clip.x1 += xx (bounds.x + config.bottom_io_padding);
-			command_text_clip.x2 -= xx config.bottom_io_padding;
-			command_text_clip.y1 += xx config.bottom_io_padding;
-			command_text_clip.y2 -= xx config.bottom_io_padding;
-	
+			command_text_clip.x1 += xx bounds.x;
+			
 			cursor_position := calculate_drawn_cursor_position (*command_input, config.bottom_io_font_height, position);
 			xoffset := 0.0;
 			while cursor_position.x + xoffset + page.space_advance > xx width
@@ -911,7 +894,7 @@ draw_screen :: (using screen : *Screen)
 		else
 		{
 			draw_text (*loaded_font, to_string (message_buffer), config.bottom_io_font_height,
-				vec2 (xx config.bottom_io_padding, cast (f32) bottom_bar.y1 + config.bottom_io_padding), get_color_from_theme ("primary_text", "bottom_io_text"), bottom_bar);
+				vec2 (0, cast (f32) bottom_bar.y1), get_color_from_theme ("primary_text", "bottom_io_text"), bottom_bar);
 		}
 	}
 }
@@ -957,13 +940,13 @@ draw_tab :: (using tab : *Screen_Tab, is_active : bool)
 	{
 		info_bar.x1 = tab_area.x1;
 		info_bar.x2 = tab_area.x2;
-		info_bar.y1 = tab_area.y2 - cast (s32) (2 * config.buffer_info_padding + info_line_height);
+		info_bar.y1 = tab_area.y2 - cast (s32) (info_line_height);
 		info_bar.y2 = tab_area.y2;
 	}
 
 	{
 		line_bar.x1 = tab_area.x1;
-		line_bar.x2 = line_bar.x1 + cast (s32) ((max_line_digit_count + 2) * buffer_page.space_advance + 2 * config.buffer_line_numbers_padding);
+		line_bar.x2 = line_bar.x1 + cast (s32) ((max_line_digit_count + 2) * buffer_page.space_advance);
 		line_bar.y1 = tab_area.y1;
 		line_bar.y2 = info_bar.y1;
 	}
@@ -998,7 +981,7 @@ draw_tab :: (using tab : *Screen_Tab, is_active : bool)
 	// Make sure the cursor is inside the text area if the user modified the buffer
 	if scroll_to_cursor
 	{
-		profile ("scroll_to_cursor");
+		profile ("scroll to cursor");
 		cursor_position := calculate_drawn_cursor_position (*input, config.buffer_font_height, VEC2_ZERO, config.buffer_render_whitespace);
 		// @Cleanup @Speed (stefan): Make this use math instead of loops.
 		// @Note (stefan): After profiling, this is very slow and takes about 2.14 ms min, 4.7 ms max, 2.25 ms on average (for comparison,
@@ -1059,12 +1042,10 @@ draw_tab :: (using tab : *Screen_Tab, is_active : bool)
 	immediate_line (vec2 (xx line_bar.x2, xx tab_area.y1), vec2 (xx line_bar.x2, xx info_bar.y1), get_color_from_theme ("primary_light", "buffer_line_numbers_separation"), 1);
 
 	// Draw line numbers
-	/*
-	*/
 	{
-		profile ("draw_line_numbers");
+		profile ("draw line numbers");
 		pen : Vec2;
-		pen.x = cast (f32) line_bar.x1 + config.buffer_line_numbers_padding;
+		pen.x = cast (f32) line_bar.x1;
 		pen.y = cast (f32) line_bar.y1 + text_offset.y;
 		pen.y += buffer_page.ascender;
 		color := get_color_from_theme ("primary_text", "buffer_line_numbers_text");
@@ -1088,7 +1069,7 @@ draw_tab :: (using tab : *Screen_Tab, is_active : bool)
 			if pen.y - buffer_page.ascender  > xx line_bar.y2 then break;
 			
 			// Draw the line numbers backwards
-			pen.x = cast (f32) line_bar.x2 - config.buffer_line_numbers_padding;
+			pen.x = cast (f32) line_bar.x2;
 			pen.x -= buffer_page.space_advance;
 			current := line;
 			while current != 0
@@ -1114,12 +1095,12 @@ draw_tab :: (using tab : *Screen_Tab, is_active : bool)
 		if needs_regenerate_color_ranges then generate_color_ranges (tab);
 		if language == .NONE
 		{
-			profile ("draw_text_buffer");
+			profile ("draw text buffer");
 			draw_text_input (*input, config.buffer_font_height, text_position, get_color_from_theme ("primary_text", "buffer_text"), text_area, active = is_active, render_whitespace = config.buffer_render_whitespace, whitespace_dimming = config.buffer_rendered_whitespace_dimming);
 		}
 		else
 		{
-			profile ("draw_text_buffer");
+			profile ("draw text buffer");
 			draw_text_input (*input, config.buffer_font_height, text_position, color_ranges, text_area, active = is_active, render_whitespace = config.buffer_render_whitespace, whitespace_dimming = config.buffer_rendered_whitespace_dimming);
 		}
 		
@@ -1147,15 +1128,15 @@ draw_tab :: (using tab : *Screen_Tab, is_active : bool)
 		immediate_quad (cast (f32) info_bar.x1, cast (f32) info_bar.y1, cast (f32) info_bar.x2, cast (f32) info_bar.y2, get_color_from_theme ("secondary", "buffer_info_background"));
 		
 		// Draw info text
-		info_text_position.x = cast (f32) info_bar.x1 + config.buffer_info_padding;
-		info_text_position.y = cast (f32) info_bar.y1 + config.buffer_info_padding;
+		info_text_position.x = cast (f32) info_bar.x1;
+		info_text_position.y = cast (f32) info_bar.y1;
 		tab_name := get_tab_name (tab);
 		info_str : string;
 		if language != .NONE
-			info_str = fstring (temp_allocator, "% - Ln %, Col % - % line(s) - UTF8 - % - %",
+			info_str = fstring (temp_allocator, " % - Ln %, Col % - % line(s) - UTF8 - % - %",
 				tab_name, input.buffer.line_index + 1, input.buffer.column_index + 1, input.buffer.lines.count, input.eol_sequence, language);
 		else
-			info_str = fstring (temp_allocator, "% - Ln %, Col % - % line(s) - UTF8 - %",
+			info_str = fstring (temp_allocator, " % - Ln %, Col % - % line(s) - UTF8 - %",
 				tab_name, input.buffer.line_index + 1, input.buffer.column_index + 1, input.buffer.lines.count, input.eol_sequence);
 		draw_text (*loaded_font, info_str, config.buffer_info_font_height, info_text_position, get_color_from_theme ("secondary_text", "buffer_info_text"), tab_area);
 	}
