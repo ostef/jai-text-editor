@@ -6,6 +6,8 @@ primary_text #e5e5e5
 secondary_very_dark #666666
 secondary_dark #808080
 secondary #999999
+secondary_light #cccccc
+secondary_very_light #eeeeee
 secondary_text #3f3f3f
 cursor #e5e5e5
 selection #4c7fe5b2

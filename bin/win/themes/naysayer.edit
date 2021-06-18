@@ -6,18 +6,21 @@ primary_text #ffffff
 secondary_very_dark #96764b
 secondary_dark #bf9e70
 secondary #d2b58d
+secondary_light #e7d6b1
+secondary_very_light #f2ebd1
 secondary_text #3f3f3f
 cursor #e5e5e5
 selection #0000ff
 inactive_selection #80808080
 buffer_line_numbers_text #126367
+buffer_line_numbers_text_highlight #3eaaa4
 inactive_stripes #0c343c
 
 # Syntax highlighting
 syntax_invalid #ff0000
 syntax_comment #44b340
-syntax_identifier #ffffff
-syntax_keyword #d2b58d
+syntax_identifier #d2b58d
+syntax_keyword #ffffff
 syntax_keyword_type #8cde94
 syntax_string #2ec09c
 syntax_number #7ad0c6

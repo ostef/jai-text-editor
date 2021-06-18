@@ -1048,7 +1048,6 @@ draw_tab :: (using tab : *Screen_Tab, is_active : bool)
 		pen.x = cast (f32) line_bar.x1;
 		pen.y = cast (f32) line_bar.y1 + text_offset.y;
 		pen.y += buffer_page.ascender;
-		color := get_color_from_theme ("primary_text", "buffer_line_numbers_text");
 		
 		// We draw the line number ourselves instead of calling draw_text, because this is faster
 		// and it matters on files that have a lot of lines.
@@ -1068,6 +1067,8 @@ draw_tab :: (using tab : *Screen_Tab, is_active : bool)
 			
 			if pen.y - buffer_page.ascender  > xx line_bar.y2 then break;
 			
+			color := get_color_from_theme ("secondary", "buffer_line_numbers_text");
+			if line == input.buffer.line_index + 1 then color = get_color_from_theme ("secondary_very_light", "buffer_line_numbers_text_highlight");
 			// Draw the line numbers backwards
 			pen.x = cast (f32) line_bar.x2;
 			pen.x -= buffer_page.space_advance;
