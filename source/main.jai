@@ -96,7 +96,7 @@ main :: ()
 	linalg_register_print_procedures ();
 
 	init_profiler ();
-	init_window (*window, "Edit", 100, 100, 1280, 720);
+	init_window (*window, "Edit", DEFAULT_X, DEFAULT_Y, DEFAULT_W, DEFAULT_H);
 	window.borders = DEFAULT_WINDOW_BORDERS;
 	make_window_context_current (*window);
 	gl_load (*gl, get_gl_proc_address);
